@@ -10,25 +10,37 @@
 
 const EM_DASH = '—';
 
-/** Normalise `-0` to `0` so no formatter emits a negative zero. */
-function toDisplayNumber(val: number): number {
+/**
+ * Normalise `-0` to `0` so no formatter emits a negative zero.
+ *
+ * `Math.round(-0.4)` is `-0`, and `(-0.4 / 100000).toFixed(1)` is `'-0.0'`, so
+ * both the integer and fixed-decimal paths need it. `value === 0` is true for
+ * both `0` and `-0`, so that comparison is enough for the numeric case.
+ */
+function toRoundedInt(val: number): number {
   const rounded = Math.round(val);
   return rounded === 0 ? 0 : rounded;
 }
 
+/** Fixed-decimal rendering that never starts with a minus sign for a zero value. */
+function toFixedText(val: number, digits: number): string {
+  const text = val.toFixed(digits);
+  return /^-0(?:\.0+)?$/.test(text) ? text.slice(1) : text;
+}
+
 export function formatINR(val: number): string {
   if (!Number.isFinite(val)) return EM_DASH;
-  return new Intl.NumberFormat('en-IN').format(toDisplayNumber(val));
+  return new Intl.NumberFormat('en-IN').format(toRoundedInt(val));
 }
 
 export function formatLakhs(val: number): string {
   if (!Number.isFinite(val)) return EM_DASH;
-  return `₹${(val / 100000).toFixed(1)}L`;
+  return `₹${toFixedText(val / 100000, 1)}L`;
 }
 
 export function formatCrores(val: number): string {
   if (!Number.isFinite(val)) return EM_DASH;
-  return `₹${(val / 10000000).toFixed(2)} Cr`;
+  return `₹${toFixedText(val / 10000000, 2)} Cr`;
 }
 
 export interface StatutoryGratuity {

@@ -17,6 +17,12 @@ describe('currency formatters', () => {
   it('renders an em dash for a non-finite crore value', () => {
     expect(formatCrores(NaN)).toBe('—')
   })
+  it('never renders a negative zero in the lakh format', () => {
+    expect(formatLakhs(-0.4)).toBe('₹0.0L')
+  })
+  it('never renders a negative zero in the crore format', () => {
+    expect(formatCrores(-0.4)).toBe('₹0.00 Cr')
+  })
 })
 
 describe('computeStatutoryGratuity', () => {
@@ -40,7 +46,12 @@ describe('computeStatutoryGratuity', () => {
     })
   })
   it('marks a NaN tenure invalid rather than eligible', () => {
-    expect(computeStatutoryGratuity(50000, NaN).eligible).toBe(false)
+    // Full-object assertion, not just `.eligible`: `{eligible:false, invalid:false}`
+    // is exactly the state in which RetentionSection renders a confident ₹0
+    // "Not legally eligible" statement for a tenure it could not read.
+    expect(computeStatutoryGratuity(50000, NaN)).toEqual({
+      gratuity: 0, roundedTenure: 0, eligible: false, invalid: true,
+    })
   })
   it('marks a negative tenure invalid', () => {
     expect(computeStatutoryGratuity(50000, -2).invalid).toBe(true)

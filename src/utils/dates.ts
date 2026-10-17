@@ -1,19 +1,33 @@
+// `xlsx` is CommonJS. Vite inlines it and exposes the exports as properties of a
+// single API object - verified in the production bundle, where `SSF` sits as a
+// sibling of `read` and `utils` on that object. So `XLSX.SSF` resolves in the
+// browser for exactly the same reason `XLSX.read` already does on the import
+// path; a bare-ESM environment would differ, and would need a default import.
 import * as XLSX from 'xlsx'
 
 /**
  * Timezone-independent date handling for the HR roster.
  *
- * Every helper here works in LOCAL calendar components and never calls
- * `toISOString()`. A `Date` built as `new Date(2021, 2, 15)` is local midnight;
- * converting that to UTC is 2021-03-14T18:30Z in India (UTC+05:30), so
- * `.toISOString().slice(0, 10)` silently shifted every joining date back one
- * day — and tenure, gratuity eligibility and the ₹20,00,000 statutory cap all
- * hang off that field. Arithmetic therefore goes through `Date.UTC` on the
- * *components*, which is timezone-invariant without touching local midnight.
+ * Nothing here calls `toISOString()`. A `Date` built as `new Date(2021, 2, 15)` is
+ * local midnight, and `.toISOString().slice(0, 10)` silently shifted every joining
+ * date back a day for anyone east of Greenwich — and tenure, gratuity eligibility
+ * and the ₹20,00,000 statutory cap all hang off that field.
  *
- * A value that cannot be understood returns `null` instead of a plausible
- * default: the previous silent `'2023-01-15'` fallback manufactured a fake
- * tenure for unparseable input rather than reporting that the data is bad.
+ * WHICH components to read depends on how the Date was anchored, so the two cases
+ * are kept deliberately separate rather than unified:
+ *
+ * - `toISODate` reads LOCAL components: its input is an instant ("now"), not a
+ *   calendar date.
+ * - `parseSpreadsheetDate`'s Date branch reads UTC components: `XLSX.read(buffer,
+ *   { cellDates: true })` yields date-only cells anchored at UTC midnight, so a
+ *   local read loses a day for anyone west of Greenwich.
+ *
+ * Day arithmetic goes through `Date.UTC` on the *components*, which is
+ * timezone-invariant without touching local midnight.
+ *
+ * A value that cannot be understood returns `null` instead of a plausible default:
+ * the previous silent `'2023-01-15'` fallback manufactured a fake tenure for
+ * unparseable input rather than reporting that the data is bad.
  */
 
 /** Working days in an Indian payroll month; the attendance denominator. */
@@ -41,6 +55,10 @@ function isRealDate(year: number, month: number, day: number): boolean {
 }
 
 function fromParts(year: number, month: number, day: number): string | null {
+  // The output contract is a 4-digit year, matching ISO_DATE. A year outside
+  // 1..9999 cannot be rendered and must be rejected rather than silently widened
+  // — Date.parse('44927') resolves to a real instant in year 44927.
+  if (!Number.isInteger(year) || year < 1 || year > 9999) return null
   if (!isRealDate(year, month, day)) return null
   return `${String(year).padStart(4, '0')}-${pad2(month)}-${pad2(day)}`
 }
@@ -77,7 +95,12 @@ export function parseSpreadsheetDate(val: unknown): string | null {
   if (val === null || val === undefined) return null
 
   if (val instanceof Date) {
-    return Number.isNaN(val.getTime()) ? null : toISODate(val)
+    // UTC components, deliberately the inverse of toISODate: SheetJS builds
+    // date-only cells at UTC midnight, so reading them as local loses a day for
+    // anyone west of Greenwich. This is the one branch in the module that reads
+    // UTC where toISODate reads local — do not "unify" the two.
+    if (Number.isNaN(val.getTime())) return null
+    return fromParts(val.getUTCFullYear(), val.getUTCMonth() + 1, val.getUTCDate())
   }
 
   if (typeof val === 'number') {
@@ -107,9 +130,15 @@ export function parseSpreadsheetDate(val: unknown): string | null {
     return fromParts(year, month, day)
   }
 
+  // `Date.parse` is the last resort, for textual formats V8 understands but the
+  // regexes above do not ('March 15, 2021'). For those non-date-only strings V8
+  // parses as LOCAL time, so the local components are the correct read here —
+  // the inverse of the Date branch above, which receives a UTC-anchored cell.
+  // Routed through fromParts so the result is validated like every other branch.
   const fallback = Date.parse(str)
   if (Number.isNaN(fallback)) return null
-  return toISODate(new Date(fallback))
+  const fallbackDate = new Date(fallback)
+  return fromParts(fallbackDate.getFullYear(), fallbackDate.getMonth() + 1, fallbackDate.getDate())
 }
 
 /**

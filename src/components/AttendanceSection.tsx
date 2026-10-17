@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR } from '../utils/formatters';
 import { computeLOP } from '../utils/payroll';
+import { computeAttendancePct } from '../utils/dates';
 
 interface AttendanceSectionProps {
   employees: Employee[];
@@ -12,7 +13,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
 
-  const totalPresentSum = employees.reduce((acc, e) => acc + (e.presentDays || 25), 0);
+  // Summed directly: `e.presentDays || 25` silently promoted a genuine 0 (someone
+  // absent all month) to 25, inflating the "Workforce Present Avg" KPI.
+  const totalPresentSum = employees.reduce((acc, e) => acc + e.presentDays, 0);
   const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '24.8';
   
   // Total LOP Deductions. computeLOP is the single owner of this arithmetic, so
@@ -87,7 +90,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
             <tbody>
               {currentItems.map(emp => {
                 const lopDed = computeLOP(emp.basicSalary, emp.lopDays);
-                const attPct = ((emp.presentDays / 26) * 100).toFixed(1);
+                const attPct = computeAttendancePct(emp.presentDays);
                 return (
                   <tr key={emp.id}>
                     <td className="cell-id">{emp.id}</td>
@@ -102,7 +105,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
                     </td>
                     <td>₹{formatINR(lopDed)}</td>
                     <td>
-                      <span className={`badge ${Number(attPct) >= 95 ? 'badge-active' : 'badge-notice'}`}>
+                      <span className={`badge ${attPct >= 95 ? 'badge-active' : 'badge-notice'}`}>
                         {attPct}%
                       </span>
                     </td>

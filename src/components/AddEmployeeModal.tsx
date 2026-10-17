@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import type { Employee, Department } from '../types';
+import { toISODate } from '../utils/dates';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -23,7 +24,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const [department, setDepartment] = useState(departments[0]?.name || 'Engineering & Technology');
   const [role, setRole] = useState('Senior Software Engineer');
   const [location, setLocation] = useState(locations[0] || 'Bengaluru HQ');
-  const [doj, setDoj] = useState(() => new Date().toISOString().slice(0, 10));
+  // toISODate reads local components, so a hire created between 00:00 and 05:30 IST
+// is stamped with today's date. `new Date().toISOString().slice(0, 10)` would give
+// it yesterday's - wrong on the field that drives tenure and statutory gratuity.
+const [doj, setDoj] = useState(() => toISODate(new Date()));
   const [ctc, setCtc] = useState(150000);
   const [gender, setGender] = useState<'Female' | 'Male' | 'Non-Binary'>('Female');
   const [phone, setPhone] = useState('+91 9876543210');

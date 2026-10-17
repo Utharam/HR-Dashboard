@@ -25,6 +25,9 @@ describe('parseSpreadsheetDate', () => {
     expect(r).not.toBeNull()
     expect(Number(r!.slice(5, 7))).toBeLessThanOrEqual(12)
   })
+  it('reads an unambiguous US slash date as month-first, day last', () => {
+    expect(parseSpreadsheetDate('12/31/2021')).toBe('2021-12-31')
+  })
   it('defaults an ambiguous slash date to day-first for an Indian roster', () => {
     expect(parseSpreadsheetDate('05/03/2021')).toBe('2021-03-05')
   })
@@ -39,6 +42,40 @@ describe('parseSpreadsheetDate', () => {
   })
   it('returns null for an impossible ISO date', () => {
     expect(parseSpreadsheetDate('2021-02-30')).toBeNull()
+  })
+  it('rejects an Excel serial that arrived as text instead of inventing a year', () => {
+    // Date.parse('44927') resolves to a real instant in year 44927, which the
+    // Date.parse fallback used to pass straight through as '44927-01-01'.
+    expect(parseSpreadsheetDate('44927')).toBeNull()
+  })
+})
+
+describe('parseSpreadsheetDate Date branch', () => {
+  // XLSX.read(buffer, { cellDates: true }) builds date-only cells at UTC
+  // midnight, so this branch reads UTC components. A local read loses a day for
+  // anyone west of Greenwich, which is why the round-tripped workbook measured
+  // 2021-03-14 in America/Los_Angeles and America/St_Johns.
+
+  it('reads a UTC-midnight Date as that same calendar date in every timezone', () => {
+    // The UTC components of this instant are (2021, 2, 15) in EVERY timezone, so
+    // this assertion is zone-independent: it holds west of UTC, east of UTC and
+    // at UTC. A local-component implementation returns 2021-03-14 west of UTC.
+    expect(parseSpreadsheetDate(new Date(Date.UTC(2021, 2, 15)))).toBe('2021-03-15')
+  })
+
+  it('reads a local-midnight Date from its UTC components, not its local ones', () => {
+    // Contract pin: the branch always reports the UTC calendar date. Where the
+    // host offset is non-zero these differ - e.g. in Asia/Kolkata this instant is
+    // 2021-03-14T18:30Z, so the UTC reading is 2021-03-14 and the local reading
+    // would be 2021-03-15. Deliberately not a hardcoded string, because the
+    // correct answer depends on the host offset.
+    const d = new Date(2021, 2, 15)
+    const utcDay = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+    expect(parseSpreadsheetDate(d)).toBe(utcDay)
+  })
+
+  it('returns null for an Invalid Date rather than a fake one', () => {
+    expect(parseSpreadsheetDate(new Date(NaN))).toBeNull()
   })
 })
 
