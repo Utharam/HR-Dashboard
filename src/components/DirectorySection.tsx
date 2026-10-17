@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
+import { statusBadgeClass, statusBadgeLabel } from './statusBadge';
 
 interface DirectorySectionProps {
   employees: Employee[];
@@ -18,15 +19,12 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
   const totalPages = Math.ceil(employees.length / pageSize) || 1;
   const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Active': return <span className="badge badge-active">Active</span>;
-      case 'Probation': return <span className="badge badge-probation">Probation</span>;
-      case 'Notice Period': return <span className="badge badge-notice">Notice</span>;
-      case 'Resigned': return <span className="badge badge-resigned">Resigned</span>;
-      default: return <span className="badge badge-primary">{status}</span>;
-    }
-  };
+  // Tone and label both come from statusBadge, which is keyed by the full
+  // Employee['status'] union - so an `Unknown` import renders as neutral here instead
+  // of falling through to whatever a `default` branch happened to pick.
+  const getStatusBadge = (status: Employee['status']) => (
+    <span className={`badge ${statusBadgeClass(status)}`}>{statusBadgeLabel(status)}</span>
+  );
 
   return (
     <div className="section-stack">

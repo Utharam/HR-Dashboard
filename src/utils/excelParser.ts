@@ -21,22 +21,59 @@ export interface ParseResult {
  */
 export { parseSpreadsheetDate as parseExcelDate };
 
-export function normalizeStatus(val: unknown): 'Active' | 'Probation' | 'Notice Period' | 'Resigned' {
-  if (!val) return 'Active';
+/**
+ * Resolves an imported status cell to a real roster state, or `Unknown`.
+ *
+ * `Unknown` — never `Active`. The previous `return 'Active'` fallback made a billable,
+ * attending, PF-contributing employee out of every typo, every unmapped HRMS lifecycle
+ * state ("Retired", "On Hold") and every blank cell, silently enlarging the payroll run
+ * and the active headcount with no warning anywhere. `Active` is matched exactly, not
+ * by substring: `includes('active')` would swallow "Inactive", which is the same defect
+ * wearing a different hat. Probation / Notice / Resigned keep their substring matches,
+ * which are unambiguous lifecycle keywords ("Probationary", "On Notice", "Exit Interview").
+ */
+export function normalizeStatus(val: unknown): Employee['status'] {
+  if (val === null || val === undefined) return 'Unknown';
   const clean = String(val).trim().toLowerCase();
+  if (!clean) return 'Unknown';
+  if (clean === 'active') return 'Active';
   if (clean.includes('probation')) return 'Probation';
   if (clean.includes('notice')) return 'Notice Period';
   if (clean.includes('resign') || clean.includes('exit') || clean.includes('terminated')) return 'Resigned';
-  return 'Active';
+  return 'Unknown';
 }
 
-export function normalizeGender(val: unknown): 'Female' | 'Male' | 'Non-Binary' {
-  if (!val) return 'Female';
+/**
+ * Resolves an imported gender cell to a real roster value, or `Unknown` / `Prefer Not
+ * Say` — never `Female`.
+ *
+ * The previous `return 'Female'` fallback meant an HRMS export that writes `X` for
+ * "decline to specify" produced a roster that was silently 100% Female, skewing every
+ * diversity figure with no signal that the column was unreadable. A declined answer is
+ * its own value (`Prefer Not to Say`) and an unreadable one is `Unknown`; neither belongs
+ * in the numerator or the denominator of a diversity ratio.
+ */
+export function normalizeGender(val: unknown): Employee['gender'] {
+  if (val === null || val === undefined) return 'Unknown';
   const clean = String(val).trim().toLowerCase();
+  if (!clean) return 'Unknown';
   if (clean === 'f' || clean === 'female') return 'Female';
   if (clean === 'm' || clean === 'male') return 'Male';
-  if (clean.includes('non') || clean.includes('binary') || clean.includes('other')) return 'Non-Binary';
-  return 'Female';
+  if (
+    clean.includes('non-binary') ||
+    clean.includes('nonbinary') ||
+    clean.includes('non binary') ||
+    clean === 'other'
+  ) return 'Non-Binary';
+  if (
+    clean.includes('prefer not to') ||
+    clean === 'pnts' ||
+    clean.includes('declined to specify') ||
+    clean.includes('decline to specify') ||
+    clean.includes('not disclosed') ||
+    clean.includes('not specified')
+  ) return 'Prefer Not to Say';
+  return 'Unknown';
 }
 
 /**

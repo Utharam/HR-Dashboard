@@ -29,7 +29,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 // it yesterday's - wrong on the field that drives tenure and statutory gratuity.
 const [doj, setDoj] = useState(() => toISODate(new Date()));
   const [ctc, setCtc] = useState(150000);
-  const [gender, setGender] = useState<'Female' | 'Male' | 'Non-Binary'>('Female');
+  // Keyed off Employee['gender'] rather than a hand-written union, so this form cannot
+  // drift from the roster vocabulary. A new hire is always on the roster, so the honest
+  // default is 'Active' and the picker offers a declined answer rather than forcing one
+  // of the three declared values.
+  const [gender, setGender] = useState<Employee['gender']>('Female');
   const [phone, setPhone] = useState('+91 9876543210');
 
   if (!isOpen) return null;
@@ -187,11 +191,12 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
                 id="add-gender"
                 className="omni-select" 
                 value={gender}
-                onChange={(e) => setGender(e.target.value as any)}
+                onChange={(e) => setGender(e.target.value as Employee['gender'])}
               >
                 <option value="Female">Female</option>
                 <option value="Male">Male</option>
                 <option value="Non-Binary">Non-Binary</option>
+                <option value="Prefer Not to Say">Prefer Not to Say</option>
               </select>
             </div>
           </div>

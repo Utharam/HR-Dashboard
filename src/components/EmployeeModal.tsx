@@ -3,6 +3,7 @@ import { X, Printer } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
 import { computePayroll } from '../utils/payroll';
+import { statusBadgeClass } from './statusBadge';
 
 interface EmployeeModalProps {
   employee: Employee | null;
@@ -30,7 +31,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
               <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
-              <span className={`badge ${employee.status === 'Active' ? 'badge-active' : 'badge-notice'}`}>
+              <span className={`badge ${statusBadgeClass(employee.status)}`}>
                 {employee.status}
               </span>
             </div>

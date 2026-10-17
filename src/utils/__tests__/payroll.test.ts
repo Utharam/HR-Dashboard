@@ -74,4 +74,7 @@ describe('isActive', () => {
     expect(isActive(emp({ status: 'Probation' }))).toBe(true)
     expect(isActive(emp({ status: 'Notice Period' }))).toBe(true)
   })
+  it('excludes Unknown staff: an unresolved import is not evidence of employment', () => {
+    expect(isActive(emp({ status: 'Unknown' }))).toBe(false)
+  })
 })

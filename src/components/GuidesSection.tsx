@@ -434,8 +434,8 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                     { field: 'Basic Salary', aliases: 'Monthly Basic Salary, Basic Salary, BasicSalary, Basic', type: 'Number (INR)', def: '50% of Monthly CTC', copy: 'Basic Salary' },
                     { field: 'HRA', aliases: 'HRA, House Rent Allowance, hra', type: 'Number (INR)', def: '50% of Basic (25% CTC)', copy: 'HRA' },
                     { field: 'Special Allowance', aliases: 'Special Allowance, SpecialAllowance', type: 'Number (INR)', def: 'CTC - (Basic + HRA)', copy: 'Special Allowance' },
-                    { field: 'Status', aliases: 'Status, status, Employment Status', type: 'Active | Probation | Notice | Resigned', def: 'Active', copy: 'Status' },
-                    { field: 'Gender', aliases: 'Gender, gender, Sex', type: 'Female | Male | Non-Binary', def: 'Female', copy: 'Gender' },
+                    { field: 'Status', aliases: 'Status, status, Employment Status', type: 'Active | Probation | Notice | Resigned | Unknown', def: 'Unknown (if unmapped)', copy: 'Status' },
+                    { field: 'Gender', aliases: 'Gender, gender, Sex', type: 'Female | Male | Non-Binary | Prefer Not to Say | Unknown', def: 'Unknown (if unmapped)', copy: 'Gender' },
                     { field: 'Performance Rating', aliases: 'Performance Rating, Rating, performanceRating', type: 'Number (1 - 5)', def: '4 (Exceeds Exp.)', copy: 'Performance Rating' },
                     { field: 'Attendance Days', aliases: 'Attendance (Days Present), Attendance Days, PresentDays', type: 'Number (0 - 26)', def: '25 Days', copy: 'Attendance (Days Present)' },
                     { field: 'Leave Balances', aliases: 'CL Balance, SL Balance, EL Balance, LOP Days', type: 'Number', def: 'CL: 8, SL: 8, EL: 12, LOP: derived', copy: 'CL Balance' },
@@ -548,7 +548,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
               <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                 <strong className="text-purple-soft">• Status & Gender Normalization:</strong>
                 <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                  Text values like "active", "probation", "notice", "exit", "resigned" are automatically mapped to valid enum states. Gender values ("F", "Female", "M", "Male", "Other") are normalized gracefully.
+                  Text values like "active", "probation", "notice", "exit", "resigned" are mapped to the matching enum state; "active" is matched exactly, so "inactive" is not read as "Active". Gender values ("F", "Female", "M", "Male", "Non-Binary", "Other") are mapped too, and a declined answer ("prefer not to say") is kept as "Prefer Not to Say". Anything else is recorded as <strong>Unknown</strong> rather than guessed: an unmapped Status no longer becomes "Active" (which would put the person in the payroll run), and an unmapped Gender no longer becomes "Female" (which would skew the diversity ratio). Unknown-status staff are excluded from the payroll run and their badge is neutral.
                 </p>
               </div>
             </div>

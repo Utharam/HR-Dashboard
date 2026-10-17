@@ -58,6 +58,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const activeCount = employees.filter(e => e.status === 'Active').length;
   const probationCount = employees.filter(e => e.status === 'Probation').length;
   const noticeCount = employees.filter(e => e.status === 'Notice Period').length;
+  const unknownStatusCount = employees.filter(e => e.status === 'Unknown').length;
 
   const totalMonthlyPayroll = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
   const avgMonthlyCTC = totalHeadcount ? totalMonthlyPayroll / totalHeadcount : 0;
@@ -69,7 +70,19 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const femaleCount = employees.filter(e => e.gender === 'Female').length;
   const maleCount = employees.filter(e => e.gender === 'Male').length;
   const nbCount = employees.filter(e => e.gender === 'Non-Binary').length;
-  const femaleRatio = totalHeadcount ? ((femaleCount / totalHeadcount) * 100).toFixed(1) : '48.0';
+  const declinedCount = employees.filter(e => e.gender === 'Prefer Not to Say').length;
+  const unknownGenderCount = employees.filter(e => e.gender === 'Unknown').length;
+  // The denominator is the population that actually answered: Female + Male +
+  // Non-Binary. `Prefer Not to Say` is a declined answer and `Unknown` means the
+  // column could not be read, so counting either in the denominator would silently
+  // deflate the ratio for reasons that have nothing to do with the workforce, and
+  // counting them in the numerator would be worse. The ratio therefore answers
+  // "of the employees who declared a gender, what share are Female" - stated as such
+  // in the sub-label so nobody reads it as a share of the whole roster.
+  const declaredGenderCount = femaleCount + maleCount + nbCount;
+  const femaleRatio = declaredGenderCount
+    ? ((femaleCount / declaredGenderCount) * 100).toFixed(1)
+    : '0.0';
 
   // High Performers (5-star rating)
   const topPerformers = employees.filter(e => e.performanceRating === 5).slice(0, 5);
@@ -109,16 +122,17 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
   // 2. Diversity & Status Doughnut
   const statusDoughnutData = {
-    labels: ['Active', 'Probation', 'Notice Period', 'Resigned'],
+    labels: ['Active', 'Probation', 'Notice Period', 'Resigned', 'Unknown'],
     datasets: [
       {
         data: [
           activeCount,
           probationCount,
           noticeCount,
-          employees.filter(e => e.status === 'Resigned').length
+          employees.filter(e => e.status === 'Resigned').length,
+          unknownStatusCount
         ],
-        backgroundColor: [CHART.success, CHART.warning, CHART.danger, CHART.neutral],
+        backgroundColor: [CHART.success, CHART.warning, CHART.danger, CHART.neutral, CHART.dim],
         borderColor: CHART.surface,
         borderWidth: 2,
         hoverOffset: 4
@@ -126,12 +140,15 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     ]
   };
 
+  // The doughnut shows the WHOLE roster, including the two non-answers, because a
+  // slice of "Unknown" is exactly the import defect an executive needs to see. The
+  // diversity KPI above is the one that excludes them from its denominator.
   const diversityDoughnutData = {
-    labels: ['Female', 'Male', 'Non-Binary'],
+    labels: ['Female', 'Male', 'Non-Binary', 'Prefer Not to Say', 'Unknown'],
     datasets: [
       {
-        data: [femaleCount, maleCount, nbCount],
-        backgroundColor: [CHART.pink, CHART.info, CHART.purple],
+        data: [femaleCount, maleCount, nbCount, declinedCount, unknownGenderCount],
+        backgroundColor: [CHART.pink, CHART.info, CHART.purple, CHART.dim, CHART.neutral],
         borderColor: CHART.surface,
         borderWidth: 2,
         hoverOffset: 4
@@ -241,7 +258,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           </div>
           <div className="kpi-value text-pink">{femaleRatio}%</div>
           <div className="kpi-sub">
-            {femaleCount} Female • {maleCount} Male
+            {femaleCount} of {declaredGenderCount} declared • {totalHeadcount - declaredGenderCount} declined / unknown
           </div>
         </div>
 

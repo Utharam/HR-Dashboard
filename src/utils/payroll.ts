@@ -72,7 +72,15 @@ export function computePayroll(employee: Employee): PayrollBreakdown {
   }
 }
 
-/** Resigned staff are not part of the payroll run; Probation and Notice Period are. */
+/**
+ * Resigned staff are not part of the payroll run; Probation and Notice Period are.
+ *
+ * `Unknown` is excluded too. An unresolved import is not evidence of employment: with
+ * the old `status !== 'Resigned'` test, an unrecognised or blank status column put
+ * those staff in the payroll run — generating PF, professional tax and a payslip for
+ * someone the HRMS never confirmed was on the roster. The safer failure is to leave
+ * them out of the disbursement until the status is resolved.
+ */
 export function isActive(employee: Employee): boolean {
-  return employee.status !== 'Resigned'
+  return employee.status !== 'Resigned' && employee.status !== 'Unknown';
 }

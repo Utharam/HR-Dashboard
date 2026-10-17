@@ -17,7 +17,9 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   const pageSize = 25;
 
   // Payroll run figures come from employees.filter(isActive) — resigned staff are
-  // not paid, so they must not appear in the aggregates or be charged PT.
+  // not paid, and neither is an `Unknown` status: an unresolved import is not
+  // evidence that the person is on the roster, so they must not be charged PF,
+  // professional tax or appear in the aggregates until the status is resolved.
   const activeRoster = employees.filter(isActive);
   const payroll = activeRoster.map(computePayroll);
 
