@@ -4,6 +4,7 @@ import type { Employee } from '../types';
 import { formatINR } from '../utils/formatters';
 import { computeLOP } from '../utils/payroll';
 import { computeAttendancePct } from '../utils/dates';
+import { sumLeaveBalances } from '../utils/leave';
 
 interface AttendanceSectionProps {
   employees: Employee[];
@@ -23,9 +24,13 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
   // for the same employee — including the [0, 26] day clamp it enforces.
   const totalLOPAmount = employees.reduce((acc, e) => acc + computeLOP(e.basicSalary, e.lopDays), 0);
 
-  const totalCL = employees.reduce((acc, e) => acc + (12 - (e.clBalance || 8)), 0);
-  const totalSL = employees.reduce((acc, e) => acc + (12 - (e.slBalance || 8)), 0);
-  const totalEL = employees.reduce((acc, e) => acc + (15 - (e.elBalance || 10)), 0);
+  // The roster holds remaining balances, not consumption, so this card states the
+  // balance. The previous site derived "days availed" by subtracting a hardcoded
+  // entitlement (12 / 12 / 15) from a remaining balance and defaulted each bucket
+  // with `|| 8` / `|| 10`, which turned a genuine 0 into a positive figure and
+  // produced a NEGATIVE contribution for the 52 of 200 seed staff holding EL
+  // above the 15-day cap. sumLeaveBalances is the single owner of the arithmetic.
+  const leave = sumLeaveBalances(employees);
 
   const totalPages = Math.ceil(employees.length / pageSize) || 1;
   const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -47,9 +52,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Leaves Availed (MTD)</span>
-          <div className="kpi-value text-info">{totalCL + totalSL + totalEL}</div>
-          <span className="kpi-sub">{totalCL} CL • {totalSL} SL • {totalEL} EL</span>
+          <span className="kpi-label">Total Leave Balance</span>
+          <div className="kpi-value text-info">{leave.total} Days</div>
+          <span className="kpi-sub">{leave.casual} CL • {leave.sick} SL • {leave.earned} EL</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
