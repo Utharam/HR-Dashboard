@@ -133,11 +133,12 @@ export function computeTenureYears(doj: string, asOf: Date = new Date()): number
   const day = Number(match[3])
   if (!isRealDate(year, month, day)) return null
 
-  const joined = new Date(year, month - 1, day)
-  joined.setFullYear(year)
-
   let whole = asOf.getFullYear() - year
-  if (daysBetween(joined, new Date(year + whole, month - 1, day)) > 0) whole -= 1
+  // Decrement only if the anniversary for `whole` is still ahead of asOf. The
+  // comparison must be measured from asOf: measuring from `joined` is a
+  // past-to-past interval that is always positive, which decremented every
+  // time and let the fraction below saturate at 1, discarding the part-year.
+  if (daysBetween(asOf, new Date(year + whole, month - 1, day)) > 0) whole -= 1
   if (whole <= 0) return 0
 
   const lastAnniversary = new Date(year + whole, month - 1, day)

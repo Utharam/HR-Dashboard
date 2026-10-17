@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, Calculator } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, computeStatutoryGratuity } from '../utils/formatters';
+import { computeTenureYears } from '../utils/dates';
 
 interface RetentionSectionProps {
   employees: Employee[];
@@ -10,7 +11,7 @@ interface RetentionSectionProps {
 export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees }) => {
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [basicSalary, setBasicSalary] = useState(45000);
-  const [tenureYears, setTenureYears] = useState(5.5);
+  const [tenureYears, setTenureYears] = useState<number | null>(5.5);
   const [unusedLeaves, setUnusedLeaves] = useState(15);
   const [separationType, setSeparationType] = useState<'resignation' | 'retrenchment'>('resignation');
   const [hasCalculated, setHasCalculated] = useState(false);
@@ -20,10 +21,11 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
     const emp = employees.find(e => e.id === empId);
     if (emp) {
       setBasicSalary(emp.basicSalary);
-      const doj = new Date(emp.doj);
-      const now = new Date(2026, 9, 1);
-      const diffYears = (now.getTime() - doj.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-      setTenureYears(parseFloat(Math.max(0.5, diffYears).toFixed(1)));
+      // Service is measured against the real current date, not a frozen "today".
+      // A blank or unreadable doj yields null, which computeStatutoryGratuity
+      // reports as invalid, so no settlement statement is rendered at all.
+      const service = computeTenureYears(emp.doj);
+      setTenureYears(service === null ? null : parseFloat(service.toFixed(1)));
       setUnusedLeaves(emp.elBalance || 12);
     }
   };
@@ -37,7 +39,7 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
 
   let noticePay = 0;
   let retrenchmentComp = 0;
-  if (!settlementInvalid && separationType === 'retrenchment') {
+  if (tenureYears !== null && !settlementInvalid && separationType === 'retrenchment') {
     noticePay = Math.max(0, Math.round(basicSalary)); // 1 month notice in lieu
     retrenchmentComp = Math.max(0, Math.round((15 * basicSalary * tenureYears) / 30)); // 15 days avg pay/yr
   }
@@ -100,7 +102,7 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
               step="0.1"
               className="omni-input"
               style={{ width: '100%' }}
-              value={tenureYears}
+              value={tenureYears ?? ''}
               onChange={(e) => setTenureYears(Math.max(0, Number(e.target.value)))}
             />
           </div>
