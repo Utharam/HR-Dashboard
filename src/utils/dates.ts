@@ -118,8 +118,9 @@ export function parseSpreadsheetDate(val: unknown): string | null {
  *
  * Whole years are counted by anniversary and the remainder is the fraction of
  * the year actually served, so an employee is exactly N years old on their
- * anniversary date rather than a day-count approximation of one. A joining date
- * in the future yields 0, not a negative tenure.
+ * anniversary date rather than a day-count approximation of one. The fraction is
+ * reported for sub-year service too; rounding to whole years is the consumer's
+ * job. A joining date in the future yields 0, not a negative tenure.
  */
 export function computeTenureYears(doj: string, asOf: Date = new Date()): number | null {
   if (typeof doj !== 'string') return null
@@ -139,7 +140,6 @@ export function computeTenureYears(doj: string, asOf: Date = new Date()): number
   // past-to-past interval that is always positive, which decremented every
   // time and let the fraction below saturate at 1, discarding the part-year.
   if (daysBetween(asOf, new Date(year + whole, month - 1, day)) > 0) whole -= 1
-  if (whole <= 0) return 0
 
   const lastAnniversary = new Date(year + whole, month - 1, day)
   lastAnniversary.setFullYear(year + whole)
@@ -150,7 +150,11 @@ export function computeTenureYears(doj: string, asOf: Date = new Date()): number
   const span = daysBetween(lastAnniversary, nextAnniversary)
   const fraction = span > 0 ? served / span : 0
 
-  return whole + Math.min(Math.max(fraction, 0), 1)
+  // No early-out on `whole <= 0`: a sub-year joiner still has a real part-year to
+  // report, and the consumer (computeStatutoryGratuity) applies the 6-months-round-up
+  // rule itself, so pre-rounding here would only discard information. Clamping the
+  // final value at 0 is what keeps a future date of joining from going negative.
+  return Math.max(0, whole + Math.min(Math.max(fraction, 0), 1))
 }
 
 /**

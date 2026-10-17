@@ -83,27 +83,25 @@ describe('computeTenureYears', () => {
     expect(computeTenureYears('2020-01-15', new Date(2026, 9, 17))).toBeCloseTo(6 + 275 / 365, 10)
   })
 
-  it('rounds a joiner under six months down', () => {
+  it('reports a joiner under six months as a fraction below 0.5', () => {
     // doj 2024-01-15, asOf 2024-04-20: 96 days served of a 366-day service year
-    // (2024 is a leap year), i.e. 0.2623 - well below the 0.5 threshold.
+    // (2024 is a leap year), i.e. 0.2623 - well below the 0.5 threshold, so the
+    // statutory rounding counts 0 completed years.
     //
-    // Pins current behaviour: `computeTenureYears` short-circuits to 0 for anyone
-    // with under a full year of service, so the 0.2623 part-year is not reported.
-    // Harmless for the statutory result - 0 and 0.2623 both round to 0 completed
-    // years and neither is eligible - but the fraction is discarded here.
-    expect(computeTenureYears('2024-01-15', new Date(2024, 3, 20))).toBe(0)
+    // 96 = 91 days to 2024-04-15 (31 January + 29 in leap February + 31 March),
+    // then 5 more.
+    expect(computeTenureYears('2024-01-15', new Date(2024, 3, 20))).toBeCloseTo(96 / 366, 10)
   })
 
-  it('cannot round a joiner past six months up to 1 year - the fraction is dropped', () => {
+  it('reports a joiner past six months as a fraction above 0.5, which rounds UP to 1', () => {
     // doj 2024-01-15, asOf 2024-08-20: 218 days of a 366-day service year = 0.5956,
-    // which IS above the 0.5 threshold and would round UP to 1 completed year.
+    // which is above the 0.5 threshold, so Payment of Gratuity rounding counts this
+    // employee as 1 completed year.
     //
-    // The same `whole <= 0` guard returns 0, so that round-up is unreachable
-    // through this function. No payment consequence - a sub-year tenure cannot
-    // reach the 5-year eligibility threshold or the Rs 20,00,000 cap either way -
-    // but the figure shown for a 7-month employee is 0 rather than 0.6. Pinned so
-    // it cannot change silently.
-    expect(computeTenureYears('2024-01-15', new Date(2024, 7, 20))).toBe(0)
+    // Nothing is payable either way (1 year is far below the 5-year threshold), but
+    // the tenure itself must survive the round trip: this used to short-circuit to 0
+    // for anyone under a year of service, discarding the part-year entirely.
+    expect(computeTenureYears('2024-01-15', new Date(2024, 7, 20))).toBeCloseTo(218 / 366, 10)
   })
 })
 
