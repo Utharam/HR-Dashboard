@@ -1,0 +1,138 @@
+import React from 'react';
+import { X, Printer } from 'lucide-react';
+import type { Employee } from '../types';
+import { formatINR, formatLakhs } from '../utils/formatters';
+
+interface EmployeeModalProps {
+  employee: Employee | null;
+  onClose: () => void;
+}
+
+export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose }) => {
+  if (!employee) return null;
+
+  const epf = Math.round(Math.min(employee.basicSalary, 15000) * 0.12);
+  const pt = 200;
+  const lop = Math.round((employee.basicSalary / 26) * employee.lopDays);
+  const totalDeductions = epf + pt + lop;
+  const netPay = employee.monthlyCTC - totalDeductions;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-window" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Profile: ${employee.name}`}>
+        <button 
+          onClick={onClose}
+          aria-label="Close payslip"
+          className="modal-close no-print"
+        >
+          <X size={20} />
+        </button>
+
+        {/* Header Profile */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+              <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
+              <span className={`badge ${employee.status === 'Active' ? 'badge-active' : 'badge-notice'}`}>
+                {employee.status}
+              </span>
+            </div>
+            <p className="text-muted" style={{ marginTop: '2px' }}>
+              {employee.role} • <strong className="text-main">{employee.department}</strong>
+            </p>
+          </div>
+          <span className="cell-id" style={{ padding: '4px 10px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)' }}>
+            {employee.id}
+          </span>
+        </div>
+
+        {/* Profile Details Grid */}
+        <dl className="inset-panel detail-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--space-5)' }}>
+          <div><dt>Location:</dt> <dd>{employee.location}</dd></div>
+          <div><dt>Date of Joining:</dt> <dd>{employee.doj}</dd></div>
+          <div><dt>Work Email:</dt> <dd>{employee.email}</dd></div>
+          <div><dt>Contact:</dt> <dd>{employee.phone}</dd></div>
+          <div><dt>PF UAN:</dt> <dd className="text-mono">{employee.uan}</dd></div>
+          <div><dt>Performance Rating:</dt> <dd className="text-purple-soft">★ {employee.performanceRating}.0 / 5.0</dd></div>
+        </dl>
+
+        {/* Payslip Card Breakdown */}
+        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-xl)', padding: 'var(--space-5)', marginBottom: 'var(--space-5)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)', flexWrap: 'wrap' }}>
+            <h3 className="omni-card-title text-primary">
+              Executive Compensation & Monthly Payslip
+            </h3>
+            <span className="text-dim" style={{ fontSize: 'var(--fs-xs)' }}>
+              Annual CTC: <strong className="text-success">{formatLakhs(employee.monthlyCTC * 12)}</strong>
+            </span>
+          </div>
+
+          <table className="omni-table" style={{ fontSize: 'var(--fs-sm)' }}>
+            <tbody>
+              <tr>
+                <td>Monthly Gross CTC (Fixed)</td>
+                <td style={{ textAlign: 'right', fontWeight: 'var(--fw-semibold)' }}>₹{formatINR(employee.monthlyCTC)}</td>
+              </tr>
+              <tr>
+                <td className="payslip-line">• Basic Salary (50%)</td>
+                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.basicSalary)}</td>
+              </tr>
+              <tr>
+                <td className="payslip-line">• House Rent Allowance / HRA (25%)</td>
+                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.hra)}</td>
+              </tr>
+              <tr>
+                <td className="payslip-line">• Special / Executive Allowance (25%)</td>
+                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.specialAllowance)}</td>
+              </tr>
+              <tr className="text-danger-soft">
+                <td>− Employee Provident Fund (EPF 12% @ ₹15k cap)</td>
+                <td style={{ textAlign: 'right' }}>−₹{formatINR(epf)}</td>
+              </tr>
+              <tr className="text-danger-soft">
+                <td>− Professional Tax (State Statutory)</td>
+                <td style={{ textAlign: 'right' }}>−₹{pt}</td>
+              </tr>
+              {lop > 0 && (
+                <tr className="text-danger-soft">
+                  <td>− Loss of Pay ({employee.lopDays} days @ Basic/26)</td>
+                  <td style={{ textAlign: 'right' }}>−₹{formatINR(lop)}</td>
+                </tr>
+              )}
+              <tr className="payslip-total">
+                <td>Net Take-Home Pay</td>
+                <td style={{ textAlign: 'right' }}>₹{formatINR(netPay)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Leave Balances */}
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
+          <div className="stat-tile">
+            <span className="stat-tile__label">Casual Leave (CL)</span>
+            <div className="stat-tile__value text-info-soft">{employee.clBalance} Days</div>
+          </div>
+          <div className="stat-tile">
+            <span className="stat-tile__label">Sick Leave (SL)</span>
+            <div className="stat-tile__value text-warning-soft">{employee.slBalance} Days</div>
+          </div>
+          <div className="stat-tile">
+            <span className="stat-tile__label">Privilege Leave (EL)</span>
+            <div className="stat-tile__value text-success-soft">{employee.elBalance} Days</div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }} className="no-print">
+          <button onClick={() => window.print()} className="btn btn-secondary">
+            <Printer size={16} /> Print Payslip
+          </button>
+          <button onClick={onClose} className="btn btn-primary">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
