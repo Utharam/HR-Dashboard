@@ -33,13 +33,30 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
   // drift from the roster vocabulary. A new hire is always on the roster, so the honest
   // default is 'Active' and the picker offers a declined answer rather than forcing one
   // of the three declared values.
-  const [gender, setGender] = useState<Employee['gender']>('Female');
+  //
+  // The picker offering a declined answer is only half of it: this state used to start on
+  // 'Female', so every hire saved without touching the select was written to the roster
+  // as Female - biasing the very diversity ratio the declined option exists to protect,
+  // and no `??` can fix it because 'Female' is a legitimate roster value here. The state
+  // therefore starts EMPTY, which is not a roster value at all. `''` cannot be persisted:
+  // the select is `required`, and handleSubmit refuses the save as well. Substituting
+  // 'Prefer Not to Say' instead would be the same defect wearing a different hat - it
+  // records a decline that nobody made.
+  const [gender, setGender] = useState<Employee['gender'] | ''>('');
+  const [genderError, setGenderError] = useState(false);
   const [phone, setPhone] = useState('+91 9876543210');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // The select is `required`, so the browser blocks an untouched picker first. This
+    // guard is the backstop that makes "an empty gender is never persisted" a property
+    // of the save path rather than of the browser's validation UI.
+    if (gender === '') {
+      setGenderError(true);
+      return;
+    }
     const newId = `EMP-${1201 + totalEmployeesCount}`;
     const monthlyCTC = Number(ctc);
     const basicSalary = Math.round(monthlyCTC * 0.5);
@@ -190,14 +207,25 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
               <select 
                 id="add-gender"
                 className="omni-select" 
+                required
+                aria-invalid={genderError}
                 value={gender}
-                onChange={(e) => setGender(e.target.value as Employee['gender'])}
+                onChange={(e) => {
+                  setGenderError(false);
+                  setGender(e.target.value as Employee['gender']);
+                }}
               >
+                <option value="">Select gender...</option>
                 <option value="Female">Female</option>
                 <option value="Male">Male</option>
                 <option value="Non-Binary">Non-Binary</option>
                 <option value="Prefer Not to Say">Prefer Not to Say</option>
               </select>
+              {genderError && (
+                <span className="omni-label text-danger-soft" role="alert">
+                  Choose a gender, or select "Prefer Not to Say". It is not assumed for you.
+                </span>
+              )}
             </div>
           </div>
 

@@ -62,9 +62,13 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
   const totalMonthlyPayroll = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
   const avgMonthlyCTC = totalHeadcount ? totalMonthlyPayroll / totalHeadcount : 0;
+  // An empty roster has no attendance to average. The old fallback published a literal
+  // '95.2', which is a plausible-looking workforce statistic for a dataset that does
+  // not exist. 0.0 is the honest reading and matches the empty-roster ratio fallback
+  // below; no number is invented here.
   const avgAttendance = totalHeadcount 
     ? (employees.reduce((acc, e) => acc + computeAttendancePct(e.presentDays), 0) / totalHeadcount).toFixed(1)
-    : '95.2';
+    : '0.0';
 
   // Diversity
   const femaleCount = employees.filter(e => e.gender === 'Female').length;

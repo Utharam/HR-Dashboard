@@ -85,6 +85,9 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
   warnings: string[];
 } {
   const warnings: string[] = [];
+  // Held aside from `warnings` so a 200-row unreadable column cannot push these out of
+  // the display cap, and so the cap can report how many rows it is not showing.
+  const unresolvedEnumWarnings: string[] = [];
   const recognizedColSet = new Set<string>();
 
   const employees: Employee[] = rows.map((row, idx) => {
@@ -215,10 +218,34 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     }
 
     // 11. Status & Gender
-    const status = normalizeStatus(row.Status ?? row.status);
-    const gender = normalizeGender(row.Gender ?? row.gender);
+    const rawStatus = row.Status ?? row.status;
+    const rawGender = row.Gender ?? row.gender;
+    const status = normalizeStatus(rawStatus);
+    const gender = normalizeGender(rawGender);
     if (row.Status || row.status) recognizedColSet.add('Status');
     if (row.Gender || row.gender) recognizedColSet.add('Gender');
+
+    // An unresolved enum is stored faithfully and fails closed, but silently is not
+    // enough: `isActive` excludes Unknown from the payroll run, so an import whose
+    // Status column is missing drops the whole roster out of every payroll aggregate
+    // with no indication of why. There is also no UI to repair a status after import —
+    // AddEmployeeModal only creates and DirectorySection only reads — so the import is
+    // the only place this can be surfaced. Collected separately from `warnings` so the
+    // 5-line cap below cannot starve them behind per-row salary and date messages.
+    if (status === 'Unknown') {
+      unresolvedEnumWarnings.push(
+        String(rawStatus ?? '').trim() === ''
+          ? `Row ${idx + 1} (${name}): no Status value found in the sheet. Recorded as Unknown and excluded from the payroll run until the status is corrected.`
+          : `Row ${idx + 1} (${name}): Status "${String(rawStatus).trim()}" was not recognised; recorded as Unknown and excluded from the payroll run.`
+      );
+    }
+    if (gender === 'Unknown') {
+      unresolvedEnumWarnings.push(
+        String(rawGender ?? '').trim() === ''
+          ? `Row ${idx + 1} (${name}): no Gender value found in the sheet. Recorded as Unknown and excluded from gender-ratio reporting.`
+          : `Row ${idx + 1} (${name}): Gender "${String(rawGender).trim()}" was not recognised; recorded as Unknown and excluded from gender-ratio reporting.`
+      );
+    }
 
     // 12. Attendance
     const rawPresent = 
@@ -300,10 +327,23 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     };
   });
 
+  // Unresolved Status / Gender rows lead the list: they are the failures with no route
+  // out of the app, and every one of them changes what the Payroll tab totals. The cap
+  // is the pre-existing 5-line display limit, now with a count of what it is hiding so a
+  // truncated list cannot read as "that was all of them".
+  const MAX_WARNINGS = 5;
+  const shownUnresolved = unresolvedEnumWarnings.slice(0, MAX_WARNINGS - 1);
+  const overflowNote =
+    unresolvedEnumWarnings.length > shownUnresolved.length
+      ? [
+          `+ ${unresolvedEnumWarnings.length - shownUnresolved.length} more row(s) in this sheet had a Status or Gender value that could not be read; every one is recorded as Unknown.`
+        ]
+      : [];
+
   return {
     employees,
     recognizedColumns: Array.from(recognizedColSet),
-    warnings: warnings.slice(0, 5) // Cap warnings display to avoid clutter
+    warnings: [...shownUnresolved, ...overflowNote, ...warnings].slice(0, MAX_WARNINGS)
   };
 }
 

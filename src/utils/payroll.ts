@@ -80,6 +80,13 @@ export function computePayroll(employee: Employee): PayrollBreakdown {
  * those staff in the payroll run — generating PF, professional tax and a payslip for
  * someone the HRMS never confirmed was on the roster. The safer failure is to leave
  * them out of the disbursement until the status is resolved.
+ *
+ * This predicate is not self-enforcing; every consumer must apply it. It gates the
+ * Payroll tab's aggregates and table figures (`PayrollSection`), the payroll-register
+ * export (`App.tsx`) and the per-employee payslip (`EmployeeModal`). It deliberately
+ * does NOT gate the staff-roster export or the roster views: a master roster is a
+ * record of who is on file, not a statement of who is being paid, and batch B keeps
+ * Resigned staff visible in the payroll table for the same reason.
  */
 export function isActive(employee: Employee): boolean {
   return employee.status !== 'Resigned' && employee.status !== 'Unknown';

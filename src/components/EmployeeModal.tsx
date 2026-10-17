@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Printer } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
-import { computePayroll } from '../utils/payroll';
+import { computePayroll, isActive } from '../utils/payroll';
 import { statusBadgeClass } from './statusBadge';
 
 interface EmployeeModalProps {
@@ -13,7 +13,12 @@ interface EmployeeModalProps {
 export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose }) => {
   if (!employee) return null;
 
-  const { epf, professionalTax: pt, lossOfPay: lop, netPayable: netPay } = computePayroll(employee);
+  // A payslip is a statement of money payable, so one is computed only for staff in the
+  // payroll run. A Resigned or Unknown employee gets an explicit notice in place of the
+  // figures instead: their profile stays visible (batch B keeps resigned staff in the
+  // payroll *table*), but no Net Take-Home figure is shown for someone who is not being
+  // paid. Previously every profile computed and printed a full payslip regardless.
+  const payslip = isActive(employee) ? computePayroll(employee) : null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -58,51 +63,60 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
         <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-xl)', padding: 'var(--space-5)', marginBottom: 'var(--space-5)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)', flexWrap: 'wrap' }}>
             <h3 className="omni-card-title text-primary">
-              Executive Compensation & Monthly Payslip
+              {payslip ? 'Executive Compensation & Monthly Payslip' : 'Executive Compensation'}
             </h3>
             <span className="text-dim" style={{ fontSize: 'var(--fs-xs)' }}>
               Annual CTC: <strong className="text-success">{formatLakhs(employee.monthlyCTC * 12)}</strong>
             </span>
           </div>
 
-          <table className="omni-table" style={{ fontSize: 'var(--fs-sm)' }}>
-            <tbody>
-              <tr>
-                <td>Monthly Gross CTC (Fixed)</td>
-                <td style={{ textAlign: 'right', fontWeight: 'var(--fw-semibold)' }}>₹{formatINR(employee.monthlyCTC)}</td>
-              </tr>
-              <tr>
-                <td className="payslip-line">• Basic Salary (50%)</td>
-                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.basicSalary)}</td>
-              </tr>
-              <tr>
-                <td className="payslip-line">• House Rent Allowance / HRA (25%)</td>
-                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.hra)}</td>
-              </tr>
-              <tr>
-                <td className="payslip-line">• Special / Executive Allowance (25%)</td>
-                <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.specialAllowance)}</td>
-              </tr>
-              <tr className="text-danger-soft">
-                <td>− Employee Provident Fund (EPF 12% @ ₹15k cap)</td>
-                <td style={{ textAlign: 'right' }}>−₹{formatINR(epf)}</td>
-              </tr>
-              <tr className="text-danger-soft">
-                <td>− Professional Tax (State Statutory)</td>
-                <td style={{ textAlign: 'right' }}>−₹{pt}</td>
-              </tr>
-              {lop > 0 && (
-                <tr className="text-danger-soft">
-                  <td>− Loss of Pay ({employee.lopDays} days @ Basic/26)</td>
-                  <td style={{ textAlign: 'right' }}>−₹{formatINR(lop)}</td>
+          {payslip ? (
+            <table className="omni-table" style={{ fontSize: 'var(--fs-sm)' }}>
+              <tbody>
+                <tr>
+                  <td>Monthly Gross CTC (Fixed)</td>
+                  <td style={{ textAlign: 'right', fontWeight: 'var(--fw-semibold)' }}>₹{formatINR(employee.monthlyCTC)}</td>
                 </tr>
-              )}
-              <tr className="payslip-total">
-                <td>Net Take-Home Pay</td>
-                <td style={{ textAlign: 'right' }}>₹{formatINR(netPay)}</td>
-              </tr>
-            </tbody>
-          </table>
+                <tr>
+                  <td className="payslip-line">• Basic Salary (50%)</td>
+                  <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.basicSalary)}</td>
+                </tr>
+                <tr>
+                  <td className="payslip-line">• House Rent Allowance / HRA (25%)</td>
+                  <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.hra)}</td>
+                </tr>
+                <tr>
+                  <td className="payslip-line">• Special / Executive Allowance (25%)</td>
+                  <td style={{ textAlign: 'right' }} className="text-muted">₹{formatINR(employee.specialAllowance)}</td>
+                </tr>
+                <tr className="text-danger-soft">
+                  <td>− Employee Provident Fund (EPF 12% @ ₹15k cap)</td>
+                  <td style={{ textAlign: 'right' }}>−₹{formatINR(payslip.epf)}</td>
+                </tr>
+                <tr className="text-danger-soft">
+                  <td>− Professional Tax (State Statutory)</td>
+                  <td style={{ textAlign: 'right' }}>−₹{payslip.professionalTax}</td>
+                </tr>
+                {payslip.lossOfPay > 0 && (
+                  <tr className="text-danger-soft">
+                    <td>− Loss of Pay ({employee.lopDays} days @ Basic/26)</td>
+                    <td style={{ textAlign: 'right' }}>−₹{formatINR(payslip.lossOfPay)}</td>
+                  </tr>
+                )}
+                <tr className="payslip-total">
+                  <td>Net Take-Home Pay</td>
+                  <td style={{ textAlign: 'right' }}>₹{formatINR(payslip.netPayable)}</td>
+                </tr>
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-muted" role="note">
+              No payslip is available for this employee. Their recorded status is
+              {' '}<strong>{employee.status}</strong>, so they are not part of the payroll run
+              {' '}— no PF, professional tax or net pay is computed until the status is resolved
+              to Active, Probation or Notice Period.
+            </p>
+          )}
         </div>
 
         {/* Leave Balances */}
@@ -123,9 +137,11 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
 
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }} className="no-print">
-          <button onClick={() => window.print()} className="btn btn-secondary">
-            <Printer size={16} /> Print Payslip
-          </button>
+          {payslip && (
+            <button onClick={() => window.print()} className="btn btn-secondary">
+              <Printer size={16} /> Print Payslip
+            </button>
+          )}
           <button onClick={onClose} className="btn btn-primary">
             Close
           </button>

@@ -25,7 +25,7 @@ import {
   INITIAL_REQUISITIONS 
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
-import { computePayroll } from './utils/payroll';
+import { computePayroll, isActive } from './utils/payroll';
 
 export const App: React.FC = () => {
   // Local persistence in localStorage
@@ -144,7 +144,14 @@ export const App: React.FC = () => {
 
   // Export Monthly Payroll Advice to Excel
   const handleExportPayroll = () => {
-    const data = filteredEmployees.map(e => {
+    // The payroll run excludes Resigned and Unknown staff, and this register is a
+    // statement of money payable - so it must be filtered by the same `isActive` the
+    // Payroll tab uses. It was not: an Unknown import still had a Net Salary Payable
+    // written into the file, which is how an unresolved import becomes a real payment.
+    // The roster export above is deliberately NOT filtered — it is the master list,
+    // not a disbursement.
+    const payrollRun = filteredEmployees.filter(isActive);
+    const data = payrollRun.map(e => {
       const p = computePayroll(e);
 
       return {

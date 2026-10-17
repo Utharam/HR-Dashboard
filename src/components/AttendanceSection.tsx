@@ -17,7 +17,14 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
   // Summed directly: `e.presentDays || 25` silently promoted a genuine 0 (someone
   // absent all month) to 25, inflating the "Workforce Present Avg" KPI.
   const totalPresentSum = employees.reduce((acc, e) => acc + e.presentDays, 0);
-  const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '24.8';
+  // Both fallbacks below used to be invented statistics — '24.8' days and a hardcoded
+  // '95.4% Workforce Availability' in the JSX — shown for a roster with no employees to
+  // measure. An empty roster reports 0.0 for both, and the sub-label is now derived from
+  // the same array as the card above it instead of being typed into the markup.
+  const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '0.0';
+  const workforceAvailabilityPct = employees.length
+    ? (employees.reduce((acc, e) => acc + computeAttendancePct(e.presentDays), 0) / employees.length).toFixed(1)
+    : '0.0';
   
   // Total LOP Deductions. computeLOP is the single owner of this arithmetic, so
   // the Attendance tab and the Payroll tab can never quote different LOP figures
@@ -48,7 +55,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Workforce Present Avg</span>
           <div className="kpi-value text-success">{avgPresent} Days</div>
-          <span className="kpi-sub">95.4% Workforce Availability</span>
+          <span className="kpi-sub">{workforceAvailabilityPct}% Workforce Availability</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
