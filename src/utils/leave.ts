@@ -38,3 +38,18 @@ export function sumLeaveBalances(employees: Employee[]): LeaveBalanceTotals {
 
   return { casual, sick, earned, total: casual + sick + earned }
 }
+
+/**
+ * One employee's encashable earned-leave days, through the same guard.
+ *
+ * This feeds the leave-encashment line of the final settlement statement —
+ * `(basic / 30) * min(days, 30)` — which an exiting employee may act on. The
+ * site this replaces read `emp.elBalance || 12`, so an employee who had
+ * genuinely used every earned day (`elBalance: 0`) was credited 12 encashable
+ * days: a fabricated settlement figure, not a display artefact. There is no
+ * entitlement default to fall back on here; the record is either there or it
+ * is not, and "not" is zero.
+ */
+export function earnedLeaveBalance(employee: Employee): number {
+  return safeBalance(employee.elBalance)
+}

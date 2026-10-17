@@ -25,7 +25,11 @@ const axisTickFont = { family: CHART.font, size: 11 };
 
 export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
   const totalHeadcountCurrent = tracker[tracker.length - 1]?.headcount || 200;
-  const currentPayroll = tracker[tracker.length - 1]?.grossPayroll || 23000000;
+  // Read the recorded payroll directly. `|| 23000000` published a fabricated
+  // ₹2.3 Cr monthly payroll whenever the tracker was empty or the last month
+  // recorded a genuine zero — a payroll figure, not a placeholder, and the one
+  // remaining `|| <numeric default>` on a payroll number in this section.
+  const currentPayroll = tracker[tracker.length - 1]?.grossPayroll ?? 0;
   const avgAttendance = (tracker.reduce((acc, t) => acc + t.avgAttendance, 0) / tracker.length).toFixed(1);
   const avgAttrition = (tracker.reduce((acc, t) => acc + t.attritionPct, 0) / tracker.length).toFixed(2);
 

@@ -3,6 +3,7 @@ import { ShieldCheck, Calculator } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, computeStatutoryGratuity } from '../utils/formatters';
 import { computeTenureYears } from '../utils/dates';
+import { earnedLeaveBalance } from '../utils/leave';
 
 interface RetentionSectionProps {
   employees: Employee[];
@@ -26,7 +27,7 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
       // reports as invalid, so no settlement statement is rendered at all.
       const service = computeTenureYears(emp.doj);
       setTenureYears(service === null ? null : parseFloat(service.toFixed(1)));
-      setUnusedLeaves(emp.elBalance || 12);
+      setUnusedLeaves(earnedLeaveBalance(emp));
     }
   };
 
