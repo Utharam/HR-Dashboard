@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { Employee } from '../types';
+import { parseSpreadsheetDate } from './dates';
 
 export interface ParseResult {
   sheetName: string;
@@ -10,54 +11,15 @@ export interface ParseResult {
 }
 
 /**
- * Robust date parser for spreadsheets:
- * Supports JS Date objects, Excel serial numbers, and common date strings (YYYY-MM-DD, DD/MM/YYYY, etc.)
+ * Robust date parser for spreadsheets: JS Date objects, Excel serial numbers
+ * and textual dates, resolved timezone-independently by `dates.ts`.
+ *
+ * Re-exported under its original name so existing importers keep working.
+ * It now returns `string | null`: an unreadable cell yields `null` (and a
+ * warning at the call site) instead of the old fake `'2023-01-15'` default,
+ * which invented a tenure for every row it could not understand.
  */
-export function parseExcelDate(val: unknown): string {
-  if (!val) return '2023-01-15';
-
-  if (val instanceof Date) {
-    if (isNaN(val.getTime())) return '2023-01-15';
-    return val.toISOString().slice(0, 10);
-  }
-
-  if (typeof val === 'number' && val > 0 && val < 100000) {
-    try {
-      const parsed = XLSX.SSF.parse_date_code(val);
-      if (parsed && parsed.y && parsed.m && parsed.d) {
-        const y = String(parsed.y).padStart(4, '0');
-        const m = String(parsed.m).padStart(2, '0');
-        const d = String(parsed.d).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-      }
-    } catch {
-      // fallback to Date epoch
-      const dt = new Date(Math.round((val - 25569) * 86400 * 1000));
-      if (!isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-    }
-  }
-
-  const str = String(val).trim();
-  // Check standard ISO YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return str;
-  }
-
-  // Check DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-  if (dmyMatch) {
-    const [, d, m, y] = dmyMatch;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-
-  // Fallback to standard Date.parse
-  const parsed = Date.parse(str);
-  if (!isNaN(parsed)) {
-    return new Date(parsed).toISOString().slice(0, 10);
-  }
-
-  return '2023-01-15';
-}
+export { parseSpreadsheetDate as parseExcelDate };
 
 export function normalizeStatus(val: unknown): 'Active' | 'Probation' | 'Notice Period' | 'Resigned' {
   if (!val) return 'Active';
@@ -152,7 +114,13 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       row['Hire Date'] ?? 
       row.doj;
     if (rawDoj) recognizedColSet.add('Date of Joining');
-    const doj = parseExcelDate(rawDoj);
+    const parsedDoj = parseSpreadsheetDate(rawDoj);
+    if (parsedDoj === null && rawDoj != null && String(rawDoj).trim() !== '') {
+      warnings.push(
+        `Row ${idx + 1} (${name}): Date of Joining "${String(rawDoj).trim()}" could not be read as a date. Left blank — tenure and gratuity will be unavailable.`
+      );
+    }
+    const doj = parsedDoj ?? '';
 
     // 7. Monthly CTC & Annual CTC
     let monthlyCTC = 120000;
