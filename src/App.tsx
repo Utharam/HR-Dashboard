@@ -25,6 +25,7 @@ import {
   INITIAL_REQUISITIONS 
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
+import { computePayroll } from './utils/payroll';
 
 export const App: React.FC = () => {
   // Local persistence in localStorage
@@ -144,10 +145,7 @@ export const App: React.FC = () => {
   // Export Monthly Payroll Advice to Excel
   const handleExportPayroll = () => {
     const data = filteredEmployees.map(e => {
-      const epf = Math.round(Math.min(e.basicSalary, 15000) * 0.12);
-      const pt = 200;
-      const lop = Math.round((e.basicSalary / 26) * e.lopDays);
-      const netPay = e.monthlyCTC - (epf + pt + lop);
+      const p = computePayroll(e);
 
       return {
         'Employee ID': e.id,
@@ -155,15 +153,15 @@ export const App: React.FC = () => {
         'Department': e.department,
         'Designation': e.role,
         'Location': e.location,
-        'Monthly Gross CTC': e.monthlyCTC,
-        'Basic (50%)': e.basicSalary,
-        'HRA (25%)': e.hra,
-        'Special Allowance (25%)': e.specialAllowance,
-        'EPF (12% @ ₹15k cap)': epf,
-        'Professional Tax': pt,
-        'Loss of Pay (LOP)': lop,
-        'Total Deductions': epf + pt + lop,
-        'Net Salary Payable': netPay
+        'Monthly Gross CTC': p.gross,
+        'Basic (50%)': p.basic,
+        'HRA (25%)': p.hra,
+        'Special Allowance (25%)': p.specialAllowance,
+        'EPF (12% @ ₹15k cap)': p.epf,
+        'Professional Tax': p.professionalTax,
+        'Loss of Pay (LOP)': p.lossOfPay,
+        'Total Deductions': p.totalDeductions,
+        'Net Salary Payable': p.netPayable
       };
     });
 

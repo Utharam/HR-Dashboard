@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Printer } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
+import { computePayroll } from '../utils/payroll';
 
 interface EmployeeModalProps {
   employee: Employee | null;
@@ -11,11 +12,7 @@ interface EmployeeModalProps {
 export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose }) => {
   if (!employee) return null;
 
-  const epf = Math.round(Math.min(employee.basicSalary, 15000) * 0.12);
-  const pt = 200;
-  const lop = Math.round((employee.basicSalary / 26) * employee.lopDays);
-  const totalDeductions = epf + pt + lop;
-  const netPay = employee.monthlyCTC - totalDeductions;
+  const { epf, professionalTax: pt, lossOfPay: lop, netPayable: netPay } = computePayroll(employee);
 
   return (
     <div className="modal-overlay" onClick={onClose}>

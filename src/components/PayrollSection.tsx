@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatCrores } from '../utils/formatters';
+import { computePayroll, isActive, PROFESSIONAL_TAX } from '../utils/payroll';
 
 interface PayrollSectionProps {
   employees: Employee[];
@@ -15,13 +16,17 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
 
-  const totalMonthlyGross = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
-  const totalBasic = employees.reduce((acc, e) => acc + e.basicSalary, 0);
-  
-  // Total Statutory Deductions: EPF + ESI/PT
-  const totalEPF = employees.reduce((acc, e) => acc + Math.round(Math.min(e.basicSalary, 15000) * 0.12), 0);
-  const totalPT = employees.length * 200; // Standard ₹200/mo
-  const totalNetDisbursable = totalMonthlyGross - (totalEPF + totalPT);
+  // Payroll run figures come from employees.filter(isActive) — resigned staff are
+  // not paid, so they must not appear in the aggregates or be charged PT.
+  const activeRoster = employees.filter(isActive);
+  const payroll = activeRoster.map(computePayroll);
+
+  const totalMonthlyGross = payroll.reduce((acc, p) => acc + p.gross, 0);
+  const totalBasic = payroll.reduce((acc, p) => acc + p.basic, 0);
+  const totalEPF = payroll.reduce((acc, p) => acc + p.epf, 0);
+  const totalPT = activeRoster.length * PROFESSIONAL_TAX; // Standard ₹200/mo
+  const totalLOP = payroll.reduce((acc, p) => acc + p.lossOfPay, 0);
+  const totalNetDisbursable = totalMonthlyGross - (totalEPF + totalPT + totalLOP);
 
   const totalPages = Math.ceil(employees.length / pageSize) || 1;
   const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -33,7 +38,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Total Monthly CTC</span>
           <div className="kpi-value">{formatCrores(totalMonthlyGross)}</div>
-          <span className="kpi-sub">Across {employees.length} active roster</span>
+          <span className="kpi-sub">Across {activeRoster.length} active roster</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
@@ -60,7 +65,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         <div className="omni-card-header">
           <div>
             <h3 className="omni-card-title">Compensation Structure & Take-Home Salary Breakdown</h3>
-            <p className="omni-card-sub">Standard Indian wage formula: 50% Basic, 25% HRA, 25% Special Allowance minus EPF and PT.</p>
+            <p className="omni-card-sub">Standard Indian wage formula: 50% Basic, 25% HRA, 25% Special Allowance minus EPF, Professional Tax and LOP.</p>
           </div>
           <span className="pagination__count">
             Showing {employees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, employees.length)} of {employees.length}
@@ -86,9 +91,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
             </thead>
             <tbody>
               {currentItems.map(emp => {
-                const epf = Math.round(Math.min(emp.basicSalary, 15000) * 0.12);
-                const pt = 200;
-                const net = emp.monthlyCTC - (epf + pt);
+                const p = computePayroll(emp);
 
                 return (
                   <tr key={emp.id}>
@@ -99,9 +102,9 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                     <td>₹{formatINR(emp.basicSalary)}</td>
                     <td>₹{formatINR(emp.hra)}</td>
                     <td>₹{formatINR(emp.specialAllowance)}</td>
-                    <td className="text-danger-soft">−₹{formatINR(epf)}</td>
-                    <td className="text-danger-soft">−₹{pt}</td>
-                    <td className="cell-strong text-success">₹{formatINR(net)}</td>
+                    <td className="text-danger-soft">−₹{formatINR(p.epf)}</td>
+                    <td className="text-danger-soft">−₹{p.professionalTax}</td>
+                    <td className="cell-strong text-success">₹{formatINR(p.netPayable)}</td>
                     <td>
                       <button 
                         onClick={() => onSelectEmployee(emp)}
