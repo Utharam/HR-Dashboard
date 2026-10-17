@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR } from '../utils/formatters';
+import { computeLOP } from '../utils/payroll';
 
 interface AttendanceSectionProps {
   employees: Employee[];
@@ -14,11 +15,10 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
   const totalPresentSum = employees.reduce((acc, e) => acc + (e.presentDays || 25), 0);
   const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '24.8';
   
-  // Total LOP Deductions (Basic / 26 * LOP Days)
-  const totalLOPAmount = employees.reduce((acc, e) => {
-    const dailyWage = e.basicSalary / 26;
-    return acc + Math.round(dailyWage * (e.lopDays || 0));
-  }, 0);
+  // Total LOP Deductions. computeLOP is the single owner of this arithmetic, so
+  // the Attendance tab and the Payroll tab can never quote different LOP figures
+  // for the same employee — including the [0, 26] day clamp it enforces.
+  const totalLOPAmount = employees.reduce((acc, e) => acc + computeLOP(e.basicSalary, e.lopDays), 0);
 
   const totalCL = employees.reduce((acc, e) => acc + (12 - (e.clBalance || 8)), 0);
   const totalSL = employees.reduce((acc, e) => acc + (12 - (e.slBalance || 8)), 0);
@@ -86,7 +86,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
             </thead>
             <tbody>
               {currentItems.map(emp => {
-                const lopDed = Math.round((emp.basicSalary / 26) * emp.lopDays);
+                const lopDed = computeLOP(emp.basicSalary, emp.lopDays);
                 const attPct = ((emp.presentDays / 26) * 100).toFixed(1);
                 return (
                   <tr key={emp.id}>

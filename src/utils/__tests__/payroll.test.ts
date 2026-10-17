@@ -56,7 +56,7 @@ describe('computePayroll', () => {
     expect(p.lossOfPay).toBe(expectedLOP)
     expect(p.netPayable).toBe(p.gross - (p.epf + p.professionalTax + p.lossOfPay))
   })
-  it('excludes Professional Tax from the net when there is no LOP', () => {
+  it('deducts Professional Tax from the net when there is no LOP', () => {
     const p = computePayroll(emp())
     expect(p.netPayable).toBe(100000 - (1800 + PROFESSIONAL_TAX))
   })
