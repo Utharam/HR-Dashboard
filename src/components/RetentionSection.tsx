@@ -30,16 +30,22 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
 
   // Statutory calculation
   const gratuityResult = computeStatutoryGratuity(basicSalary, tenureYears);
-  const leaveEncashment = Math.round((basicSalary / 30) * Math.min(unusedLeaves, 30));
-  
+  // An unusable input yields no settlement at all: a ₹0 total would read as a
+  // legitimate finding on a statement an employee may act on.
+  const settlementInvalid = gratuityResult.invalid;
+  const leaveEncashment = Math.max(0, Math.round((basicSalary / 30) * Math.min(unusedLeaves, 30)));
+
   let noticePay = 0;
   let retrenchmentComp = 0;
-  if (separationType === 'retrenchment') {
-    noticePay = Math.round(basicSalary); // 1 month notice in lieu
-    retrenchmentComp = Math.round((15 * basicSalary * tenureYears) / 30); // 15 days avg pay/yr
+  if (!settlementInvalid && separationType === 'retrenchment') {
+    noticePay = Math.max(0, Math.round(basicSalary)); // 1 month notice in lieu
+    retrenchmentComp = Math.max(0, Math.round((15 * basicSalary * tenureYears) / 30)); // 15 days avg pay/yr
   }
 
-  const totalSettlement = gratuityResult.gratuity + leaveEncashment + noticePay + retrenchmentComp;
+  const totalSettlement = Math.max(
+    0,
+    (settlementInvalid ? 0 : gratuityResult.gratuity) + leaveEncashment + noticePay + retrenchmentComp
+  );
 
   return (
     <div className="section-stack">
@@ -77,10 +83,11 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-basic"
               type="number"
+              min={0}
               className="omni-input"
               style={{ width: '100%' }}
               value={basicSalary}
-              onChange={(e) => setBasicSalary(Number(e.target.value))}
+              onChange={(e) => setBasicSalary(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -89,11 +96,12 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-tenure"
               type="number"
+              min={0}
               step="0.1"
               className="omni-input"
               style={{ width: '100%' }}
               value={tenureYears}
-              onChange={(e) => setTenureYears(Number(e.target.value))}
+              onChange={(e) => setTenureYears(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -102,10 +110,11 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-leaves"
               type="number"
+              min={0}
               className="omni-input"
               style={{ width: '100%' }}
               value={unusedLeaves}
-              onChange={(e) => setUnusedLeaves(Number(e.target.value))}
+              onChange={(e) => setUnusedLeaves(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -133,7 +142,7 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
         </button>
 
         {/* Calculation Result Breakdown */}
-        {hasCalculated && (
+        {hasCalculated && !settlementInvalid && (
           <div className="settlement">
             <h4 className="omni-card-title">
               Official Final Settlement Statement
@@ -190,6 +199,22 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
                   ₹{formatINR(totalSettlement)}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Withheld panel: an unusable input must not print a ₹0 settlement. */}
+        {hasCalculated && settlementInvalid && (
+          <div className="settlement">
+            <h4 className="omni-card-title">
+              Official Final Settlement Statement
+            </h4>
+
+            <div className="settlement__line settlement__line--void" style={{ display: 'block' }}>
+              Enter a valid basic salary and date of joining
+              <span className="settlement__flag">
+                No settlement can be stated: the tenure or basic salary on this profile could not be read.
+              </span>
             </div>
           </div>
         )}
