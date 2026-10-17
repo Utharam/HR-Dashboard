@@ -12,7 +12,7 @@ const emp = (over: Partial<Employee> = {}): Employee => ({
   basicSalary: 50000, hra: 25000, specialAllowance: 25000,
   status: 'Active', gender: 'Female', performanceRating: 4,
   reportsTo: null, presentDays: 26, clBalance: 8, slBalance: 8,
-  elBalance: 12, lopDays: 0, uan: '100000000000', attendancePct: 100,
+  elBalance: 12, lopDays: 0, uan: '100000000000',
   ...over,
 })
 

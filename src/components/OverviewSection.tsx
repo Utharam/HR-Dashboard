@@ -4,6 +4,7 @@ import 'chart.js/auto';
 import { Users, CreditCard, Award, CalendarCheck, TrendingDown, Sparkles } from 'lucide-react';
 import type { Employee, Department } from '../types';
 import { formatINR, formatCrores, formatLakhs } from '../utils/formatters';
+import { computeAttendancePct } from '../utils/dates';
 
 interface OverviewSectionProps {
   employees: Employee[];
@@ -61,7 +62,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const totalMonthlyPayroll = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
   const avgMonthlyCTC = totalHeadcount ? totalMonthlyPayroll / totalHeadcount : 0;
   const avgAttendance = totalHeadcount 
-    ? (employees.reduce((acc, e) => acc + (e.attendancePct || 95), 0) / totalHeadcount).toFixed(1)
+    ? (employees.reduce((acc, e) => acc + computeAttendancePct(e.presentDays), 0) / totalHeadcount).toFixed(1)
     : '95.2';
 
   // Diversity

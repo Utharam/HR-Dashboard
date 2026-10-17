@@ -61,8 +61,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       slBalance: 10,
       elBalance: 15,
       lopDays: 0,
-      uan: `100${Math.floor(100000000 + Math.random() * 900000000)}`,
-      attendancePct: 96.2
+      uan: `100${Math.floor(100000000 + Math.random() * 900000000)}`
     };
 
     onAddEmployee(newEmp);

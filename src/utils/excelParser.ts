@@ -236,8 +236,6 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     const uan = String(row['PF UAN'] ?? row.UAN ?? row.uan ?? '100123456789').trim();
     if (row['PF UAN'] || row.UAN || row.uan) recognizedColSet.add('PF UAN');
 
-    const attendancePct = Number(((presentDays / 26) * 100).toFixed(1));
-
     return {
       id,
       name,
@@ -261,8 +259,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       slBalance,
       elBalance,
       lopDays,
-      uan,
-      attendancePct
+      uan
     };
   });
 

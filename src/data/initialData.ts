@@ -25,7 +25,6 @@ export interface Employee {
   elBalance: number;
   lopDays: number;
   uan: string;
-  attendancePct: number;
 }
 
 export interface Department {
@@ -181,8 +180,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 5,
     "lopDays": 4,
-    "uan": "100642621108",
-    "attendancePct": 84.6
+    "uan": "100642621108"
   },
   {
     "id": "EMP-1002",
@@ -207,8 +205,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 17,
     "lopDays": 3,
-    "uan": "100849621470",
-    "attendancePct": 88.5
+    "uan": "100849621470"
   },
   {
     "id": "EMP-1003",
@@ -233,8 +230,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 18,
     "lopDays": 0,
-    "uan": "100966647391",
-    "attendancePct": 96.2
+    "uan": "100966647391"
   },
   {
     "id": "EMP-1004",
@@ -259,8 +255,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 5,
     "lopDays": 0,
-    "uan": "100185675980",
-    "attendancePct": 100.0
+    "uan": "100185675980"
   },
   {
     "id": "EMP-1005",
@@ -285,8 +280,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100754049436",
-    "attendancePct": 92.3
+    "uan": "100754049436"
   },
   {
     "id": "EMP-1006",
@@ -311,8 +305,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 18,
     "lopDays": 2,
-    "uan": "100530747414",
-    "attendancePct": 92.3
+    "uan": "100530747414"
   },
   {
     "id": "EMP-1007",
@@ -337,8 +330,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100902099969",
-    "attendancePct": 92.3
+    "uan": "100902099969"
   },
   {
     "id": "EMP-1008",
@@ -363,8 +355,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 15,
     "lopDays": 4,
-    "uan": "100740389325",
-    "attendancePct": 84.6
+    "uan": "100740389325"
   },
   {
     "id": "EMP-1009",
@@ -389,8 +380,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 9,
     "lopDays": 1,
-    "uan": "100103484630",
-    "attendancePct": 92.3
+    "uan": "100103484630"
   },
   {
     "id": "EMP-1010",
@@ -415,8 +405,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 13,
     "lopDays": 1,
-    "uan": "100448059918",
-    "attendancePct": 88.5
+    "uan": "100448059918"
   },
   {
     "id": "EMP-1011",
@@ -441,8 +430,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 17,
     "lopDays": 2,
-    "uan": "100237859287",
-    "attendancePct": 84.6
+    "uan": "100237859287"
   },
   {
     "id": "EMP-1012",
@@ -467,8 +455,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 12,
     "lopDays": 0,
-    "uan": "100366186631",
-    "attendancePct": 92.3
+    "uan": "100366186631"
   },
   {
     "id": "EMP-1013",
@@ -493,8 +480,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 6,
     "lopDays": 4,
-    "uan": "100652070932",
-    "attendancePct": 84.6
+    "uan": "100652070932"
   },
   {
     "id": "EMP-1014",
@@ -519,8 +505,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 8,
     "lopDays": 3,
-    "uan": "100480424119",
-    "attendancePct": 88.5
+    "uan": "100480424119"
   },
   {
     "id": "EMP-1015",
@@ -545,8 +530,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 8,
     "lopDays": 2,
-    "uan": "100250519597",
-    "attendancePct": 92.3
+    "uan": "100250519597"
   },
   {
     "id": "EMP-1016",
@@ -571,8 +555,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100621453189",
-    "attendancePct": 100.0
+    "uan": "100621453189"
   },
   {
     "id": "EMP-1017",
@@ -597,8 +580,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 7,
     "lopDays": 2,
-    "uan": "100162795957",
-    "attendancePct": 92.3
+    "uan": "100162795957"
   },
   {
     "id": "EMP-1018",
@@ -623,8 +605,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 18,
     "lopDays": 3,
-    "uan": "100172972420",
-    "attendancePct": 88.5
+    "uan": "100172972420"
   },
   {
     "id": "EMP-1019",
@@ -649,8 +630,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100356287095",
-    "attendancePct": 100.0
+    "uan": "100356287095"
   },
   {
     "id": "EMP-1020",
@@ -675,8 +655,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 13,
     "lopDays": 0,
-    "uan": "100242224154",
-    "attendancePct": 100.0
+    "uan": "100242224154"
   },
   {
     "id": "EMP-1021",
@@ -701,8 +680,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 15,
     "lopDays": 4,
-    "uan": "100223940587",
-    "attendancePct": 84.6
+    "uan": "100223940587"
   },
   {
     "id": "EMP-1022",
@@ -727,8 +705,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 9,
     "lopDays": 2,
-    "uan": "100990505735",
-    "attendancePct": 92.3
+    "uan": "100990505735"
   },
   {
     "id": "EMP-1023",
@@ -753,8 +730,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100685823118",
-    "attendancePct": 100.0
+    "uan": "100685823118"
   },
   {
     "id": "EMP-1024",
@@ -779,8 +755,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 15,
     "lopDays": 2,
-    "uan": "100536344399",
-    "attendancePct": 92.3
+    "uan": "100536344399"
   },
   {
     "id": "EMP-1025",
@@ -805,8 +780,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100141580226",
-    "attendancePct": 96.2
+    "uan": "100141580226"
   },
   {
     "id": "EMP-1026",
@@ -831,8 +805,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 9,
     "lopDays": 3,
-    "uan": "100477040284",
-    "attendancePct": 88.5
+    "uan": "100477040284"
   },
   {
     "id": "EMP-1027",
@@ -857,8 +830,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 10,
     "lopDays": 2,
-    "uan": "100568574364",
-    "attendancePct": 84.6
+    "uan": "100568574364"
   },
   {
     "id": "EMP-1028",
@@ -883,8 +855,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 10,
     "lopDays": 0,
-    "uan": "100769108025",
-    "attendancePct": 100.0
+    "uan": "100769108025"
   },
   {
     "id": "EMP-1029",
@@ -909,8 +880,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 8,
     "lopDays": 1,
-    "uan": "100827264603",
-    "attendancePct": 92.3
+    "uan": "100827264603"
   },
   {
     "id": "EMP-1030",
@@ -935,8 +905,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 12,
     "lopDays": 2,
-    "uan": "100648868899",
-    "attendancePct": 88.5
+    "uan": "100648868899"
   },
   {
     "id": "EMP-1031",
@@ -961,8 +930,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 8,
     "lopDays": 4,
-    "uan": "100149621604",
-    "attendancePct": 84.6
+    "uan": "100149621604"
   },
   {
     "id": "EMP-1032",
@@ -987,8 +955,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100906341966",
-    "attendancePct": 96.2
+    "uan": "100906341966"
   },
   {
     "id": "EMP-1033",
@@ -1013,8 +980,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 7,
     "lopDays": 2,
-    "uan": "100700141462",
-    "attendancePct": 88.5
+    "uan": "100700141462"
   },
   {
     "id": "EMP-1034",
@@ -1039,8 +1005,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100394846763",
-    "attendancePct": 92.3
+    "uan": "100394846763"
   },
   {
     "id": "EMP-1035",
@@ -1065,8 +1030,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 11,
     "lopDays": 1,
-    "uan": "100168965204",
-    "attendancePct": 88.5
+    "uan": "100168965204"
   },
   {
     "id": "EMP-1036",
@@ -1091,8 +1055,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 5,
     "lopDays": 0,
-    "uan": "100997356828",
-    "attendancePct": 100.0
+    "uan": "100997356828"
   },
   {
     "id": "EMP-1037",
@@ -1117,8 +1080,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 16,
     "lopDays": 1,
-    "uan": "100768143326",
-    "attendancePct": 96.2
+    "uan": "100768143326"
   },
   {
     "id": "EMP-1038",
@@ -1143,8 +1105,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 10,
     "lopDays": 4,
-    "uan": "100462388455",
-    "attendancePct": 84.6
+    "uan": "100462388455"
   },
   {
     "id": "EMP-1039",
@@ -1169,8 +1130,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100365518424",
-    "attendancePct": 92.3
+    "uan": "100365518424"
   },
   {
     "id": "EMP-1040",
@@ -1195,8 +1155,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100935147672",
-    "attendancePct": 96.2
+    "uan": "100935147672"
   },
   {
     "id": "EMP-1041",
@@ -1221,8 +1180,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 16,
     "lopDays": 3,
-    "uan": "100964929067",
-    "attendancePct": 84.6
+    "uan": "100964929067"
   },
   {
     "id": "EMP-1042",
@@ -1247,8 +1205,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 18,
     "lopDays": 1,
-    "uan": "100488896443",
-    "attendancePct": 92.3
+    "uan": "100488896443"
   },
   {
     "id": "EMP-1043",
@@ -1273,8 +1230,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 18,
     "lopDays": 0,
-    "uan": "100446071904",
-    "attendancePct": 96.2
+    "uan": "100446071904"
   },
   {
     "id": "EMP-1044",
@@ -1299,8 +1255,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 18,
     "lopDays": 1,
-    "uan": "100327761953",
-    "attendancePct": 92.3
+    "uan": "100327761953"
   },
   {
     "id": "EMP-1045",
@@ -1325,8 +1280,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100696115913",
-    "attendancePct": 100.0
+    "uan": "100696115913"
   },
   {
     "id": "EMP-1046",
@@ -1351,8 +1305,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 12,
     "lopDays": 1,
-    "uan": "100556881239",
-    "attendancePct": 88.5
+    "uan": "100556881239"
   },
   {
     "id": "EMP-1047",
@@ -1377,8 +1330,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 8,
     "lopDays": 2,
-    "uan": "100396889215",
-    "attendancePct": 92.3
+    "uan": "100396889215"
   },
   {
     "id": "EMP-1048",
@@ -1403,8 +1355,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 9,
     "lopDays": 2,
-    "uan": "100413679331",
-    "attendancePct": 92.3
+    "uan": "100413679331"
   },
   {
     "id": "EMP-1049",
@@ -1429,8 +1380,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 18,
     "lopDays": 2,
-    "uan": "100530256336",
-    "attendancePct": 88.5
+    "uan": "100530256336"
   },
   {
     "id": "EMP-1050",
@@ -1455,8 +1405,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100575368059",
-    "attendancePct": 100.0
+    "uan": "100575368059"
   },
   {
     "id": "EMP-1051",
@@ -1481,8 +1430,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 7,
     "lopDays": 3,
-    "uan": "100180600295",
-    "attendancePct": 88.5
+    "uan": "100180600295"
   },
   {
     "id": "EMP-1052",
@@ -1507,8 +1455,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100945923902",
-    "attendancePct": 92.3
+    "uan": "100945923902"
   },
   {
     "id": "EMP-1053",
@@ -1533,8 +1480,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 17,
     "lopDays": 3,
-    "uan": "100409893263",
-    "attendancePct": 84.6
+    "uan": "100409893263"
   },
   {
     "id": "EMP-1054",
@@ -1559,8 +1505,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100368830491",
-    "attendancePct": 96.2
+    "uan": "100368830491"
   },
   {
     "id": "EMP-1055",
@@ -1585,8 +1530,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 9,
     "lopDays": 3,
-    "uan": "100781594897",
-    "attendancePct": 88.5
+    "uan": "100781594897"
   },
   {
     "id": "EMP-1056",
@@ -1611,8 +1555,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100139403247",
-    "attendancePct": 92.3
+    "uan": "100139403247"
   },
   {
     "id": "EMP-1057",
@@ -1637,8 +1580,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 5,
     "lopDays": 0,
-    "uan": "100768548027",
-    "attendancePct": 100.0
+    "uan": "100768548027"
   },
   {
     "id": "EMP-1058",
@@ -1663,8 +1605,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 16,
     "lopDays": 4,
-    "uan": "100114682844",
-    "attendancePct": 84.6
+    "uan": "100114682844"
   },
   {
     "id": "EMP-1059",
@@ -1689,8 +1630,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 11,
     "lopDays": 1,
-    "uan": "100590470737",
-    "attendancePct": 92.3
+    "uan": "100590470737"
   },
   {
     "id": "EMP-1060",
@@ -1715,8 +1655,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 18,
     "lopDays": 1,
-    "uan": "100999232921",
-    "attendancePct": 96.2
+    "uan": "100999232921"
   },
   {
     "id": "EMP-1061",
@@ -1741,8 +1680,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 10,
     "lopDays": 0,
-    "uan": "100713963047",
-    "attendancePct": 100.0
+    "uan": "100713963047"
   },
   {
     "id": "EMP-1062",
@@ -1767,8 +1705,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 7,
     "lopDays": 1,
-    "uan": "100207765664",
-    "attendancePct": 88.5
+    "uan": "100207765664"
   },
   {
     "id": "EMP-1063",
@@ -1793,8 +1730,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 14,
     "lopDays": 0,
-    "uan": "100452794611",
-    "attendancePct": 96.2
+    "uan": "100452794611"
   },
   {
     "id": "EMP-1064",
@@ -1819,8 +1755,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100576396216",
-    "attendancePct": 92.3
+    "uan": "100576396216"
   },
   {
     "id": "EMP-1065",
@@ -1845,8 +1780,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 14,
     "lopDays": 1,
-    "uan": "100282518553",
-    "attendancePct": 88.5
+    "uan": "100282518553"
   },
   {
     "id": "EMP-1066",
@@ -1871,8 +1805,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100269625036",
-    "attendancePct": 96.2
+    "uan": "100269625036"
   },
   {
     "id": "EMP-1067",
@@ -1897,8 +1830,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 6,
     "lopDays": 3,
-    "uan": "100485429460",
-    "attendancePct": 88.5
+    "uan": "100485429460"
   },
   {
     "id": "EMP-1068",
@@ -1923,8 +1855,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100335154329",
-    "attendancePct": 100.0
+    "uan": "100335154329"
   },
   {
     "id": "EMP-1069",
@@ -1949,8 +1880,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 16,
     "lopDays": 1,
-    "uan": "100450811990",
-    "attendancePct": 96.2
+    "uan": "100450811990"
   },
   {
     "id": "EMP-1070",
@@ -1975,8 +1905,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 17,
     "lopDays": 2,
-    "uan": "100963538119",
-    "attendancePct": 88.5
+    "uan": "100963538119"
   },
   {
     "id": "EMP-1071",
@@ -2001,8 +1930,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 5,
     "lopDays": 1,
-    "uan": "100588322781",
-    "attendancePct": 92.3
+    "uan": "100588322781"
   },
   {
     "id": "EMP-1072",
@@ -2027,8 +1955,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 15,
     "lopDays": 1,
-    "uan": "100797115550",
-    "attendancePct": 92.3
+    "uan": "100797115550"
   },
   {
     "id": "EMP-1073",
@@ -2053,8 +1980,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 12,
     "lopDays": 0,
-    "uan": "100550033924",
-    "attendancePct": 100.0
+    "uan": "100550033924"
   },
   {
     "id": "EMP-1074",
@@ -2079,8 +2005,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 12,
     "lopDays": 2,
-    "uan": "100836243579",
-    "attendancePct": 92.3
+    "uan": "100836243579"
   },
   {
     "id": "EMP-1075",
@@ -2105,8 +2030,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 17,
     "lopDays": 2,
-    "uan": "100945011302",
-    "attendancePct": 88.5
+    "uan": "100945011302"
   },
   {
     "id": "EMP-1076",
@@ -2131,8 +2055,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 18,
     "lopDays": 0,
-    "uan": "100369137895",
-    "attendancePct": 100.0
+    "uan": "100369137895"
   },
   {
     "id": "EMP-1077",
@@ -2157,8 +2080,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 5,
     "lopDays": 4,
-    "uan": "100664880035",
-    "attendancePct": 84.6
+    "uan": "100664880035"
   },
   {
     "id": "EMP-1078",
@@ -2183,8 +2105,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100591819409",
-    "attendancePct": 100.0
+    "uan": "100591819409"
   },
   {
     "id": "EMP-1079",
@@ -2209,8 +2130,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 6,
     "lopDays": 4,
-    "uan": "100779760958",
-    "attendancePct": 84.6
+    "uan": "100779760958"
   },
   {
     "id": "EMP-1080",
@@ -2235,8 +2155,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 11,
     "lopDays": 3,
-    "uan": "100463925049",
-    "attendancePct": 84.6
+    "uan": "100463925049"
   },
   {
     "id": "EMP-1081",
@@ -2261,8 +2180,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 6,
     "lopDays": 2,
-    "uan": "100200105056",
-    "attendancePct": 92.3
+    "uan": "100200105056"
   },
   {
     "id": "EMP-1082",
@@ -2287,8 +2205,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 15,
     "lopDays": 0,
-    "uan": "100814403943",
-    "attendancePct": 100.0
+    "uan": "100814403943"
   },
   {
     "id": "EMP-1083",
@@ -2313,8 +2230,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 8,
     "lopDays": 3,
-    "uan": "100494665673",
-    "attendancePct": 88.5
+    "uan": "100494665673"
   },
   {
     "id": "EMP-1084",
@@ -2339,8 +2255,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 7,
     "lopDays": 3,
-    "uan": "100464883950",
-    "attendancePct": 84.6
+    "uan": "100464883950"
   },
   {
     "id": "EMP-1085",
@@ -2365,8 +2280,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 11,
     "lopDays": 3,
-    "uan": "100269016920",
-    "attendancePct": 84.6
+    "uan": "100269016920"
   },
   {
     "id": "EMP-1086",
@@ -2391,8 +2305,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 15,
     "lopDays": 3,
-    "uan": "100574641329",
-    "attendancePct": 84.6
+    "uan": "100574641329"
   },
   {
     "id": "EMP-1087",
@@ -2417,8 +2330,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100108253947",
-    "attendancePct": 100.0
+    "uan": "100108253947"
   },
   {
     "id": "EMP-1088",
@@ -2443,8 +2355,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100637152602",
-    "attendancePct": 96.2
+    "uan": "100637152602"
   },
   {
     "id": "EMP-1089",
@@ -2469,8 +2380,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 14,
     "lopDays": 3,
-    "uan": "100410864588",
-    "attendancePct": 84.6
+    "uan": "100410864588"
   },
   {
     "id": "EMP-1090",
@@ -2495,8 +2405,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100184446671",
-    "attendancePct": 96.2
+    "uan": "100184446671"
   },
   {
     "id": "EMP-1091",
@@ -2521,8 +2430,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 10,
     "lopDays": 0,
-    "uan": "100353691745",
-    "attendancePct": 100.0
+    "uan": "100353691745"
   },
   {
     "id": "EMP-1092",
@@ -2547,8 +2455,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 15,
     "lopDays": 0,
-    "uan": "100447042200",
-    "attendancePct": 96.2
+    "uan": "100447042200"
   },
   {
     "id": "EMP-1093",
@@ -2573,8 +2480,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 9,
     "lopDays": 1,
-    "uan": "100161085229",
-    "attendancePct": 92.3
+    "uan": "100161085229"
   },
   {
     "id": "EMP-1094",
@@ -2599,8 +2505,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 10,
     "lopDays": 2,
-    "uan": "100261985842",
-    "attendancePct": 84.6
+    "uan": "100261985842"
   },
   {
     "id": "EMP-1095",
@@ -2625,8 +2530,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 13,
     "lopDays": 1,
-    "uan": "100490732457",
-    "attendancePct": 88.5
+    "uan": "100490732457"
   },
   {
     "id": "EMP-1096",
@@ -2651,8 +2555,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 13,
     "lopDays": 2,
-    "uan": "100370578414",
-    "attendancePct": 84.6
+    "uan": "100370578414"
   },
   {
     "id": "EMP-1097",
@@ -2677,8 +2580,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 13,
     "lopDays": 2,
-    "uan": "100973150512",
-    "attendancePct": 88.5
+    "uan": "100973150512"
   },
   {
     "id": "EMP-1098",
@@ -2703,8 +2605,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 8,
     "lopDays": 3,
-    "uan": "100182855381",
-    "attendancePct": 88.5
+    "uan": "100182855381"
   },
   {
     "id": "EMP-1099",
@@ -2729,8 +2630,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 16,
     "lopDays": 2,
-    "uan": "100491163514",
-    "attendancePct": 88.5
+    "uan": "100491163514"
   },
   {
     "id": "EMP-1100",
@@ -2755,8 +2655,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 17,
     "lopDays": 1,
-    "uan": "100639991949",
-    "attendancePct": 92.3
+    "uan": "100639991949"
   },
   {
     "id": "EMP-1101",
@@ -2781,8 +2680,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100190060226",
-    "attendancePct": 92.3
+    "uan": "100190060226"
   },
   {
     "id": "EMP-1102",
@@ -2807,8 +2705,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100514642708",
-    "attendancePct": 84.6
+    "uan": "100514642708"
   },
   {
     "id": "EMP-1103",
@@ -2833,8 +2730,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 18,
     "lopDays": 2,
-    "uan": "100914799481",
-    "attendancePct": 88.5
+    "uan": "100914799481"
   },
   {
     "id": "EMP-1104",
@@ -2859,8 +2755,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100356022467",
-    "attendancePct": 96.2
+    "uan": "100356022467"
   },
   {
     "id": "EMP-1105",
@@ -2885,8 +2780,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100478833337",
-    "attendancePct": 100.0
+    "uan": "100478833337"
   },
   {
     "id": "EMP-1106",
@@ -2911,8 +2805,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100500830389",
-    "attendancePct": 100.0
+    "uan": "100500830389"
   },
   {
     "id": "EMP-1107",
@@ -2937,8 +2830,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 13,
     "lopDays": 2,
-    "uan": "100991617660",
-    "attendancePct": 88.5
+    "uan": "100991617660"
   },
   {
     "id": "EMP-1108",
@@ -2963,8 +2855,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 5,
     "lopDays": 2,
-    "uan": "100527589822",
-    "attendancePct": 88.5
+    "uan": "100527589822"
   },
   {
     "id": "EMP-1109",
@@ -2989,8 +2880,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 17,
     "lopDays": 1,
-    "uan": "100898120571",
-    "attendancePct": 92.3
+    "uan": "100898120571"
   },
   {
     "id": "EMP-1110",
@@ -3015,8 +2905,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 6,
     "lopDays": 1,
-    "uan": "100685698675",
-    "attendancePct": 92.3
+    "uan": "100685698675"
   },
   {
     "id": "EMP-1111",
@@ -3041,8 +2930,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100145478504",
-    "attendancePct": 100.0
+    "uan": "100145478504"
   },
   {
     "id": "EMP-1112",
@@ -3067,8 +2955,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100137365109",
-    "attendancePct": 100.0
+    "uan": "100137365109"
   },
   {
     "id": "EMP-1113",
@@ -3093,8 +2980,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 12,
     "lopDays": 1,
-    "uan": "100668503222",
-    "attendancePct": 96.2
+    "uan": "100668503222"
   },
   {
     "id": "EMP-1114",
@@ -3119,8 +3005,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100330393232",
-    "attendancePct": 100.0
+    "uan": "100330393232"
   },
   {
     "id": "EMP-1115",
@@ -3145,8 +3030,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 15,
     "lopDays": 0,
-    "uan": "100690554938",
-    "attendancePct": 96.2
+    "uan": "100690554938"
   },
   {
     "id": "EMP-1116",
@@ -3171,8 +3055,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100128222260",
-    "attendancePct": 100.0
+    "uan": "100128222260"
   },
   {
     "id": "EMP-1117",
@@ -3197,8 +3080,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 13,
     "lopDays": 1,
-    "uan": "100984053945",
-    "attendancePct": 92.3
+    "uan": "100984053945"
   },
   {
     "id": "EMP-1118",
@@ -3223,8 +3105,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 17,
     "lopDays": 3,
-    "uan": "100159499094",
-    "attendancePct": 88.5
+    "uan": "100159499094"
   },
   {
     "id": "EMP-1119",
@@ -3249,8 +3130,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100394689553",
-    "attendancePct": 100.0
+    "uan": "100394689553"
   },
   {
     "id": "EMP-1120",
@@ -3275,8 +3155,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100384172112",
-    "attendancePct": 100.0
+    "uan": "100384172112"
   },
   {
     "id": "EMP-1121",
@@ -3301,8 +3180,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 12,
     "lopDays": 3,
-    "uan": "100269737590",
-    "attendancePct": 88.5
+    "uan": "100269737590"
   },
   {
     "id": "EMP-1122",
@@ -3327,8 +3205,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 17,
     "lopDays": 1,
-    "uan": "100214014134",
-    "attendancePct": 92.3
+    "uan": "100214014134"
   },
   {
     "id": "EMP-1123",
@@ -3353,8 +3230,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 8,
     "lopDays": 2,
-    "uan": "100720286733",
-    "attendancePct": 92.3
+    "uan": "100720286733"
   },
   {
     "id": "EMP-1124",
@@ -3379,8 +3255,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 8,
     "lopDays": 4,
-    "uan": "100152246275",
-    "attendancePct": 84.6
+    "uan": "100152246275"
   },
   {
     "id": "EMP-1125",
@@ -3405,8 +3280,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 10,
     "lopDays": 2,
-    "uan": "100712335251",
-    "attendancePct": 92.3
+    "uan": "100712335251"
   },
   {
     "id": "EMP-1126",
@@ -3431,8 +3305,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100698967370",
-    "attendancePct": 100.0
+    "uan": "100698967370"
   },
   {
     "id": "EMP-1127",
@@ -3457,8 +3330,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100452150647",
-    "attendancePct": 96.2
+    "uan": "100452150647"
   },
   {
     "id": "EMP-1128",
@@ -3483,8 +3355,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100975903641",
-    "attendancePct": 100.0
+    "uan": "100975903641"
   },
   {
     "id": "EMP-1129",
@@ -3509,8 +3380,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 14,
     "lopDays": 1,
-    "uan": "100775410705",
-    "attendancePct": 92.3
+    "uan": "100775410705"
   },
   {
     "id": "EMP-1130",
@@ -3535,8 +3405,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100540639384",
-    "attendancePct": 96.2
+    "uan": "100540639384"
   },
   {
     "id": "EMP-1131",
@@ -3561,8 +3430,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 10,
     "lopDays": 1,
-    "uan": "100467570835",
-    "attendancePct": 96.2
+    "uan": "100467570835"
   },
   {
     "id": "EMP-1132",
@@ -3587,8 +3455,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100615185000",
-    "attendancePct": 92.3
+    "uan": "100615185000"
   },
   {
     "id": "EMP-1133",
@@ -3613,8 +3480,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 5,
     "lopDays": 1,
-    "uan": "100471904990",
-    "attendancePct": 92.3
+    "uan": "100471904990"
   },
   {
     "id": "EMP-1134",
@@ -3639,8 +3505,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 5,
     "lopDays": 2,
-    "uan": "100784987769",
-    "attendancePct": 84.6
+    "uan": "100784987769"
   },
   {
     "id": "EMP-1135",
@@ -3665,8 +3530,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100798510601",
-    "attendancePct": 84.6
+    "uan": "100798510601"
   },
   {
     "id": "EMP-1136",
@@ -3691,8 +3555,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100946066287",
-    "attendancePct": 100.0
+    "uan": "100946066287"
   },
   {
     "id": "EMP-1137",
@@ -3717,8 +3580,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 15,
     "lopDays": 0,
-    "uan": "100244096091",
-    "attendancePct": 92.3
+    "uan": "100244096091"
   },
   {
     "id": "EMP-1138",
@@ -3743,8 +3605,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 17,
     "lopDays": 2,
-    "uan": "100288436227",
-    "attendancePct": 88.5
+    "uan": "100288436227"
   },
   {
     "id": "EMP-1139",
@@ -3769,8 +3630,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 5,
     "lopDays": 0,
-    "uan": "100579678614",
-    "attendancePct": 96.2
+    "uan": "100579678614"
   },
   {
     "id": "EMP-1140",
@@ -3795,8 +3655,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 7,
     "lopDays": 3,
-    "uan": "100855438611",
-    "attendancePct": 84.6
+    "uan": "100855438611"
   },
   {
     "id": "EMP-1141",
@@ -3821,8 +3680,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100961135562",
-    "attendancePct": 96.2
+    "uan": "100961135562"
   },
   {
     "id": "EMP-1142",
@@ -3847,8 +3705,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 14,
     "lopDays": 2,
-    "uan": "100452313624",
-    "attendancePct": 84.6
+    "uan": "100452313624"
   },
   {
     "id": "EMP-1143",
@@ -3873,8 +3730,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 13,
     "lopDays": 3,
-    "uan": "100161994392",
-    "attendancePct": 84.6
+    "uan": "100161994392"
   },
   {
     "id": "EMP-1144",
@@ -3899,8 +3755,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 16,
     "lopDays": 4,
-    "uan": "100174108740",
-    "attendancePct": 84.6
+    "uan": "100174108740"
   },
   {
     "id": "EMP-1145",
@@ -3925,8 +3780,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 11,
     "lopDays": 1,
-    "uan": "100242796714",
-    "attendancePct": 96.2
+    "uan": "100242796714"
   },
   {
     "id": "EMP-1146",
@@ -3951,8 +3805,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 13,
     "lopDays": 1,
-    "uan": "100365764028",
-    "attendancePct": 92.3
+    "uan": "100365764028"
   },
   {
     "id": "EMP-1147",
@@ -3977,8 +3830,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100136052248",
-    "attendancePct": 100.0
+    "uan": "100136052248"
   },
   {
     "id": "EMP-1148",
@@ -4003,8 +3855,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 13,
     "lopDays": 2,
-    "uan": "100442420233",
-    "attendancePct": 88.5
+    "uan": "100442420233"
   },
   {
     "id": "EMP-1149",
@@ -4029,8 +3880,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 13,
     "lopDays": 0,
-    "uan": "100772155012",
-    "attendancePct": 92.3
+    "uan": "100772155012"
   },
   {
     "id": "EMP-1150",
@@ -4055,8 +3905,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100608436962",
-    "attendancePct": 96.2
+    "uan": "100608436962"
   },
   {
     "id": "EMP-1151",
@@ -4081,8 +3930,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100454617185",
-    "attendancePct": 100.0
+    "uan": "100454617185"
   },
   {
     "id": "EMP-1152",
@@ -4107,8 +3955,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100333019716",
-    "attendancePct": 96.2
+    "uan": "100333019716"
   },
   {
     "id": "EMP-1153",
@@ -4133,8 +3980,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 8,
     "lopDays": 1,
-    "uan": "100508732434",
-    "attendancePct": 88.5
+    "uan": "100508732434"
   },
   {
     "id": "EMP-1154",
@@ -4159,8 +4005,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 10,
     "lopDays": 0,
-    "uan": "100704006325",
-    "attendancePct": 96.2
+    "uan": "100704006325"
   },
   {
     "id": "EMP-1155",
@@ -4185,8 +4030,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 8,
     "lopDays": 2,
-    "uan": "100636120880",
-    "attendancePct": 88.5
+    "uan": "100636120880"
   },
   {
     "id": "EMP-1156",
@@ -4211,8 +4055,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100682115008",
-    "attendancePct": 92.3
+    "uan": "100682115008"
   },
   {
     "id": "EMP-1157",
@@ -4237,8 +4080,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 16,
     "lopDays": 3,
-    "uan": "100643026584",
-    "attendancePct": 88.5
+    "uan": "100643026584"
   },
   {
     "id": "EMP-1158",
@@ -4263,8 +4105,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 13,
     "lopDays": 0,
-    "uan": "100407829477",
-    "attendancePct": 96.2
+    "uan": "100407829477"
   },
   {
     "id": "EMP-1159",
@@ -4289,8 +4130,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 18,
     "lopDays": 2,
-    "uan": "100184846271",
-    "attendancePct": 88.5
+    "uan": "100184846271"
   },
   {
     "id": "EMP-1160",
@@ -4315,8 +4155,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 11,
     "lopDays": 3,
-    "uan": "100160252954",
-    "attendancePct": 84.6
+    "uan": "100160252954"
   },
   {
     "id": "EMP-1161",
@@ -4341,8 +4180,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 8,
     "lopDays": 0,
-    "uan": "100391086098",
-    "attendancePct": 100.0
+    "uan": "100391086098"
   },
   {
     "id": "EMP-1162",
@@ -4367,8 +4205,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 7,
     "lopDays": 0,
-    "uan": "100996199211",
-    "attendancePct": 96.2
+    "uan": "100996199211"
   },
   {
     "id": "EMP-1163",
@@ -4393,8 +4230,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100749794986",
-    "attendancePct": 92.3
+    "uan": "100749794986"
   },
   {
     "id": "EMP-1164",
@@ -4419,8 +4255,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100809391059",
-    "attendancePct": 92.3
+    "uan": "100809391059"
   },
   {
     "id": "EMP-1165",
@@ -4445,8 +4280,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 10,
     "lopDays": 3,
-    "uan": "100430999662",
-    "attendancePct": 88.5
+    "uan": "100430999662"
   },
   {
     "id": "EMP-1166",
@@ -4471,8 +4305,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100695088987",
-    "attendancePct": 100.0
+    "uan": "100695088987"
   },
   {
     "id": "EMP-1167",
@@ -4497,8 +4330,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 15,
     "lopDays": 2,
-    "uan": "100388749542",
-    "attendancePct": 88.5
+    "uan": "100388749542"
   },
   {
     "id": "EMP-1168",
@@ -4523,8 +4355,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 9,
     "lopDays": 1,
-    "uan": "100737594763",
-    "attendancePct": 96.2
+    "uan": "100737594763"
   },
   {
     "id": "EMP-1169",
@@ -4549,8 +4380,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100422589929",
-    "attendancePct": 92.3
+    "uan": "100422589929"
   },
   {
     "id": "EMP-1170",
@@ -4575,8 +4405,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100491932454",
-    "attendancePct": 100.0
+    "uan": "100491932454"
   },
   {
     "id": "EMP-1171",
@@ -4601,8 +4430,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 18,
     "lopDays": 0,
-    "uan": "100249442440",
-    "attendancePct": 96.2
+    "uan": "100249442440"
   },
   {
     "id": "EMP-1172",
@@ -4627,8 +4455,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 13,
     "lopDays": 0,
-    "uan": "100683734594",
-    "attendancePct": 100.0
+    "uan": "100683734594"
   },
   {
     "id": "EMP-1173",
@@ -4653,8 +4480,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100213757100",
-    "attendancePct": 100.0
+    "uan": "100213757100"
   },
   {
     "id": "EMP-1174",
@@ -4679,8 +4505,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 12,
     "lopDays": 0,
-    "uan": "100261861139",
-    "attendancePct": 96.2
+    "uan": "100261861139"
   },
   {
     "id": "EMP-1175",
@@ -4705,8 +4530,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 17,
     "lopDays": 2,
-    "uan": "100473984594",
-    "attendancePct": 92.3
+    "uan": "100473984594"
   },
   {
     "id": "EMP-1176",
@@ -4731,8 +4555,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 16,
     "lopDays": 2,
-    "uan": "100692609167",
-    "attendancePct": 92.3
+    "uan": "100692609167"
   },
   {
     "id": "EMP-1177",
@@ -4757,8 +4580,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 12,
     "lopDays": 0,
-    "uan": "100104778194",
-    "attendancePct": 96.2
+    "uan": "100104778194"
   },
   {
     "id": "EMP-1178",
@@ -4783,8 +4605,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 10,
     "elBalance": 6,
     "lopDays": 1,
-    "uan": "100666629680",
-    "attendancePct": 92.3
+    "uan": "100666629680"
   },
   {
     "id": "EMP-1179",
@@ -4809,8 +4630,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 14,
     "lopDays": 0,
-    "uan": "100436280635",
-    "attendancePct": 96.2
+    "uan": "100436280635"
   },
   {
     "id": "EMP-1180",
@@ -4835,8 +4655,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 14,
     "lopDays": 0,
-    "uan": "100622558165",
-    "attendancePct": 96.2
+    "uan": "100622558165"
   },
   {
     "id": "EMP-1181",
@@ -4861,8 +4680,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 5,
     "lopDays": 0,
-    "uan": "100975331448",
-    "attendancePct": 96.2
+    "uan": "100975331448"
   },
   {
     "id": "EMP-1182",
@@ -4887,8 +4705,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 17,
     "lopDays": 3,
-    "uan": "100395121074",
-    "attendancePct": 88.5
+    "uan": "100395121074"
   },
   {
     "id": "EMP-1183",
@@ -4913,8 +4730,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 9,
     "lopDays": 0,
-    "uan": "100682014641",
-    "attendancePct": 100.0
+    "uan": "100682014641"
   },
   {
     "id": "EMP-1184",
@@ -4939,8 +4755,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 10,
     "lopDays": 4,
-    "uan": "100932828137",
-    "attendancePct": 84.6
+    "uan": "100932828137"
   },
   {
     "id": "EMP-1185",
@@ -4965,8 +4780,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 18,
     "lopDays": 0,
-    "uan": "100712112671",
-    "attendancePct": 100.0
+    "uan": "100712112671"
   },
   {
     "id": "EMP-1186",
@@ -4991,8 +4805,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100804263267",
-    "attendancePct": 100.0
+    "uan": "100804263267"
   },
   {
     "id": "EMP-1187",
@@ -5017,8 +4830,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 11,
     "lopDays": 2,
-    "uan": "100532557724",
-    "attendancePct": 88.5
+    "uan": "100532557724"
   },
   {
     "id": "EMP-1188",
@@ -5043,8 +4855,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 17,
     "lopDays": 0,
-    "uan": "100561325766",
-    "attendancePct": 96.2
+    "uan": "100561325766"
   },
   {
     "id": "EMP-1189",
@@ -5069,8 +4880,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 15,
     "lopDays": 0,
-    "uan": "100772355141",
-    "attendancePct": 100.0
+    "uan": "100772355141"
   },
   {
     "id": "EMP-1190",
@@ -5095,8 +4905,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100188498371",
-    "attendancePct": 92.3
+    "uan": "100188498371"
   },
   {
     "id": "EMP-1191",
@@ -5121,8 +4930,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 3,
     "elBalance": 8,
     "lopDays": 3,
-    "uan": "100737458510",
-    "attendancePct": 84.6
+    "uan": "100737458510"
   },
   {
     "id": "EMP-1192",
@@ -5147,8 +4955,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 4,
     "elBalance": 8,
     "lopDays": 2,
-    "uan": "100210811807",
-    "attendancePct": 88.5
+    "uan": "100210811807"
   },
   {
     "id": "EMP-1193",
@@ -5173,8 +4980,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 5,
     "elBalance": 12,
     "lopDays": 0,
-    "uan": "100774395804",
-    "attendancePct": 100.0
+    "uan": "100774395804"
   },
   {
     "id": "EMP-1194",
@@ -5199,8 +5005,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 11,
     "lopDays": 0,
-    "uan": "100366058599",
-    "attendancePct": 100.0
+    "uan": "100366058599"
   },
   {
     "id": "EMP-1195",
@@ -5225,8 +5030,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 6,
     "elBalance": 16,
     "lopDays": 0,
-    "uan": "100941600554",
-    "attendancePct": 100.0
+    "uan": "100941600554"
   },
   {
     "id": "EMP-1196",
@@ -5251,8 +5055,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 8,
     "elBalance": 7,
     "lopDays": 3,
-    "uan": "100492358645",
-    "attendancePct": 84.6
+    "uan": "100492358645"
   },
   {
     "id": "EMP-1197",
@@ -5277,8 +5080,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 13,
     "lopDays": 3,
-    "uan": "100923678093",
-    "attendancePct": 84.6
+    "uan": "100923678093"
   },
   {
     "id": "EMP-1198",
@@ -5303,8 +5105,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 6,
     "lopDays": 0,
-    "uan": "100675944565",
-    "attendancePct": 92.3
+    "uan": "100675944565"
   },
   {
     "id": "EMP-1199",
@@ -5329,8 +5130,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 9,
     "elBalance": 6,
     "lopDays": 2,
-    "uan": "100159086532",
-    "attendancePct": 88.5
+    "uan": "100159086532"
   },
   {
     "id": "EMP-1200",
@@ -5355,8 +5155,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     "slBalance": 7,
     "elBalance": 7,
     "lopDays": 1,
-    "uan": "100886983862",
-    "attendancePct": 92.3
+    "uan": "100886983862"
   }
 ];
 export const INITIAL_TRACKER: MonthlyTracker[] = [

@@ -22,7 +22,6 @@ export interface Employee {
   elBalance: number;
   lopDays: number;
   uan: string;
-  attendancePct: number;
 }
 
 export interface Department {
