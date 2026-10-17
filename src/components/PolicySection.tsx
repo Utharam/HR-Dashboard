@@ -130,7 +130,7 @@ const getCategoryIcon = (category: PolicyCategory) => {
             <Baby size={18} className="text-pink" />
           </div>
           <div className="kpi-value text-pink">
-            {maternalPolicy?.daysAllowed || 182} Days
+            {maternalPolicy?.daysAllowed ?? 182} Days
           </div>
           <div className="kpi-sub">
             26 Weeks (100% Fully Paid)
@@ -143,7 +143,7 @@ const getCategoryIcon = (category: PolicyCategory) => {
             <HeartHandshake size={18} className="text-purple" />
           </div>
           <div className="kpi-value text-purple">
-            {paternalPolicy?.daysAllowed || 15} Days
+            {paternalPolicy?.daysAllowed ?? 15} Days
           </div>
           <div className="kpi-sub">
             Availed within 180 days

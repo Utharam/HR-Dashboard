@@ -24,7 +24,11 @@ const CHART = {
 const axisTickFont = { family: CHART.font, size: 11 };
 
 export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
-  const totalHeadcountCurrent = tracker[tracker.length - 1]?.headcount || 200;
+  // Read the recorded headcount directly, matching the payroll read below.
+  // `|| 200` published a fabricated 200-person workforce whenever the tracker
+  // was empty or the last month recorded a genuine zero — so an empty tracker
+  // claimed 200 staff beside a ₹0 payroll. No record means no headcount.
+  const totalHeadcountCurrent = tracker[tracker.length - 1]?.headcount ?? 0;
   // Read the recorded payroll directly. `|| 23000000` published a fabricated
   // ₹2.3 Cr monthly payroll whenever the tracker was empty or the last month
   // recorded a genuine zero — a payroll figure, not a placeholder, and the one
