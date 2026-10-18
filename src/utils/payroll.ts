@@ -1,4 +1,6 @@
 import type { Employee } from '../types'
+import { toISODate } from './dates'
+import { epfWageCeiling } from './statutoryRates'
 
 /**
  * Single source of truth for Indian payroll arithmetic.
@@ -9,7 +11,6 @@ import type { Employee } from '../types'
  * overstated disbursable payroll by the full LOP total.
  */
 
-export const EPF_WAGE_CEILING = 15000
 export const EPF_RATE = 0.12
 export const PROFESSIONAL_TAX = 200
 export const WORKING_DAYS_PER_MONTH = 26
@@ -32,10 +33,10 @@ function safeAmount(value: number): number {
   return value
 }
 
-export function computeEPF(basicSalary: number): number {
+export function computeEPF(basicSalary: number, asOf: string = toISODate(new Date())): number {
   const basic = safeAmount(basicSalary)
   if (basic === 0) return 0
-  return Math.round(Math.min(basic, EPF_WAGE_CEILING) * EPF_RATE)
+  return Math.round(Math.min(basic, epfWageCeiling(asOf)) * EPF_RATE)
 }
 
 export function computeLOP(basicSalary: number, lopDays: number): number {
@@ -48,13 +49,16 @@ export function computeLOP(basicSalary: number, lopDays: number): number {
   return Math.round((basic / WORKING_DAYS_PER_MONTH) * days)
 }
 
-export function computePayroll(employee: Employee): PayrollBreakdown {
+export function computePayroll(
+  employee: Employee,
+  asOf: string = toISODate(new Date()),
+): PayrollBreakdown {
   const gross = safeAmount(employee.monthlyCTC)
   const basic = safeAmount(employee.basicSalary)
   const hra = safeAmount(employee.hra)
   const specialAllowance = safeAmount(employee.specialAllowance)
 
-  const epf = computeEPF(basic)
+  const epf = computeEPF(basic, asOf)
   const professionalTax = PROFESSIONAL_TAX
   const lossOfPay = computeLOP(basic, employee.lopDays)
   const totalDeductions = epf + professionalTax + lossOfPay

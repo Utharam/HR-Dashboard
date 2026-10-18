@@ -25,7 +25,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   // evidence that the person is on the roster, so they must not be charged PF,
   // professional tax or appear in the aggregates until the status is resolved.
   const activeRoster = employees.filter(isActive);
-  const payroll = activeRoster.map(computePayroll);
+  const payroll = activeRoster.map((emp) => computePayroll(emp));
 
   const totalMonthlyGross = payroll.reduce((acc, p) => acc + p.gross, 0);
   const totalBasic = payroll.reduce((acc, p) => acc + p.basic, 0);

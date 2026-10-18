@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeEPF, computeLOP, computePayroll, isActive,
-  EPF_WAGE_CEILING, PROFESSIONAL_TAX,
+  EPF_RATE, PROFESSIONAL_TAX,
 } from '../payroll'
+import { epfWageCeilingToday } from '../statutoryRates'
 import type { Employee } from '../../types'
 
 const emp = (over: Partial<Employee> = {}): Employee => ({
@@ -17,8 +18,8 @@ const emp = (over: Partial<Employee> = {}): Employee => ({
 })
 
 describe('computeEPF', () => {
-  it('caps the EPF wage ceiling at ₹15,000', () => {
-    expect(computeEPF(EPF_WAGE_CEILING)).toBe(1800)
+  it('defaults to the wage ceiling in force today', () => {
+    expect(computeEPF(50000)).toBe(Math.round(epfWageCeilingToday() * EPF_RATE))
   })
   it('applies 12% below the ceiling', () => {
     expect(computeEPF(10000)).toBe(1200)
@@ -28,6 +29,22 @@ describe('computeEPF', () => {
   })
   it('returns 0 for a negative basic salary', () => {
     expect(computeEPF(-5000)).toBe(0)
+  })
+})
+
+describe('computeEPF against the wage ceiling schedule', () => {
+  it('caps at 15000 before 17 September 2026', () => {
+    expect(computeEPF(50000, '2026-09-16')).toBe(1800)
+  })
+  it('caps at 25000 from 17 September 2026', () => {
+    expect(computeEPF(50000, '2026-09-17')).toBe(3000)
+  })
+  it('applies 12% below the ceiling on both sides of the change', () => {
+    expect(computeEPF(10000, '2026-09-16')).toBe(1200)
+    expect(computeEPF(20000, '2026-09-17')).toBe(2400)
+  })
+  it('still returns 0 for a non-finite basic salary', () => {
+    expect(computeEPF(NaN, '2026-09-17')).toBe(0)
   })
 })
 
@@ -58,7 +75,7 @@ describe('computePayroll', () => {
   })
   it('deducts Professional Tax from the net when there is no LOP', () => {
     const p = computePayroll(emp())
-    expect(p.netPayable).toBe(100000 - (1800 + PROFESSIONAL_TAX))
+    expect(p.netPayable).toBe(100000 - (computeEPF(50000) + PROFESSIONAL_TAX))
   })
   it('never returns NaN for a corrupt CTC', () => {
     const p = computePayroll(emp({ monthlyCTC: NaN }))
