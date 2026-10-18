@@ -86,7 +86,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 9. **Excel Data Hub:**
    - **Spreadsheet Ingestion:** Drag-and-drop any Excel spreadsheet (`.xlsx`, `.xls`, `.csv`). Auto-detects columns whether from Workday, SAP, BambooHR, Darwinbox, or custom spreadsheets.
    - **Download Standard Template:** Generates a pre-formatted Excel template with recognized column headers.
-   - **Export Master Roster:** Downloads the complete 200 employee directory as an Excel file.
+   - **Export Master Roster:** Downloads the complete 200 employee directory as an Excel file with all 24 columns, including the canonical department ID, the reporting line, PF UANs and leave balances. The file round-trips: importing it reproduces the register it came from.
    - **Export Payroll Register:** Generates a bank-ready payroll register spreadsheet with line-by-line deduction breakdowns.
 
 10. **HR Policy & Benefits Hub:**

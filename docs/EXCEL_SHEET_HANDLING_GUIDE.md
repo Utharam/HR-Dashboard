@@ -50,16 +50,16 @@ OmniHR uses a **flexible column alias engine** that dynamically matches spreadsh
 | **Department** | `Department`, `department`, `Dept`, `Dept Name`, `Division` | String | `Engineering & Technology` | Used for departmental grouping and charts. |
 | **Designation / Role** | `Designation / Role`, `Designation`, `Role`, `role`, `Title`, `Job Title`, `Position` | String | `Software Engineer` | Job title displayed on profile cards. |
 | **Office Location** | `Office Location`, `Location`, `location`, `Branch`, `City`, `Office` | String | `Bengaluru HQ` | Regional hub (Bengaluru, Mumbai, Delhi, etc.). |
-| **Date of Joining** | `DOJ`, `Date of Joining`, `Joining Date`, `Hire Date`, `doj` | Date / String / Serial | `2023-01-15` | Normalized to `YYYY-MM-DD`. Supports Excel serial numbers. |
+| **Date of Joining** | `DOJ`, `Date of Joining`, `Joining Date`, `Hire Date`, `doj` | Date / String / Serial | Blank (with a warning) | Normalized to `YYYY-MM-DD`. Supports Excel serial numbers. An unreadable value is left blank rather than invented. |
 | **Monthly CTC** | `Monthly CTC`, `MonthlyCTC`, `Monthly Gross CTC`, `CTC`, `salary`, `Gross Salary` | Number | Derived from Annual CTC or `120000` | Fixed gross monthly cost-to-company in INR. |
-| **Annual CTC** | `Annual CTC (INR)`, `Annual CTC`, `AnnualCTC`, `Yearly CTC`, `package` | Number | `Monthly CTC * 12` | If Monthly CTC is omitted, `Annual CTC / 12` is used. |
+| **Annual CTC** | `Annual CTC (INR)`, `Annual CTC`, `AnnualCTC`, `Yearly CTC`, `package`, `Annual Salary` | Number | `Monthly CTC * 12` | If Monthly CTC is omitted, `Annual CTC / 12` is used. `Annual Salary` is the BambooHR report header. |
 | **Basic Salary** | `Monthly Basic Salary`, `Basic Salary`, `BasicSalary`, `Basic`, `basic` | Number | `Monthly CTC * 0.50` | 50% of CTC under standard wage norms. |
 | **HRA** | `HRA`, `House Rent Allowance`, `hra` | Number | `Basic Salary * 0.50` | Standard 25% of CTC (50% of Basic). |
 | **Special Allowance** | `Special Allowance`, `SpecialAllowance`, `specialAllowance` | Number | `Monthly CTC - (Basic + HRA)` | Balancing executive allowance. |
-| **Employment Status** | `Status`, `status`, `Employment Status` | String | `Active` | Normalized to: `Active`, `Probation`, `Notice Period`, `Resigned`. |
-| **Gender** | `Gender`, `gender`, `Sex` | String | `Female` | Normalized to: `Female`, `Male`, `Non-Binary`. |
+| **Employment Status** | `Status`, `status`, `Employment Status` | String | `Unknown` | Normalized to: `Active`, `Probation`, `Notice Period`, `Resigned`, `Unknown`. |
+| **Gender** | `Gender`, `gender`, `Sex` | String | `Unknown` | Normalized to: `Female`, `Male`, `Non-Binary`, `Prefer Not to Say`, `Unknown`. |
 | **Performance Rating** | `Performance Rating`, `Rating`, `performanceRating`, `Score` | Number (1–5) | `4` (Exceeds Expectations) | Clamped to integer between 1 and 5. |
-| **Attendance Days** | `Attendance (Days Present)`, `Attendance Days`, `PresentDays`, `presentDays`, `Attendance` | Number (0–26) | `25` | Days present in standard 26-day business cycle. |
+| **Attendance Days** | `Attendance (Days Present)`, `Attendance Days`, `Present Days`, `PresentDays`, `presentDays`, `Attendance` | Number (0–26) | `25` | Days present in standard 26-day business cycle. |
 | **Casual Leave (CL)** | `CL Balance`, `Casual Leave Balance`, `clBalance` | Number | `8` | Annual remaining casual leave balance. |
 | **Sick Leave (SL)** | `SL Balance`, `Sick Leave Balance`, `slBalance` | Number | `8` | Annual remaining sick leave balance. |
 | **Privilege Leave (EL)**| `EL Balance`, `Earned Leave Balance`, `Privilege Leave Balance`, `elBalance` | Number | `12` | Accumulated privilege leave balance for encashment. |
@@ -170,8 +170,9 @@ OmniHR provides three standardized Excel export capabilities:
 
 ### 1. Complete Staff Master Roster (`OmniHR_Staff_Roster_YYYY-MM-DD.xlsx`)
 - **Use Case:** Comprehensive backup, annual HR audit, insurance enrollment.
-- **Includes 21 Columns:**
-  `Employee ID`, `Full Name`, `Work Email`, `Phone`, `Department`, `Designation / Role`, `Office Location`, `Date of Joining`, `Annual CTC (INR)`, `Monthly Basic Salary`, `HRA`, `Special Allowance`, `Status`, `Gender`, `Performance Rating`, `Attendance (Days Present)`, `CL Balance`, `SL Balance`, `EL Balance`, `LOP Days`, `PF UAN`.
+- **Includes 24 Columns:**
+  `Employee ID`, `Full Name`, `Work Email`, `Phone`, `Department`, `Department ID`, `Designation / Role`, `Office Location`, `Date of Joining`, `Monthly CTC`, `Annual CTC (INR)`, `Monthly Basic Salary`, `HRA`, `Special Allowance`, `Status`, `Gender`, `Performance Rating`, `Reports To`, `Attendance (Days Present)`, `CL Balance`, `SL Balance`, `EL Balance`, `LOP Days`, `PF UAN`.
+- **Round-trip safe:** the file is the same contract the importer reads. `Department ID` and `Reports To` are written explicitly, and `Date of Joining` is a native Excel date cell (number-formatted `yyyy-mm-dd`), so it can be sorted, filtered and used with `DATEDIF`. Re-importing the roster reproduces the register it was exported from.
 
 ### 2. Monthly Payroll Register (`OmniHR_Payroll_Register_YYYY-MM-DD.xlsx`)
 - **Use Case:** Direct bank salary transfer advice, CFO approval, statutory compliance filing.

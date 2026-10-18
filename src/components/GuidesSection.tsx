@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { ActiveTab } from '../types';
 import { describeTable, scrollRegionLabel } from '../utils/pagination';
+import { STAFF_ROSTER_COLUMNS } from '../utils/excelSchema';
 
 const STATUTE_TITLE = 'Indian statutory and legal formulation reference';
 const ALIAS_TITLE = 'Excel column header aliases';
@@ -47,15 +48,15 @@ const ALIAS_ROWS = [
   { field: 'Office Location', aliases: 'Office Location, Location, location, Branch, City, Office', type: 'String', def: 'Bengaluru HQ', copy: 'Office Location' },
   { field: 'Date of Joining', aliases: 'DOJ, Date of Joining, Joining Date, Hire Date, doj', type: 'Date / Serial / Str', def: '2023-01-15', copy: 'Date of Joining' },
   { field: 'Monthly CTC', aliases: 'Monthly CTC, MonthlyCTC, Monthly Gross CTC, CTC, salary', type: 'Number (INR)', def: 'Annual / 12 or ₹1,20,000', copy: 'Monthly CTC' },
-  { field: 'Annual CTC', aliases: 'Annual CTC (INR), Annual CTC, AnnualCTC, Yearly CTC', type: 'Number (INR)', def: 'Monthly CTC * 12', copy: 'Annual CTC (INR)' },
+  { field: 'Annual CTC', aliases: 'Annual CTC (INR), Annual CTC, AnnualCTC, Yearly CTC, Annual Salary', type: 'Number (INR)', def: 'Monthly CTC * 12', copy: 'Annual CTC (INR)' },
   { field: 'Basic Salary', aliases: 'Monthly Basic Salary, Basic Salary, BasicSalary, Basic', type: 'Number (INR)', def: '50% of Monthly CTC', copy: 'Basic Salary' },
   { field: 'HRA', aliases: 'HRA, House Rent Allowance, hra', type: 'Number (INR)', def: '50% of Basic (25% CTC)', copy: 'HRA' },
   { field: 'Special Allowance', aliases: 'Special Allowance, SpecialAllowance', type: 'Number (INR)', def: 'CTC - (Basic + HRA)', copy: 'Special Allowance' },
   { field: 'Status', aliases: 'Status, status, Employment Status', type: 'Active | Probation | Notice | Resigned | Unknown', def: 'Unknown (if unmapped)', copy: 'Status' },
   { field: 'Gender', aliases: 'Gender, gender, Sex', type: 'Female | Male | Non-Binary | Prefer Not to Say | Unknown', def: 'Unknown (if unmapped)', copy: 'Gender' },
-  { field: 'Performance Rating', aliases: 'Performance Rating, Rating, performanceRating', type: 'Number (1 - 5)', def: '4 (Exceeds Exp.)', copy: 'Performance Rating' },
-  { field: 'Attendance Days', aliases: 'Attendance (Days Present), Attendance Days, PresentDays', type: 'Number (0 - 26)', def: '25 Days', copy: 'Attendance (Days Present)' },
-  { field: 'Leave Balances', aliases: 'CL Balance, SL Balance, EL Balance, LOP Days', type: 'Number', def: 'CL: 8, SL: 8, EL: 12, LOP: derived', copy: 'CL Balance' },
+  { field: 'Performance Rating', aliases: 'Performance Rating, Rating, performanceRating, Score', type: 'Number (1 - 5)', def: '4 (Exceeds Exp.)', copy: 'Performance Rating' },
+  { field: 'Attendance Days', aliases: 'Attendance (Days Present), Attendance Days, Present Days, PresentDays', type: 'Number (0 - 26)', def: '25 Days', copy: 'Attendance (Days Present)' },
+  { field: 'Leave Balances', aliases: 'CL Balance, Casual Leave Balance, SL Balance, Sick Leave Balance, EL Balance, Earned Leave Balance, Privilege Leave Balance, LOP Days, Loss of Pay Days', type: 'Number', def: 'CL: 8, SL: 8, EL: 12, LOP: derived', copy: 'CL Balance' },
   { field: 'Work Email', aliases: 'Work Email, Work email, Email, email', type: 'String', def: '{name}@omnixhr.io', copy: 'Work Email' },
   { field: 'Phone Number', aliases: 'Phone, Phone Number, Mobile, Contact', type: 'String', def: '+91 9876543210', copy: 'Phone' },
   { field: 'PF UAN', aliases: 'PF UAN, UAN, UAN Number, uan', type: 'String (12 digits)', def: '100123456789', copy: 'PF UAN' },
@@ -605,7 +606,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                   <Download size={16} /> <strong>Staff Master Roster (.xlsx)</strong>
                 </div>
                 <p className="prose">
-                  Multi-column complete workbook containing all 21 employee attributes, reporting managers, PF UANs, and contact emails.
+                  Multi-column complete workbook containing all {STAFF_ROSTER_COLUMNS.length} employee attributes, reporting managers, PF UANs, and contact emails.
                 </p>
               </div>
 

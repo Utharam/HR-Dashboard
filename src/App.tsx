@@ -29,6 +29,7 @@ import {
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
 import { computePayroll, isActive } from './utils/payroll';
+import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
 import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
 import { isEmployeeRow, isPolicyRow } from './utils/rowValidators';
 
@@ -231,32 +232,16 @@ export const App: React.FC = () => {
 
   // Export Complete Employee Roster to Excel
   const handleExportEmployees = () => {
-    const data = filteredEmployees.map(e => ({
-      'Employee ID': e.id,
-      'Full Name': e.name,
-      'Work Email': e.email,
-      'Phone': e.phone,
-      'Department': e.department,
-      'Designation / Role': e.role,
-      'Office Location': e.location,
-      'Date of Joining': e.doj,
-      'Monthly CTC': e.monthlyCTC,
-      'Annual CTC (INR)': e.monthlyCTC * 12,
-      'Monthly Basic Salary': e.basicSalary,
-      'HRA': e.hra,
-      'Special Allowance': e.specialAllowance,
-      'Status': e.status,
-      'Gender': e.gender,
-      'Performance Rating': e.performanceRating,
-      'Attendance (Days Present)': e.presentDays,
-      'CL Balance': e.clBalance,
-      'SL Balance': e.slBalance,
-      'EL Balance': e.elBalance,
-      'LOP Days': e.lopDays,
-      'PF UAN': e.uan
-    }));
+    // One contract for the writer and the importer: see `utils/excelSchema.ts`. The old
+    // inline literal omitted `reportsTo` and `deptId` while emitting the joining date as
+    // text, so the file this app produced could not be read back as the register it came
+    // from.
+    const data = buildStaffRosterRows(filteredEmployees);
 
-    const ws = XLSX.utils.json_to_sheet(data);
+    const ws = XLSX.utils.json_to_sheet(data, {
+      header: STAFF_ROSTER_COLUMNS.map((column) => column.header),
+      dateNF: 'yyyy-mm-dd',
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Staff_Roster');
     XLSX.writeFile(wb, `OmniHR_Staff_Roster_${new Date().toISOString().slice(0, 10)}.xlsx`);

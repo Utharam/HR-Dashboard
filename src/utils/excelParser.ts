@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Employee } from '../types';
 import { parseSpreadsheetDate } from './dates';
+import { resolveDeptId } from './excelSchema';
 
 export interface ParseResult {
   sheetName: string;
@@ -278,6 +279,20 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     if (rawDept) recognizedColSet.add('Department');
     const department = String(rawDept || 'Engineering & Technology').trim();
 
+    // The canonical id is exported alongside the name, so a roster this app wrote comes
+    // back with the id it left with. The fallback resolves the name against
+    // `INITIAL_DEPARTMENTS`; re-deriving it from the name is what turned `eng` into `engi`
+    // and broke every department filter after an import.
+    const rawDeptId =
+      row['Department ID'] ??
+      row['Dept ID'] ??
+      row.deptId;
+    if (rawDeptId) recognizedColSet.add('Department ID');
+    const deptId =
+      rawDeptId == null || String(rawDeptId).trim() === ''
+        ? resolveDeptId(department)
+        : String(rawDeptId).trim();
+
     // 4. Role / Designation
     const rawRole = 
       row['Designation / Role'] ?? 
@@ -338,7 +353,8 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       row['Annual CTC'] ?? 
       row.AnnualCTC ?? 
       row['Yearly CTC'] ?? 
-      row.package;
+      row.package ??
+      row['Annual Salary'];
 
     const readMonthlyCTC = parseCurrencyCell(rawMonthlyCTC);
     const readAnnualCTC = parseCurrencyCell(rawAnnualCTC);
@@ -396,12 +412,16 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     if (parseCurrencyCell(rawSpecial) !== null) recognizedColSet.add('Special Allowance');
 
     // 11. Status & Gender
-    const rawStatus = row.Status ?? row.status;
-    const rawGender = row.Gender ?? row.gender;
+    //
+    // `Employment Status` and `Sex` are the names Workday and BambooHR use; the guides
+    // have always advertised them, but only `Status` and `Gender` were read, so a real
+    // export landed every row on Unknown and dropped the roster out of the payroll run.
+    const rawStatus = row.Status ?? row.status ?? row['Employment Status'];
+    const rawGender = row.Gender ?? row.gender ?? row.Sex;
     const status = normalizeStatus(rawStatus);
     const gender = normalizeGender(rawGender);
-    if (row.Status || row.status) recognizedColSet.add('Status');
-    if (row.Gender || row.gender) recognizedColSet.add('Gender');
+    if (rawStatus != null && String(rawStatus).trim() !== '') recognizedColSet.add('Status');
+    if (rawGender != null && String(rawGender).trim() !== '') recognizedColSet.add('Gender');
 
     // An unresolved enum is stored faithfully and fails closed, but silently is not
     // enough: `isActive` excludes Unknown from the payroll run, so an import whose
@@ -433,6 +453,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     const rawPresent = 
       row['Attendance (Days Present)'] ?? 
       row['Attendance Days'] ?? 
+      row['Present Days'] ??
       row.PresentDays ?? 
       row.presentDays ?? 
       row.Attendance;
@@ -444,9 +465,13 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     // 13. Leave balances
     // These were three unguarded `Number(row['CL Balance'] ?? 8)` calls: "—" and "N/A"
     // became NaN, and a NaN balance renders as "NaN" in every leave figure downstream.
-    const rawCl = row['CL Balance'] ?? row.clBalance;
-    const rawSl = row['SL Balance'] ?? row.slBalance;
-    const rawEl = row['EL Balance'] ?? row.elBalance;
+    const rawCl = row['CL Balance'] ?? row['Casual Leave Balance'] ?? row.clBalance;
+    const rawSl = row['SL Balance'] ?? row['Sick Leave Balance'] ?? row.slBalance;
+    const rawEl =
+      row['EL Balance'] ??
+      row['Earned Leave Balance'] ??
+      row['Privilege Leave Balance'] ??
+      row.elBalance;
     const clBalance = toFiniteNumber(rawCl, { min: 0, max: 60, fallback: 8 });
     const slBalance = toFiniteNumber(rawSl, { min: 0, max: 60, fallback: 8 });
     const elBalance = toFiniteNumber(rawEl, { min: 0, max: 60, fallback: 12 });
@@ -455,7 +480,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     if (parseCurrencyCell(rawEl) !== null) recognizedColSet.add('EL Balance');
 
     // 14. LOP Days
-    const rawLop = row['LOP Days'] ?? row.lopDays;
+    const rawLop = row['LOP Days'] ?? row['Loss of Pay Days'] ?? row.lopDays;
     const lopDays = toFiniteNumber(rawLop, {
       min: 0,
       max: 26,
@@ -464,7 +489,12 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     if (parseCurrencyCell(rawLop) !== null) recognizedColSet.add('LOP Days');
 
     // 15. Performance Rating (1 to 5)
-    const rawRating = row['Performance Rating'] ?? row.Rating ?? row.performanceRating ?? row.rating;
+    const rawRating =
+      row['Performance Rating'] ??
+      row.Rating ??
+      row.performanceRating ??
+      row.rating ??
+      row.Score;
     const performanceRating = Math.round(
       toFiniteNumber(rawRating, { min: 1, max: 5, fallback: 4 }),
     );
@@ -473,18 +503,32 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     // 16. Work Email & Phone
     const email = String(
       row['Work Email'] ?? 
+      row['Work email'] ??
       row.Email ?? 
       row.email ?? 
       `${name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@omnixhr.io`
     ).trim();
-    if (row['Work Email'] || row.Email || row.email) recognizedColSet.add('Work Email');
+    if (row['Work Email'] || row['Work email'] || row.Email || row.email) recognizedColSet.add('Work Email');
 
     const phone = String(row.Phone ?? row['Phone Number'] ?? row.Mobile ?? row.Contact ?? '+91 9876543210').trim();
     if (row.Phone || row['Phone Number'] || row.Mobile) recognizedColSet.add('Phone');
 
     // 17. PF UAN
-    const uan = String(row['PF UAN'] ?? row.UAN ?? row.uan ?? '100123456789').trim();
-    if (row['PF UAN'] || row.UAN || row.uan) recognizedColSet.add('PF UAN');
+    const uan = String(
+      row['PF UAN'] ?? row.UAN ?? row['UAN Number'] ?? row.uan ?? '100123456789',
+    ).trim();
+    if (row['PF UAN'] || row.UAN || row['UAN Number'] || row.uan) recognizedColSet.add('PF UAN');
+
+    // 18. Reporting line
+    //
+    // This was hardcoded to `null`, so one export/import cycle erased the org chart.
+    // An empty cell is an absent reporting line, not a manager called "".
+    const rawReportsTo = row['Reports To'] ?? row['Reporting Manager'] ?? null;
+    const reportsTo =
+      rawReportsTo == null || String(rawReportsTo).trim() === ''
+        ? null
+        : String(rawReportsTo).trim();
+    if (rawReportsTo) recognizedColSet.add('Reports To');
 
     return {
       id,
@@ -492,7 +536,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       email,
       phone,
       department,
-      deptId: department.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4),
+      deptId,
       role,
       location,
       doj,
@@ -503,7 +547,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       status,
       gender,
       performanceRating,
-      reportsTo: null,
+      reportsTo,
       presentDays,
       clBalance,
       slBalance,
