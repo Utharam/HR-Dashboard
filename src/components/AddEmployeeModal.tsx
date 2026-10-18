@@ -22,6 +22,23 @@ const DEFAULT_CTC = 150000;
 const DEFAULT_DEPARTMENT = 'Engineering & Technology';
 const DEFAULT_LOCATION = 'Bengaluru HQ';
 
+/**
+ * The picker's options, typed to the roster vocabulary.
+ *
+ * `<select>` hands back a raw string; a cast would assert a value the parser has never
+ * checked. This guard narrows it instead, and anything unrecognised leaves the field
+ * empty - which `handleSubmit` already refuses to persist.
+ */
+const GENDERS: ReadonlyArray<Employee['gender']> = [
+  'Female',
+  'Male',
+  'Non-Binary',
+  'Prefer Not to Say',
+  'Unknown',
+];
+const isGender = (value: string): value is Employee['gender'] =>
+  (GENDERS as readonly string[]).includes(value);
+
 export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   isOpen,
   onClose,
@@ -260,7 +277,7 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
                 value={gender}
                 onChange={(e) => {
                   setGenderError(false);
-                  setGender(e.target.value as Employee['gender']);
+                  setGender(isGender(e.target.value) ? e.target.value : '');
                 }}
               >
                 <option value="">Select gender...</option>

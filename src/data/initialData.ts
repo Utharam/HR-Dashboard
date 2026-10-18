@@ -1,59 +1,7 @@
 // OmniHR Enterprise Workforce Data Initial Seed
 // 200 Employees across 7 Corporate Departments, 33-Month Tracker, & Recruitment Pipeline
 
-export interface Employee {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  department: string;
-  deptId: string;
-  role: string;
-  location: string;
-  doj: string;
-  monthlyCTC: number;
-  basicSalary: number;
-  hra: number;
-  specialAllowance: number;
-  status: 'Active' | 'Probation' | 'Notice Period' | 'Resigned';
-  gender: 'Female' | 'Male' | 'Non-Binary';
-  performanceRating: number;
-  reportsTo: string | null;
-  presentDays: number;
-  clBalance: number;
-  slBalance: number;
-  elBalance: number;
-  lopDays: number;
-  uan: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-  head: string;
-  roles: string[];
-}
-
-export interface MonthlyTracker {
-  month: string;
-  headcount: number;
-  grossPayroll: number;
-  attritionPct: number;
-  avgAttendance: number;
-  hires: number;
-  exits: number;
-}
-
-export interface JobRequisition {
-  id: string;
-  title: string;
-  department: string;
-  location: string;
-  stage: 'Sourcing' | 'Screening' | 'Interviewing' | 'Offer Extended' | 'Hired';
-  applicants: number;
-  targetDOJ: string;
-  salaryRange: string;
-}
+import type { Employee, Department, MonthlyTracker, JobRequisition } from '../types';
 
 export const INITIAL_DEPARTMENTS: Department[] = [
   {

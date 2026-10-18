@@ -11,6 +11,17 @@ interface RetentionSectionProps {
   onClearFilters?: () => void;
 }
 
+/**
+ * The settlement engine has exactly two separation categories.
+ *
+ * `<select>` yields a string; a cast would assert one of these without checking. The guard
+ * narrows it, and an unrecognised value leaves the current category in place.
+ */
+const SEPARATION_TYPES = ['resignation', 'retrenchment'] as const;
+type SeparationType = (typeof SEPARATION_TYPES)[number];
+const isSeparationType = (value: string): value is SeparationType =>
+  (SEPARATION_TYPES as readonly string[]).includes(value);
+
 export const RetentionSection: React.FC<RetentionSectionProps> = ({
   employees,
   onClearFilters
@@ -157,7 +168,9 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({
               className="omni-select"
               style={{ width: '100%' }}
               value={separationType}
-              onChange={(e) => setSeparationType(e.target.value as any)}
+              onChange={(e) => {
+                if (isSeparationType(e.target.value)) setSeparationType(e.target.value);
+              }}
             >
               <option value="resignation">Voluntary Resignation (Notice Served)</option>
               <option value="retrenchment">Involuntary Layoff / Retrenchment (Employer Terminated)</option>

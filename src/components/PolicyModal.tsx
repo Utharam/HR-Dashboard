@@ -20,6 +20,22 @@ const ALL_GIFT_PRESETS = [
   'Custom (Type Below)'
 ];
 
+/** `<select>` values are strings; these guards narrow them without asserting. */
+const POLICY_CATEGORIES: ReadonlyArray<PolicyCategory> = [
+  'Parental Provisions',
+  'Leave & Quotas',
+  'Separation & Notice',
+  'Extended & Sabbatical',
+  'Wellness & Special Perks',
+  'Custom Rules',
+];
+const isPolicyCategory = (value: string): value is PolicyCategory =>
+  (POLICY_CATEGORIES as readonly string[]).includes(value);
+
+const TIME_UNITS: ReadonlyArray<HRPolicy['timeUnit']> = ['Days', 'Weeks', 'Months'];
+const isTimeUnit = (value: string): value is HRPolicy['timeUnit'] =>
+  (TIME_UNITS as readonly string[]).includes(value);
+
 interface PolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -157,7 +173,9 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
               id="policy-category"
               className="omni-select" 
               value={category}
-              onChange={(e) => setCategory(e.target.value as PolicyCategory)}
+              onChange={(e) => {
+                if (isPolicyCategory(e.target.value)) setCategory(e.target.value);
+              }}
             >
               <option value="Parental Provisions">Parental Provisions (Maternal / Paternal)</option>
               <option value="Leave & Quotas">Leave & Quotas (CL, SL, EL, Comp-Off)</option>
@@ -211,7 +229,9 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
               id="policy-unit"
               className="omni-select" 
               value={timeUnit}
-              onChange={(e) => setTimeUnit(e.target.value as any)}
+              onChange={(e) => {
+                if (isTimeUnit(e.target.value)) setTimeUnit(e.target.value);
+              }}
             >
               <option value="Days">Days</option>
               <option value="Weeks">Weeks</option>
