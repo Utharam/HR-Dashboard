@@ -184,6 +184,27 @@ describe('savePersisted', () => {
     expect(savePersisted('k', [{ id: 'a' }])).toEqual({ ok: false, reason: 'unavailable' })
   })
 
+  // Firefox raised the pre-standard quota error under a NAME rather than a code, so that
+  // one is a real signal and is kept.
+  it('recognises the legacy Firefox quota error name', () => {
+    const legacy = new Error('quota'); legacy.name = 'NS_ERROR_DOM_QUOTA_REACHED'
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw legacy })
+    expect(savePersisted('k', [{ id: 'a' }])).toEqual({ ok: false, reason: 'quota' })
+  })
+
+  // The removed branch. `code === 22` was WebKit's QUOTA_EXCEEDED_ERR, but the same
+  // number means INVALID_STATE_ERR in Firefox, and every browser that can run React 19
+  // throws a modern DOMException whose `code` is always 0. Treating a bare `code: 22` as
+  // quota could therefore only ever misreport some unrelated failure - and it would do so
+  // with quota advice ("free up space"), which is worse than the generic message. This
+  // test pins the removal: if the legacy numeric branch comes back, this fails.
+  it('does not treat an unrelated DOMException carrying code 22 as a quota failure', () => {
+    const unrelated = new DOMException('something else went wrong', 'InvalidStateError')
+    Object.defineProperty(unrelated, 'code', { value: 22 })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw unrelated })
+    expect(savePersisted('k', [{ id: 'a' }])).toEqual({ ok: false, reason: 'unavailable' })
+  })
+
   it('writes a versioned envelope, not a bare array', () => {
     savePersisted('k', [{ id: 'a' }])
     expect(JSON.parse(localStorage.getItem('k') as string))

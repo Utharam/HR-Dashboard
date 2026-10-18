@@ -102,6 +102,97 @@ describe('toFiniteNumber', () => {
 });
 
 describe('parseExcelBuffer rejects workbooks that are not a staff roster', () => {
+  // Measured against the xlsx@0.18.5 actually installed here, because these inputs do
+  // not all fail the way the code assumed. `XLSX.read` throws for HTML-sniffed input and
+  // for a truncated ZIP, but for a 0-byte or garbage buffer it happily returns a phantom
+  // one-cell `Sheet1` with zero rows. Nothing is destroyed or fabricated by that - the
+  // row is never mapped - but it used to fall through to NO_DATA_ROWS, whose hint
+  // claimed the file "has column headings", which is false of a file that has no content
+  // at all, and told the user to fill in a row that had nowhere to go.
+  const UNREADABLE_INPUTS: [string, ArrayBuffer][] = [
+    ['a zero-byte file', new ArrayBuffer(0)],
+    ['nine bytes of garbage', new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8]).buffer as ArrayBuffer],
+    // A sparse/zero-filled buffer decodes to a cell of NULs. `trim()` does not remove
+    // these, which is why the readable-header test looks for a letter or a digit rather
+    // than "not whitespace".
+    ['a buffer of zero bytes', new Uint8Array(32).buffer as ArrayBuffer],
+  ];
+
+  it.each(UNREADABLE_INPUTS)('rejects %s as unreadable rather than as an empty roster', async (_label, buf) => {
+    const err = await rejectionOf(buf);
+    expect(err.code).toBe('UNREADABLE_FILE');
+  });
+
+  it.each(UNREADABLE_INPUTS)('gives %s a hint that is true of that input', async (_label, buf) => {
+    const err = await rejectionOf(buf);
+
+    // The two clauses the old NO_DATA_ROWS hint asserted are both false here: the file
+    // has no column headings, and "fill in at least one employee" is not an instruction
+    // anyone can carry out on an empty buffer.
+    expect(err.hint).not.toMatch(/column headings/i);
+    expect(err.hint).not.toMatch(/fill in at least one employee/i);
+    expect(err.hint).toMatch(/no readable spreadsheet content/i);
+  });
+
+  it('does not call a one-line text file unreadable - it does have readable content', async () => {
+    // Measured: SheetJS hands back a single row of prose as the heading. Calling that
+    // "no readable spreadsheet content" would be its own untruth, so it falls through to
+    // the empty-roster message, which is now worded to be true of it.
+    const buf = new TextEncoder().encode('notes about the new starter').buffer as ArrayBuffer;
+
+    const err = await rejectionOf(buf);
+    expect(err.code).toBe('NO_DATA_ROWS');
+    expect(err.hint).not.toMatch(/no readable spreadsheet content/i);
+    expect(err.hint).not.toMatch(/column headings/i);
+  });
+
+  it('still reports a header-only template as an empty roster, not an unreadable file', async () => {
+    // The distinction the new gate turns on. Real header text, zero data rows: the user
+    // has the template and has not filled it in, which is a different problem from
+    // handing over a file with no content at all.
+    const ws = XLSX.utils.aoa_to_sheet([['Employee ID', 'Full Name', 'Monthly CTC']]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Staff_Roster');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+    const err = await rejectionOf(buf);
+    expect(err.code).toBe('NO_DATA_ROWS');
+    expect(err.hint).toMatch(/no staff rows/i);
+  });
+
+  it('still reports a template whose only data row is blank as an empty roster', async () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Employee ID', 'Full Name', 'Monthly CTC'],
+      ['   ', '\t', ''],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Staff_Roster');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+    const err = await rejectionOf(buf);
+    expect(err.code).toBe('NO_DATA_ROWS');
+  });
+
+  it('does not call a text file unreadable - it has readable content, just no OmniHR columns', async () => {
+    // A misnamed PDF or a .txt arrives with text in it. Calling that "unreadable" would
+    // be as untrue as the old message; the honest answer is that it is not a roster.
+    const buf = new TextEncoder().encode('%PDF-1.4\nsome binary noise\nmore noise').buffer as ArrayBuffer;
+
+    const err = await rejectionOf(buf);
+    expect(err.code).toBe('NO_MATCHING_COLUMNS');
+  });
+
+  it('accepts a CSV export, which has no .xlsx container at all', async () => {
+    // A guard against the new gate being over-eager: SheetJS reads CSV as a one-sheet
+    // workbook, and this is a supported import path.
+    const buf = new TextEncoder().encode(
+      'Employee ID,Full Name,Department,Monthly CTC\nEMP-1,Asha Menon,Engineering & Technology,185000',
+    ).buffer as ArrayBuffer;
+
+    const result = await parseExcelBuffer(buf);
+    expect(result.employees[0].name).toBe('Asha Menon');
+  });
+
   it('rejects a vendor invoice instead of fabricating employees from it', async () => {
     // Measured before these gates existed: this exact sheet produced two employees
     // named "Staff Member 1" with a made-up CTC, UAN and DOB, and the UI reported

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { App } from './App';
 import { DATA_SCHEMA_VERSION } from './utils/storage';
+import { isEmployeeRow } from './utils/rowValidators';
 import { INITIAL_EMPLOYEES } from './data/initialData';
 
 // jsdom has no 2D canvas, so a real Chart.js instance cannot be created and its
@@ -55,11 +56,12 @@ describe('App persistence', () => {
       expect(written.v).toBe(DATA_SCHEMA_VERSION);
       expect(Array.isArray(written.rows)).toBe(true);
       expect(written.rows.length).toBeGreaterThan(0);
-      // Every row the app will render must survive its own consumer's dereferences.
-      for (const row of written.rows) {
-        expect(typeof row.name).toBe('string');
-        expect(typeof row.id).toBe('string');
-      }
+      // Asserted with the app's own validator rather than `typeof row.name === 'string'`:
+      // the write path and the load path must agree on what a row is, and the validator is
+      // the definition of that agreement. A hand-rolled field check here only ever proved
+      // the seed data was well-formed, which nothing in this test is about.
+      const invalid = written.rows.filter((row: unknown) => !isEmployeeRow(row));
+      expect(invalid).toEqual([]);
     },
   );
 

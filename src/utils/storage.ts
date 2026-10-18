@@ -96,12 +96,24 @@ function readItem(key: string): string | null {
  * The quota error is reported separately because it is the one a user can act on:
  * the data is correct and still in memory, it simply cannot be written down yet.
  * Collapsing it into a generic failure would hide the reason the app has stopped
- * remembering anything.
+* remembering anything.
+ *
+ * Only NAMES are consulted. The legacy numeric `code` branch that used to sit here
+ * (`code === 22 || code === 1014`) was removed, deliberately:
+ *
+ *   - `22` was WebKit's `QUOTA_EXCEEDED_ERR`, but the same number is Firefox's
+ *     `INVALID_STATE_ERR`, so the check was a guess that could misfire;
+ *   - every browser capable of running React 19 throws a modern `DOMException`, whose
+ *     `code` is always `0`, so the branch was unreachable for its intended target;
+ *   - and a false positive is the expensive direction here: an unrelated failure reported
+ *     as `quota` tells the user to free up space they do not need to free.
+ *
+ * `NS_ERROR_DOM_QUOTA_REACHED` stays because it is a NAME, it is unambiguous, and Firefox
+ * really did throw it. Both accepted names are pinned by tests.
  */
 function classifyWriteError(err: unknown): 'quota' | 'unavailable' {
   const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined
-  const code = typeof err === 'object' && err !== null ? (err as { code?: unknown }).code : undefined
-  if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' || code === 22 || code === 1014) {
+  if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED') {
     return 'quota'
   }
   return 'unavailable'

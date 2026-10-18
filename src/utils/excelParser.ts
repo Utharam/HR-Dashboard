@@ -586,15 +586,49 @@ function recognizedColumnCount(rows: Record<string, unknown>[]): number {
 /**
  * True when at least one cell in the row holds something other than whitespace.
  *
- * The header-only sheet a user gets by typing column names and saving is NOT an empty
- * sheet: `json_to_sheet` writes the empty strings, and `sheet_to_json` hands back one row
- * of them. Without this check the parser mapped it to an employee called "Staff Member
- * 1". Identity is deliberately not part of the test: the recognised-column gate runs
- * first, so by the time this is asked the sheet has already proved it knows what a
- * person is.
+ * Used for DATA rows only, and only after the readable-header gate has established that
+ * the sheet has a header at all. The header-only sheet a user gets by typing column names
+ * and saving is not an empty sheet: `json_to_sheet` writes the empty strings and
+ * `sheet_to_json` hands back one row of them, so without this check the parser mapped it
+ * to an employee called "Staff Member 1".
+ *
+ * Identity is deliberately not part of the test. It sits AFTER this one on purpose - see
+ * the ordering note in `parseExcelBuffer` - because a row of empty strings under real
+ * headings recognises no column, and asking about columns first would answer "this is not
+ * a roster" about a template somebody has simply not filled in yet.
  */
 function hasAnyValue(row: Record<string, unknown>): boolean {
   return Object.values(row).some((value) => value !== null && value !== undefined && String(value).trim() !== '');
+}
+
+/**
+ * A letter or a digit: the minimum a cell must contain to be text a person wrote.
+ *
+ * `trim()` is not enough here. Measured on this project's xlsx: nine garbage bytes are
+ * decoded into a single cell of `\u0000`..`\u0008`, and ECMAScript whitespace does not
+ * include those, so a `trim() !== ''` test reads binary noise as a column heading and
+ * sends the user off to fix a file that has no headings in it.
+ */
+const READABLE_TEXT = /[\p{L}\p{N}]/u;
+
+/**
+ * True when the sheet's first row holds at least one piece of readable text.
+ *
+ * `sheet_to_json` with `header: 1` returns rows as arrays and does not consume the first
+ * row as keys, which is the only way to see the heading of a sheet that has headings and
+ * no data rows - `sheet_to_json` in object mode returns `[]` for both "template, unfilled"
+ * and "no content whatsoever", which are opposite problems.
+ *
+ * `defval` is set so a populated-but-empty trailing cell still yields its column.
+ */
+function hasReadableHeaderRow(sheet: XLSX.WorkSheet): boolean {
+  const matrix = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: '',
+  }) as unknown[][];
+  const firstRow = matrix[0];
+  if (!Array.isArray(firstRow)) return false;
+  return firstRow.some((cell) => READABLE_TEXT.test(String(cell ?? '')));
 }
 
 /**
@@ -649,19 +683,48 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ParseResult
     );
   }
 
-  // 3. Headers but nobody in them. This runs BEFORE the recognised-column count, and the
-  //    order matters: a sheet whose cells are all empty strings recognises no column
-  //    either, because recognition follows the values under the headings. Asking about
-  //    columns first would answer "this is not a roster" about a template somebody has
-  //    simply not filled in yet, and send them off to reformat a file that was fine.
-  if (!rows.some(hasAnyValue)) {
+  // 3. Is there a sheet here at all? `XLSX.read` does NOT throw for every unreadable file.
+  //    Measured on the xlsx this project ships, against the same inputs:
+  //
+  //      0-byte buffer      -> OK, phantom one-cell "Sheet1", 0 rows
+  //      9 garbage bytes    -> OK, phantom one-cell "Sheet1", 0 rows
+  //      renamed .txt/.pdf  -> OK, one row of text
+  //      truncated ZIP      -> THREW "Unsupported ZIP file"
+  //      HTML               -> THREW "Invalid HTML: could not find <table>"
+  //
+  //    So the catch above only covers HTML-sniffed input and broken archives. Everything
+  //    else arrives as an empty sheet and used to fall through to NO_DATA_ROWS, which told
+  //    the user their file "has column headings" - untrue of a file with no content - and
+  //    to fill in a row that had nowhere to go.
+  //
+  //    Only reachable when there are no data rows: if `rows` is non-empty, SheetJS already
+  //    found a heading line to use as keys, so this cannot fail.
+  if (rows.length === 0 && !hasReadableHeaderRow(sheet)) {
     throw new ExcelImportError(
-      'NO_DATA_ROWS',
-      'That sheet has column headings but no staff rows. Fill in at least one employee and upload it again.',
+      'UNREADABLE_FILE',
+      'No readable spreadsheet content was found in that file. It may be empty, damaged, or not an Excel workbook at all - if it is a CSV, open it in Excel and save it as .xlsx first, then upload that.',
     );
   }
 
-  // 4. Does this sheet know anything about people? A vendor invoice recognises no OmniHR
+  // 4. A readable sheet with nothing in it.
+  //
+  //    Order matters here, and it is the reverse of the obvious one. This gate runs BEFORE
+  //    the recognised-column count because recognition follows the VALUES under the
+  //    headings: a sheet whose cells are all empty strings recognises no column either, so
+  //    asking about columns first would answer "this is not a roster" about a template
+  //    somebody has simply not filled in yet.
+  //
+  //    The hint no longer asserts that headings are present. It has to cover both the
+  //    unfilled template and a sheet whose single row is whitespace, and claiming a
+  //    heading the user cannot see is the kind of statement this batch exists to remove.
+  if (!rows.some(hasAnyValue)) {
+    throw new ExcelImportError(
+      'NO_DATA_ROWS',
+      'No staff rows were found in that sheet. If this is the OmniHR template, add at least one employee below the headings and upload it again.',
+    );
+  }
+
+  // 5. Does this sheet know anything about people? A vendor invoice recognises no OmniHR
   //    column at all, and used to be mapped into employees named "Staff Member 1" with a
   //    made-up CTC, UAN and date of joining.
   if (recognizedColumnCount(rows) < MIN_RECOGNIZED_COLUMNS) {

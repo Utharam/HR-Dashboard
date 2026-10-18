@@ -55,6 +55,20 @@ describe('ExcelHubSection import errors', () => {
     expect(alert).not.toHaveTextContent(/Failed to parse Excel file:/i);
   });
 
+  it('reports an empty file as unreadable, not as a roster with no rows', async () => {
+    const { container } = renderHub();
+
+    // The end-to-end version of the gate: a 0-byte file must not be described to the
+    // user as having column headings and no staff rows.
+    await upload(container, new ArrayBuffer(0), 'empty.xlsx');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/That file could not be opened/i);
+    expect(alert).toHaveTextContent(/no readable spreadsheet content/i);
+    expect(alert).not.toHaveTextContent(/column headings/i);
+    expect(alert).not.toHaveTextContent(/fill in at least one employee/i);
+  });
+
   it('explains a vendor invoice instead of confirming a parse', async () => {
     const { container } = renderHub();
 
@@ -92,7 +106,10 @@ describe('ExcelHubSection import errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/No staff rows in that sheet/i);
-    expect(alert).toHaveTextContent(/Fill in at least one employee/i);
+    // Reworded from "fill in at least one employee": that instruction was unconditional
+    // and untrue for a file with no headings at all, so it is now scoped to the template.
+    expect(alert).toHaveTextContent(/add at least one employee below the headings/i);
+    expect(alert).not.toHaveTextContent(/column headings but no staff rows/i);
   });
 
   it('reports a sheet over the row cap', async () => {
