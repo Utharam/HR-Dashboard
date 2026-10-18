@@ -627,6 +627,11 @@ textarea.omni-input {
   box-shadow: var(--shadow-xl);
   animation: modal-rise var(--dur-slow) var(--ease-out) both;
 }
+/* The policy form is one long column of fields; the default width leaves a wide empty
+   gutter beside every input. */
+.modal-window--narrow {
+  max-width: 680px;
+}
 .modal-close {
   position: absolute;
   top: var(--space-4);

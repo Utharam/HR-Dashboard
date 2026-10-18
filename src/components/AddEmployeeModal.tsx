@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import type { Employee, Department } from '../types';
 import { toISODate } from '../utils/dates';
+import { Dialog } from './Dialog';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -46,8 +47,9 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
   const [genderError, setGenderError] = useState(false);
   const [phone, setPhone] = useState('+91 9876543210');
 
-  if (!isOpen) return null;
-
+  // No `if (!isOpen) return null` here: `Dialog` is the one place that decides whether a
+  // modal exists, and it needs to stay mounted so it can see the `false -> true` edge and
+  // capture the opener while focus is still on it.
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // The select is `required`, so the browser blocks an untouched picker first. This
@@ -94,19 +96,18 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add new staff profile">
+    <Dialog isOpen={isOpen} onClose={onClose} labelledBy="add-employee-modal-title">
         <button 
           onClick={onClose}
           aria-label="Close"
           className="modal-close"
         >
-          <X size={20} />
+          <X size={20} aria-hidden="true" />
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-inline)', marginBottom: 'var(--space-5)' }}>
-          <UserPlus size={22} className="text-primary" />
-          <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>Add New Staff Profile</h2>
+          <UserPlus size={22} className="text-primary" aria-hidden="true" />
+          <h2 id="add-employee-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>Add New Staff Profile</h2>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -238,7 +239,6 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 };

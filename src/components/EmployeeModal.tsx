@@ -4,6 +4,7 @@ import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
 import { computePayroll, isActive } from '../utils/payroll';
 import { statusBadgeClass } from './statusBadge';
+import { Dialog } from './Dialog';
 
 interface EmployeeModalProps {
   employee: Employee | null;
@@ -21,21 +22,23 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
   const payslip = isActive(employee) ? computePayroll(employee) : null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Profile: ${employee.name}`}>
-        <button 
-          onClick={onClose}
-          aria-label="Close payslip"
-          className="modal-close no-print"
-        >
-          <X size={20} />
-        </button>
+    // `Dialog` owns the scrim, the role, the Escape key and the focus lifecycle. It mounts
+    // at the moment `employee` becomes non-null, which is while focus is still on the
+    // control that opened it - so the trigger is captured as the restore target.
+    <Dialog isOpen onClose={onClose} labelledBy="employee-modal-title">
+      <button
+        onClick={onClose}
+        aria-label="Close payslip"
+        className="modal-close no-print"
+      >
+        <X size={20} aria-hidden="true" />
+      </button>
 
-        {/* Header Profile */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-              <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
+      {/* Header Profile */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <h2 id="employee-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
               <span className={`badge ${statusBadgeClass(employee.status)}`}>
                 {employee.status}
               </span>
@@ -146,7 +149,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
             Close
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };

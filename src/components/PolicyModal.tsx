@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Plus, Gift, Check } from 'lucide-react';
 import type { HRPolicy, PolicyCategory } from '../types';
+import { Dialog } from './Dialog';
 import { 
   MATERNAL_GIFT_PRESETS, 
   PATERNAL_GIFT_PRESETS, 
@@ -94,13 +95,13 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
   };
 
   return (
-    <div className="modal-window" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEditing ? 'Edit HR policy' : 'Create HR policy'}>
+    <>
       <button 
         onClick={onClose}
         aria-label="Close"
         className="modal-close"
       >
-        <X size={20} />
+        <X size={20} aria-hidden="true" />
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
@@ -114,10 +115,10 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
           justifyContent: 'center',
           flexShrink: 0
         }}>
-          <Sparkles size={20} className="text-primary" />
+          <Sparkles size={20} className="text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
+          <h2 id="policy-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
             {isEditing ? 'Edit HR Policy & Provisions' : 'Create Custom HR Policy / Rule'}
           </h2>
           <p className="omni-card-sub">
@@ -334,7 +335,7 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
           </button>
         </div>
       </form>
-    </div>
+    </>
   );
 };
 
@@ -344,16 +345,17 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
   onSavePolicy,
   policyToEdit
 }) => {
-  if (!isOpen) return null;
-
+  // The form keeps its own `key` so that switching between policies re-runs its state
+  // initialisers. The scrim and the focus lifecycle belong to `Dialog`, which stays
+  // mounted either side of the open edge so it can capture and restore the opener.
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Dialog isOpen={isOpen} onClose={onClose} labelledBy="policy-modal-title" className="modal-window--narrow">
       <PolicyForm 
         key={policyToEdit?.id || 'new_policy'}
         onClose={onClose}
         onSavePolicy={onSavePolicy}
         policyToEdit={policyToEdit}
       />
-    </div>
+    </Dialog>
   );
 };
