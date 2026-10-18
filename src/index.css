@@ -145,6 +145,11 @@
 
   --shell-pad: var(--space-6) var(--space-8);
   --sidebar-w: 270px;
+  /* The collapsed rail. The one length here that is not on the spacing scale, because it
+     is a layout measurement rather than a gap: 64px holds a 32px brand mark plus the
+     padding either side, and it is the width at which an 18px nav icon plus a 10px inset
+     still reads as a target rather than a hairline. */
+  --sidebar-rail-w: 64px;
 }
 
 /* ── 5. Radii, elevation, motion, z-index ───────────────────────────────── */
@@ -172,6 +177,11 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   --z-sticky: 10;
+  /* Between content and `--z-sticky`. The off-canvas navigation needs three planes: the
+     page, the scrim that dismisses the drawer, and the drawer itself. Putting the scrim at
+     `--z-modal` (999) would paint it OVER the drawer at `--z-sticky` (10), so opening the
+     navigation would render it unreachable. */
+  --z-scrim: 5;
   --z-modal: 999;
 }
 
@@ -463,8 +473,13 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
 }
+/* A blanket `white-space: nowrap` on `th` is what stopped an 11-column payroll register
+   from ever fitting a 1280px laptop: the headings alone were wider than the card, so every
+   page below the collapse breakpoint scrolled sideways to read a column header. The rule is
+   gone; cells that genuinely must not wrap say so on themselves (`.cell-id`, `.cell-muted`,
+   `.cell-dim`, `.cell-strong`), and the lowest-value columns opt out below the breakpoint
+   via `.col-optional`. */
 .omni-table td {
   padding: var(--space-3) 14px;
   border-bottom: 1px solid var(--hairline);
@@ -668,6 +683,77 @@ textarea.omni-input {
 
 /* ── 8. Layout primitives & utilities ───────────────────────────────────── */
 
+/* Application shell ----------------------------------------------------
+   The console is a two-column grid, not a flex row with a subtracted width.
+
+   It was: `display: flex` with a `flex-shrink: 0` 270px sidebar and
+   `max-width: calc(100vw - 270px)` on <main>. `100vw` is the viewport INCLUDING the
+   scrollbar gutter, so even at 1920px there was a permanently clipped sliver along the
+   right edge, and the flex item could never shrink below 270px regardless of how narrow
+   the window got. On a 375px phone that left 105px of usable content, with
+   `body { overflow-x: hidden }` swallowing the rest and no scrollbar to recover it.
+
+   `minmax(0, 1fr)` rather than a bare `1fr` is the load-bearing part: a `1fr` track has an
+   automatic minimum of `min-content`, so a wide table would push the track past the
+   viewport instead of shrinking it, and the whole overflow would reappear one level up.
+
+   <main> deliberately does NOT scroll. It used to (`overflow-y: auto`), which quietly made
+   it the page's scroll container and left `document.body.style.overflow = 'hidden'` - the
+   scroll lock `Dialog` applies behind every scrim - with nothing to lock: the content
+   moved under the modal anyway. The document scrolls; the sidebar is held in place with
+   `position: sticky`. One scroll container, so the lock has something to act on. */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--bg-main);
+}
+.app-shell__main {
+  min-width: 0;
+  padding: var(--shell-pad);
+}
+.app-shell__scrim {
+  display: none;
+}
+
+/* Sidebar -------------------------------------------------------------- */
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  /* `start` rather than the default `stretch`: a stretched grid item is exactly as tall
+     as the row, so there is no travel left and `position: sticky` never moves. */
+  align-self: start;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  padding: var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.app-sidebar__brand {
+  margin-bottom: var(--space-7);
+  padding-left: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.app-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  width: 100%;
+}
+.app-sidebar__footer {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-inline);
+}
+
 /* Section stack: one rhythm for every tab */
 .section-stack {
   display: flex;
@@ -697,6 +783,65 @@ textarea.omni-input {
 }
 @media (max-width: 760px) {
   .grid--split, .grid--half { grid-template-columns: 1fr; }
+}
+
+/* Shell breakpoints ----------------------------------------------------
+   Two steps, both driven by the sidebar rather than by the content:
+
+   - 1200px: a full 270px sidebar leaves a 25-column payroll register 130px of column. The
+     rail reclaims 206px and the three lowest-value columns go with it, so the columns
+     that survive are the ones carrying money and status.
+   - 760px: there is no honest way to keep a rail beside a 390px screen, so the sidebar
+     leaves the grid entirely and becomes a drawer. It stays in the DOM and stays focusable
+     - it is `transform`, not `display: none` - so a keyboard user who tabs into it can
+     still see where they are, and the toggle in the header is how they get back out. */
+@media (max-width: 1200px) {
+  .app-shell { grid-template-columns: var(--sidebar-rail-w) minmax(0, 1fr); }
+  .app-sidebar {
+    padding: var(--space-6) var(--space-2);
+    align-items: center;
+  }
+  .app-sidebar__label,
+  .app-sidebar__brand-text { display: none; }
+  .app-sidebar__brand { padding-left: 0; justify-content: center; }
+  .app-sidebar__nav .nav-item {
+    justify-content: center;
+    padding: var(--space-2);
+  }
+  .app-sidebar__footer .btn { padding: var(--space-2); }
+
+  /* `.col-optional` is deliberately class-based rather than nth-child: it marks a COLUMN BY
+     MEANING (an identifier, an office, a tax line) so the rule survives a column being
+     inserted or reordered above it. Hidden on both the heading and its cells - a `<th>` left
+     behind with no `<td>` under it is a header for nothing. */
+  .omni-table .col-optional { display: none; }
+}
+
+@media (max-width: 760px) {
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
+  .app-shell__main { padding: var(--space-4); }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    height: 100dvh;
+    z-index: var(--z-sticky);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .app-sidebar[data-open='true'] { transform: none; }
+  .app-shell__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-scrim);
+    background: var(--scrim);
+    border: none;
+    cursor: pointer;
+  }
 }
 
 /* KPI card: label / value / supporting note, with the icon on the label row. */

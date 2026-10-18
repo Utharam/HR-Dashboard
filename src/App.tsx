@@ -91,6 +91,27 @@ export const App: React.FC = () => {
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
 
+  // Below 760px the sidebar leaves the layout grid and becomes a fixed panel (see the shell
+  // breakpoints in index.css). The state lives here, not in the Sidebar, because the
+  // control that owns it is in the Header and the scrim that dismisses it is a sibling of
+  // both. Escape closes it for the same reason a dialog closes on Escape: leaving is never
+  // the same gesture as choosing.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsSidebarOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isSidebarOpen]);
+
+  const handleNavigate = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
@@ -289,17 +310,24 @@ export const App: React.FC = () => {
   const noticeTitle = notice?.kind === 'discarded' ? 'Saved data could not be read' : 'Change not saved';
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)' }}>
+    <div className="app-shell">
       {/* Sidebar Navigation */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleNavigate} 
         onExportExcel={handleExportEmployees}
         onResetData={handleResetData}
+        isOpen={isSidebarOpen}
       />
 
-      {/* Main Content Pane */}
-      <main style={{ flex: 1, padding: 'var(--shell-pad)', overflowY: 'auto', maxWidth: 'calc(100vw - var(--sidebar-w))' }}>
+      {/* Main Content Pane.
+          The column sizes itself: `minmax(0, 1fr)` in `.app-shell` plus `min-width: 0`
+          here is what lets it shrink below its content, and nothing here sets a width
+          against the viewport any more. `100vw` included the scrollbar gutter, so the old
+          `calc(100vw - 270px)` clipped a sliver even on a desktop. <main> does not scroll
+          either - the document does, which is what makes `Dialog`'s body scroll lock
+          actually lock something. */}
+      <main className="app-shell__main">
         <Header 
           activeTab={activeTab}
           searchQuery={searchQuery}
@@ -313,6 +341,8 @@ export const App: React.FC = () => {
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onNavigateToExcel={() => setActiveTab('excel')}
           onNavigateToGuides={() => handleNavigateToGuides('general')}
+          onToggleNav={() => setIsSidebarOpen(open => !open)}
+          navOpen={isSidebarOpen}
         />
 
         {/*
@@ -464,6 +494,19 @@ export const App: React.FC = () => {
         onConfirm={handleConfirmResetData}
         onCancel={() => setIsResetRequested(false)}
       />
+
+      {/* Dismissal surface for the off-canvas navigation. Rendered only while the drawer
+          is open, and below `--z-sticky` so it cannot cover the panel it is dismissing. It
+          is a real button so that closing the drawer is not a pointer-only gesture; the
+          header toggle and Escape do the same thing for a keyboard user. */}
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="app-shell__scrim"
+          aria-label="Dismiss navigation overlay"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
     </div>
   );
 };

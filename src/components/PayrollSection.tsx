@@ -100,7 +100,11 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
             </caption>
             <thead>
               <tr>
-                <th scope="col">Emp ID</th>
+                {/* `col-optional`: an identifier and a flat tax line are the two columns a
+                    reader can most afford to lose when the register has to fit a laptop.
+                    Both the heading and its cells carry it - a `<th>` left behind with no
+                    `<td>` under it is a header for nothing. */}
+                <th scope="col" className="col-optional">Emp ID</th>
                 <th scope="col">Employee Name</th>
                 <th scope="col">Department</th>
                 <th scope="col">Monthly CTC</th>
@@ -108,7 +112,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                 <th scope="col">HRA (25%)</th>
                 <th scope="col">Special Allow.</th>
                 <th scope="col">EPF (12%)</th>
-                <th scope="col">PT</th>
+                <th scope="col" className="col-optional">PT</th>
                 <th scope="col">Net Disbursable</th>
                 <th scope="col">Payslip</th>
               </tr>
@@ -119,7 +123,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
 
                 return (
                   <tr key={emp.id}>
-                    <td className="cell-id">{emp.id}</td>
+                    <td className="cell-id col-optional">{emp.id}</td>
                     <td className="cell-strong">{emp.name}</td>
                     <td>{emp.department}</td>
                     <td className="cell-strong">₹{formatINR(emp.monthlyCTC)}</td>
@@ -127,7 +131,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                     <td>₹{formatINR(emp.hra)}</td>
                     <td>₹{formatINR(emp.specialAllowance)}</td>
                     <td className="text-danger-soft">−₹{formatINR(p.epf)}</td>
-                    <td className="text-danger-soft">−₹{p.professionalTax}</td>
+                    <td className="text-danger-soft col-optional">−₹{p.professionalTax}</td>
                     <td className="cell-strong text-success">₹{formatINR(p.netPayable)}</td>
                     <td>
                       <button 

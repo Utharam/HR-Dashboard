@@ -78,11 +78,11 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
             </caption>
             <thead>
               <tr>
-                <th scope="col">Emp ID</th>
+                <th scope="col" className="col-optional">Emp ID</th>
                 <th scope="col">Staff Member</th>
                 <th scope="col">Department</th>
                 <th scope="col">Designation / Role</th>
-                <th scope="col">Location</th>
+                <th scope="col" className="col-optional">Location</th>
                 <th scope="col">DOJ</th>
                 <th scope="col">Annual CTC</th>
                 <th scope="col">Monthly Basic</th>
@@ -93,14 +93,14 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
             <tbody>
               {currentItems.map(emp => (
                 <tr key={emp.id}>
-                  <td className="cell-id">{emp.id}</td>
+                  <td className="cell-id col-optional">{emp.id}</td>
                   <td>
                     <div className="cell-strong">{emp.name}</div>
                     <div className="cell-dim">{emp.email}</div>
                   </td>
                   <td>{emp.department}</td>
                   <td>{emp.role}</td>
-                  <td>{emp.location}</td>
+                  <td className="col-optional">{emp.location}</td>
                   <td className="cell-muted">{emp.doj}</td>
                   <td className="cell-strong text-success">{formatLakhs(emp.monthlyCTC * 12)}</td>
                   <td>₹{formatINR(emp.basicSalary)}</td>

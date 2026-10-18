@@ -78,11 +78,18 @@ describe('DirectorySection table semantics', () => {
     expect(screen.getByRole('region', { name: /scroll/i })).toHaveAttribute('tabindex', '0');
   });
 
-  it('keeps the caption in step with the page being shown', () => {
+  it('keeps the caption in step with the page being shown', async () => {
     // A caption that says "page 1 of 8" forever is worse than no caption: it is a name
-    // that is wrong for seven eighths of its life.
+    // that is wrong for seven eighths of its life. Asserted on page 2 as well as page 1,
+    // because a caption derived once and never re-derived passes the page-1 check and is
+    // wrong everywhere else - which is exactly what it was.
     renderDirectory();
     expect(screen.getByRole('table', { name: /page 1 of 8, showing 25 of 200 records/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+    expect(screen.getByRole('table', { name: /page 2 of 8, showing 25 of 200 records/i })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: /page 1 of 8/i })).toBeNull();
   });
 
   it('describes an empty register without claiming a page window', () => {

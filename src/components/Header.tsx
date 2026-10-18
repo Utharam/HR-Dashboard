@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, UserPlus, FileSpreadsheet, Building2, MapPin, BookOpen } from 'lucide-react';
+import { Search, UserPlus, FileSpreadsheet, Building2, MapPin, BookOpen, Menu } from 'lucide-react';
 import type { ActiveTab, Department } from '../types';
 
 interface HeaderProps {
@@ -15,6 +15,14 @@ interface HeaderProps {
   onOpenAddModal: () => void;
   onNavigateToExcel: () => void;
   onNavigateToGuides?: () => void;
+  /**
+   * Opens and closes the navigation. Required rather than optional: below the collapse
+   * breakpoint the sidebar is a fixed panel that only this control can summon, and a
+   * keyboard user has to be able to reach it from wherever they are on the page.
+   */
+  onToggleNav: () => void;
+  /** Whether the navigation is currently showing, published as `aria-expanded`. */
+  navOpen: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,7 +37,9 @@ export const Header: React.FC<HeaderProps> = ({
   locations,
   onOpenAddModal,
   onNavigateToExcel,
-  onNavigateToGuides
+  onNavigateToGuides,
+  onToggleNav,
+  navOpen
 }) => {
   const getTabTitle = (tab: ActiveTab) => {
     switch (tab) {
@@ -51,13 +61,32 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="page-header no-print">
-      <div>
-        <h2 className="page-title">
-          {info.title}
-        </h2>
-        <p className="page-sub">
-          {info.sub}
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        {/*
+          The navigation toggle. It is always rendered rather than hidden above the collapse
+          breakpoint: a control that appears and disappears with the viewport is a control
+          whose keyboard tab order changes under the user, and this one is the only route
+          to the sidebar once it becomes a drawer.
+        */}
+        <button
+          type="button"
+          onClick={onToggleNav}
+          className="btn btn-secondary btn-sm"
+          aria-expanded={navOpen}
+          aria-controls="app-sidebar"
+          aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+        >
+          <Menu size={16} aria-hidden="true" />
+        </button>
+
+        <div>
+          <h2 className="page-title">
+            {info.title}
+          </h2>
+          <p className="page-sub">
+            {info.sub}
+          </p>
+        </div>
       </div>
 
       <div className="page-actions">
