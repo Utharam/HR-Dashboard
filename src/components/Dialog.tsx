@@ -20,6 +20,13 @@ export interface DialogProps {
   onClose: () => void;
   /** `id` of the element that names this dialog - normally its `<h2>`. */
   labelledBy: string;
+  /**
+   * `id` of the element that explains what opening or confirming this dialog costs.
+   * Optional, because most dialogs are named by their heading alone. Where a dialog is
+   * asking the user to agree to something, this is the difference between being told the
+   * consequence and having to go looking for it.
+   */
+  describedBy?: string;
   /** Extra classes for the window, e.g. a narrower variant for long single-column forms. */
   className?: string;
   children: React.ReactNode;
@@ -50,7 +57,14 @@ const focusableWithin = (root: HTMLElement): HTMLElement[] =>
     (el) => el.tabIndex >= 0 && !el.hasAttribute('disabled'),
   );
 
-export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, labelledBy, className, children }) => {
+export const Dialog: React.FC<DialogProps> = ({
+  isOpen,
+  onClose,
+  labelledBy,
+  describedBy,
+  className,
+  children,
+}) => {
   const windowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -93,8 +107,6 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, labelledBy, cla
 
     const items = focusableWithin(win);
     const active = document.activeElement as HTMLElement | null;
-    const onWindow = active === win;
-    const outside = !active || !win.contains(active);
 
     if (items.length === 0) {
       // Nothing to move to. Letting the browser have the key would send focus to the page
@@ -107,18 +119,28 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, labelledBy, cla
     const first = items[0];
     const last = items[items.length - 1];
 
+    // "Stranded" is every case the trap must take over rather than defer to the browser:
+    // focus on the window itself (the state the user is in the instant it opens), focus on
+    // anything at all outside it, and - the one that is easy to miss - focus on something
+    // INSIDE it that `focusableWithin` does not count. A `tabIndex={-1}` control, a control
+    // inside a disabled fieldset (the descendant has no `disabled` attribute of its own), a
+    // control the selector does not recognise: all of them can hold focus, none of them is
+    // `first` or `last`, so without this the browser gets the Tab key and walks to the next
+    // tabbable in document order - which, for a dialog that is not portalled, is behind the
+    // scrim.
+    const stranded = !active || !win.contains(active) || !items.includes(active);
+
     if (e.shiftKey) {
-      // Wrapping backwards off the first control, or off the window itself (the state the
-      // user is in the instant the dialog opens).
-      if (active === first || onWindow || outside) {
+      // Wrapping backwards off the first control, or wherever focus was left stranded.
+      if (stranded || active === first) {
         e.preventDefault();
         last.focus();
       }
       return;
     }
 
-    // Wrapping forwards off the last control, or off the window itself.
-    if (active === last || onWindow || outside) {
+    // Wrapping forwards off the last control, or wherever focus was left stranded.
+    if (stranded || active === last) {
       e.preventDefault();
       first.focus();
     }
@@ -138,6 +160,7 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, labelledBy, cla
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         tabIndex={-1}
       >
         {children}

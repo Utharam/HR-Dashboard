@@ -5,7 +5,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     /* Node types are here and NOT in tsconfig.app.json: a test may read the filesystem or
-       inspect process.cwd(), and application code must not be able to. */
+     * inspect process.cwd(), and application code must not be able to. */
     "types": ["node", "vite/client"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
@@ -27,6 +27,11 @@
   /* `test-setup.ts` is listed alongside the tests because importing
      `@testing-library/jest-dom/vitest` there is what augments vitest's Assertion with
      `toHaveValue`, `toContainElement` and the rest. Without it in this program, every
-     matcher call in a test file fails to type-check. */
-  "include": ["src/test-setup.ts", "src/**/__tests__/**/*"]
+     matcher call in a test file fails to type-check.
+
+     The two globs are the exact inverses of tsconfig.app.json's exclude, and both mirror the
+     include globs in vitest.config.ts, so a file cannot be type-checked twice, missed by
+     tsc, or picked up by one and not the other. Keyed on the test EXTENSION rather than a
+     directory, because tests live beside the code they cover as well as under __tests__. */
+  "include": ["src/test-setup.ts", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }

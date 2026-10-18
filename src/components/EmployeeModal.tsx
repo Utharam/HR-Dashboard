@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { X, Printer } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
@@ -12,6 +12,12 @@ interface EmployeeModalProps {
 }
 
 export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose }) => {
+  // Before the early return, because it is a hook and hooks are not conditional. `useId`
+  // rather than a literal, so a second payslip open at the same time - a compare view, a
+  // split pane - does not emit the same `aria-labelledby` twice and leave both dialogs
+  // resolving to whichever heading the document happens to list first.
+  const titleId = useId();
+
   if (!employee) return null;
 
   // A payslip is a statement of money payable, so one is computed only for staff in the
@@ -25,7 +31,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
     // `Dialog` owns the scrim, the role, the Escape key and the focus lifecycle. It mounts
     // at the moment `employee` becomes non-null, which is while focus is still on the
     // control that opened it - so the trigger is captured as the restore target.
-    <Dialog isOpen onClose={onClose} labelledBy="employee-modal-title">
+    <Dialog isOpen onClose={onClose} labelledBy={titleId}>
       <button
         onClick={onClose}
         aria-label="Close payslip"
@@ -38,7 +44,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <h2 id="employee-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
+            <h2 id={titleId} className="omni-card-title" style={{ fontSize: 'var(--fs-3xl)' }}>{employee.name}</h2>
               <span className={`badge ${statusBadgeClass(employee.status)}`}>
                 {employee.status}
               </span>

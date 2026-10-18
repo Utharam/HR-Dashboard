@@ -5,19 +5,51 @@ import { useState } from 'react';
 import { Dialog } from '../Dialog';
 
 /**
- * The dialog under test always sits inside a page that has focusable controls of its own.
- * That is the whole point of the exercise: a trap that cannot be observed escaping is not
- * a trap, so every harness below has an "Open" button outside the scrim and the dialog
- * itself contains more than one control, including a disabled one that must be skipped.
+ * A control the browser will focus on click but that is absent from the trap's computed
+ * list - a `tabIndex={-1}` control, a control inside a disabled fieldset, anything the
+ * selector does not recognise. It must never be reachable by Tab, and the trap has to
+ * notice it has focus rather than assume it is looking at something it knows about.
  */
-const Window = () => (
+const Uncounted = () => <button tabIndex={-1}>Not tabbable</button>;
+
+/**
+ * The dialog under test always sits inside a page that has focusable controls of its own.
+ * That is the whole point of the exercise: a trap that cannot be observed escaping is not a
+ * trap, so every harness below has an "Open" button outside the scrim and the dialog itself
+ * contains more than one control.
+ *
+ * Two placements here are load-bearing, and both were wrong at some point:
+ *
+ * - The disabled control is LAST among the things a keyboard can reach. Between "First" and
+ *   "Last" it was invisible to the test: the wrap target was "Last" with or without the
+ *   disabled filter, so deleting the filter from `Dialog` changed nothing and the test
+ *   claiming to cover that line was green against a broken trap. Where it sits decides
+ *   whether "Last" is the last focusable thing in here at all.
+ * - `Uncounted` is LAST in document order, so focusing it and pressing Tab has somewhere to
+ *   escape to. Sat between two reachable controls it would have proved nothing, because the
+ *   browser's own tabbing would have kept focus inside the dialog either way. The backward
+ *   direction needs it FIRST instead, so `WindowFirst` exists for that.
+ */
+const WindowLast = () => (
   <>
     <h2 id="t">Title</h2>
     <button>First</button>
+    <button>Last</button>
     <button disabled>Disabled</button>
+    <Uncounted />
+  </>
+);
+
+const WindowFirst = () => (
+  <>
+    <h2 id="t">Title</h2>
+    <Uncounted />
+    <button>First</button>
     <button>Last</button>
   </>
 );
+
+const Window = () => <WindowLast />;
 
 const Harness = () => {
   const [open, setOpen] = useState(false);
@@ -26,6 +58,19 @@ const Harness = () => {
       <button onClick={() => setOpen(true)}>Open</button>
       <Dialog isOpen={open} onClose={() => setOpen(false)} labelledBy="t">
         <Window />
+      </Dialog>
+    </>
+  );
+};
+
+/** As `Harness`, but the uncounted control is the first thing in the window. */
+const ReverseHarness = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>Open</button>
+      <Dialog isOpen={open} onClose={() => setOpen(false)} labelledBy="t">
+        <WindowFirst />
       </Dialog>
     </>
   );
@@ -81,6 +126,27 @@ describe('Dialog', () => {
     );
     expect(dialog().className).toContain('modal-window');
     expect(dialog().className).toContain('modal-window--narrow');
+  });
+
+  it('threads an optional description through to the window', () => {
+    render(
+      <Dialog isOpen onClose={() => {}} labelledBy="t" describedBy="d">
+        <h2 id="t">Title</h2>
+        <p id="d">What agreeing to this costs you.</p>
+      </Dialog>,
+    );
+    expect(dialog()).toHaveAccessibleDescription('What agreeing to this costs you.');
+  });
+
+  it('carries no description at all when none is given', () => {
+    render(
+      <Dialog isOpen onClose={() => {}} labelledBy="t">
+        <h2 id="t">Title</h2>
+      </Dialog>,
+    );
+    // Absent, not empty: `aria-describedby=""` points at nothing and some screen readers
+    // announce the empty reference.
+    expect(dialog().hasAttribute('aria-describedby')).toBe(false);
   });
 
   it('closes on Escape', async () => {
@@ -176,15 +242,54 @@ describe('Dialog', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'First' }));
   });
 
-  it('never lands on a disabled control while cycling', async () => {
+  it('wraps past a trailing disabled control instead of treating it as the last one', async () => {
+    // The disabled button is the final element in the window (see `Window`). If the trap
+    // counted it, "Last" would not be the last focusable thing and the wrap would never
+    // fire - the browser would carry focus out through the scrim instead.
     render(<Harness />);
     await open();
+    const first = screen.getByRole('button', { name: 'First' });
     const last = screen.getByRole('button', { name: 'Last' });
 
     await userEvent.click(last);
     await userEvent.tab();
 
     expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Disabled' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'First' }));
+    expect(document.activeElement).toBe(first);
+    expect(dialog()).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it('recovers focus when it sits on a control the trap does not count', async () => {
+    // Focusable by pointer, absent from the trap's computed list: a `tabIndex={-1}` control,
+    // a control inside a disabled fieldset, anything the selector does not know about. It is
+    // the last element in document order, so letting the browser have the Tab key here is
+    // what walks a keyboard user straight off the scrim.
+    render(<Harness />);
+    await open();
+    const first = screen.getByRole('button', { name: 'First' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Not tabbable' }));
+    expect(document.activeElement).not.toBe(first);
+
+    await userEvent.tab();
+
+    expect(document.activeElement).toBe(first);
+    expect(dialog()).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it('recovers focus in the other direction from an uncounted control', async () => {
+    // Mirror image of the test above, and just as load-bearing: with the uncounted control
+    // LAST, Shift+Tab's natural destination was still inside the dialog and this assertion
+    // passed against a trap that had no recovery for it. It only discriminates when the
+    // control is the FIRST thing in the window.
+    render(<ReverseHarness />);
+    await open();
+    const last = screen.getByRole('button', { name: 'Last' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Not tabbable' }));
+    await userEvent.tab({ shift: true });
+
+    expect(document.activeElement).toBe(last);
+    expect(dialog()).toContainElement(document.activeElement as HTMLElement);
   });
 });

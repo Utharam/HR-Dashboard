@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { X, Sparkles, Plus, Gift, Check } from 'lucide-react';
 import type { HRPolicy, PolicyCategory } from '../types';
 import { Dialog } from './Dialog';
@@ -31,12 +31,15 @@ interface PolicyFormProps {
   onClose: () => void;
   onSavePolicy: (policy: HRPolicy) => void;
   policyToEdit?: HRPolicy | null;
+  /** Owned by `PolicyModal` so two policy dialogs cannot share one `aria-labelledby`. */
+  titleId: string;
 }
 
 const PolicyForm: React.FC<PolicyFormProps> = ({
   onClose,
   onSavePolicy,
-  policyToEdit
+  policyToEdit,
+  titleId
 }) => {
   const isEditing = !!policyToEdit;
 
@@ -118,7 +121,7 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
           <Sparkles size={20} className="text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h2 id="policy-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
+          <h2 id={titleId} className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
             {isEditing ? 'Edit HR Policy & Provisions' : 'Create Custom HR Policy / Rule'}
           </h2>
           <p className="omni-card-sub">
@@ -348,13 +351,21 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
   // The form keeps its own `key` so that switching between policies re-runs its state
   // initialisers. The scrim and the focus lifecycle belong to `Dialog`, which stays
   // mounted either side of the open edge so it can capture and restore the opener.
+  //
+  // The heading id is minted here rather than in `PolicyForm` and passed down, because
+  // `PolicyForm` is remounted whenever the edited policy changes while `Dialog` is not. A
+  // literal would also be wrong the moment a second policy dialog existed: `aria-labelledby`
+  // resolves to the first matching id in the document, so both would announce the first title.
+  const titleId = useId();
+
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} labelledBy="policy-modal-title" className="modal-window--narrow">
+    <Dialog isOpen={isOpen} onClose={onClose} labelledBy={titleId} className="modal-window--narrow">
       <PolicyForm 
         key={policyToEdit?.id || 'new_policy'}
         onClose={onClose}
         onSavePolicy={onSavePolicy}
         policyToEdit={policyToEdit}
+        titleId={titleId}
       />
     </Dialog>
   );

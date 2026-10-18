@@ -39,15 +39,16 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
 }) => {
   // `useId` rather than a literal: this is a reusable primitive, and two instances open at
-  // once must not end up pointing `aria-labelledby` at the same heading.
+  // once must not end up pointing `aria-labelledby` or `aria-describedby` at the same element.
   const titleId = useId();
+  const messageId = useId();
 
   return (
-    <Dialog isOpen={isOpen} onClose={onCancel} labelledBy={titleId}>
+    <Dialog isOpen={isOpen} onClose={onCancel} labelledBy={titleId} describedBy={messageId}>
       <h2 id={titleId} className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
         {title}
       </h2>
-      <p className="text-muted" style={{ marginTop: 'var(--space-3)' }}>
+      <p id={messageId} className="text-muted" style={{ marginTop: 'var(--space-3)' }}>
         {message}
       </p>
 

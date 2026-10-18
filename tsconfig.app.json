@@ -23,9 +23,10 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  /* Tests under __tests__ are type-checked by tsconfig.test.json instead, which adds the
-     Node types the filesystem-reading guard test needs. Without this the app project would
-     have to declare them, and application code would then be free to reference process and
-     node:fs without a single type error. */
-  "exclude": ["src/**/__tests__/**/*"]
+  /* Every *.test.ts / *.test.tsx is type-checked by tsconfig.test.json instead, which adds
+     the Node types a filesystem-reading test needs. Keyed on the test EXTENSION rather than
+     the __tests__ directory, because tests live beside the code they cover as well as in it -
+     src/App.test.tsx and src/components/ExcelHubSection.test.tsx are co-located. Matching
+     vitest.config.ts's own globs is what keeps the two from drifting apart. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

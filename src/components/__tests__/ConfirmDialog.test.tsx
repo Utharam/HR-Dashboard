@@ -52,6 +52,26 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(/cannot be recovered once deleted/i);
   });
 
+  it('announces the consequence as the dialog description, not as something to navigate to', () => {
+    // The question alone is not enough to answer it. A screen-reader user has to be told
+    // what agreeing costs them, and the way to do that is `aria-describedby` - a bare
+    // paragraph in the dialog body is only read if they go looking for it.
+    render(
+      <ConfirmDialog
+        isOpen
+        title="Delete custom policy?"
+        message="Custom policies cannot be recovered once deleted."
+        confirmLabel="Delete"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+      'Custom policies cannot be recovered once deleted.',
+    );
+  });
+
   it('calls onCancel when Cancel is pressed', async () => {
     const onCancel = vi.fn();
     render(<ConfirmDialog isOpen title="T" message="M" confirmLabel="Reset" onConfirm={vi.fn()} onCancel={onCancel} />);

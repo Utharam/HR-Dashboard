@@ -128,3 +128,61 @@ describe.each(MODALS)('%s focus lifecycle', (_name, Harness) => {
     }
   });
 });
+
+describe('two dialogs of the same kind open at once', () => {
+  const noop = () => {};
+  const TWICE: [string, () => ReactElement][] = [
+    ['EmployeeModal', () => (
+      <>
+        <EmployeeModal employee={employee} onClose={noop} />
+        <EmployeeModal employee={{ ...employee, id: 'EMP-2', name: 'Rahul Verma' }} onClose={noop} />
+      </>
+    )],
+    ['AddEmployeeModal', () => (
+      <>
+        <AddEmployeeModal isOpen onClose={noop} departments={departments} locations={locations} onAddEmployee={noop} totalEmployeesCount={1} />
+        <AddEmployeeModal isOpen onClose={noop} departments={departments} locations={locations} onAddEmployee={noop} totalEmployeesCount={2} />
+      </>
+    )],
+    ['PolicyModal', () => (
+      <>
+        <PolicyModal isOpen onClose={noop} onSavePolicy={noop} />
+        <PolicyModal isOpen onClose={noop} onSavePolicy={noop} />
+      </>
+    )],
+  ];
+
+  it('names each EmployeeModal after its own heading rather than both resolving to the first', () => {
+    // A hard-coded id is fine right up until a second instance exists - a compare view, a
+    // favourites pane, a second row opened on top of the first. `aria-labelledby` resolves
+    // to the FIRST element with that id in the document, so both dialogs would announce the
+    // first person's name. The primitive uses `useId()` for exactly this reason; these three
+    // modals have to match it.
+    render(<>{TWICE[0][1]()}</>);
+
+    const dialogs = screen.getAllByRole('dialog');
+    expect(dialogs).toHaveLength(2);
+    expect(dialogs[0]).toHaveAccessibleName('Asha Menon');
+    expect(dialogs[1]).toHaveAccessibleName('Rahul Verma');
+  });
+
+  it.each(TWICE)('%s points its ARIA references at one element each', (_name, twice) => {
+    render(twice());
+
+    // Scoped to ARIA reference targets on purpose. The three modals also carry hard-coded
+    // ids on their own form fields (`add-name`, `policy-title`, ...), which collide the same
+    // way when two instances render - a real defect, but a different one, and fixing it means
+    // minting an id per field rather than per dialog.
+    const referenced = Array.from(document.querySelectorAll('[aria-labelledby], [aria-describedby]')).flatMap((el) =>
+      [el.getAttribute('aria-labelledby'), el.getAttribute('aria-describedby')]
+        .filter((v): v is string => !!v)
+        .flatMap((v) => v.split(/\s+/))
+        .filter(Boolean),
+    );
+
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const id of referenced) {
+      expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1);
+    }
+  });
+});

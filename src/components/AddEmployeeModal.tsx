@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import type { Employee, Department } from '../types';
 import { toISODate } from '../utils/dates';
@@ -30,6 +30,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   onAddEmployee,
   totalEmployeesCount
 }) => {
+  // `useId` rather than a literal, so two of these open at once cannot emit the same
+  // `aria-labelledby` and leave both dialogs resolving to the first heading in the document.
+  const titleId = useId();
+
   const [name, setName] = useState('');
   const [department, setDepartment] = useState(departments[0]?.name || DEFAULT_DEPARTMENT);
   const [role, setRole] = useState(DEFAULT_ROLE);
@@ -139,7 +143,7 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} labelledBy="add-employee-modal-title">
+    <Dialog isOpen={isOpen} onClose={onClose} labelledBy={titleId}>
         <button 
           onClick={onClose}
           aria-label="Close"
@@ -150,7 +154,7 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-inline)', marginBottom: 'var(--space-5)' }}>
           <UserPlus size={22} className="text-primary" aria-hidden="true" />
-          <h2 id="add-employee-modal-title" className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>Add New Staff Profile</h2>
+          <h2 id={titleId} className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>Add New Staff Profile</h2>
         </div>
 
         <form onSubmit={handleSubmit}>
