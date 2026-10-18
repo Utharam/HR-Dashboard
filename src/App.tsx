@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { AlertTriangle, X } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { OverviewSection } from './components/OverviewSection';
@@ -26,17 +27,47 @@ import {
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
 import { computePayroll, isActive } from './utils/payroll';
+import { loadPersisted, savePersisted } from './utils/storage';
+import { isEmployeeRow, isPolicyRow } from './utils/rowValidators';
+
+const EMPLOYEES_KEY = 'omnihr_employees';
+const POLICIES_KEY = 'omnihr_policies';
+
+/**
+ * A failure to PERSIST, shown to the user.
+ *
+ * `savePersisted` reports failure instead of throwing, and this is what the report
+ * becomes. It deliberately says only one thing - the change on screen was not written
+ * down - because an import that "succeeded" and then vanished on refresh is the failure
+ * this replaces.
+ */
+type AppNotice = { scope: 'employees' | 'policies'; reason: 'quota' | 'unavailable' };
+
+const NOTICE_COPY: Record<AppNotice['reason'], string> = {
+  quota:
+    'Your change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.',
+  unavailable:
+    'Your change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+};
 
 export const App: React.FC = () => {
-  // Local persistence in localStorage
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('omnihr_employees');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* fallback */ }
-    }
-    return INITIAL_EMPLOYEES;
-  });
+  // Read once per mount through the validating loader. `loadPersisted` is a pure read of
+  // storage, so a re-run is harmless and returns the same answer.
+  //
+  // `recovered` is deliberately NOT surfaced as a notice here: it is true both for "the
+  // saved payload was unusable" and for "this is a first visit and nothing was ever
+  // saved", and the contract does not distinguish them. Warning on both would greet
+  // every new user with a recovery notice for data that never existed. Telling the
+  // difference needs a signal `storage.ts` does not expose yet.
+  const initialLoad = useMemo(
+    () => ({
+      employees: loadPersisted(EMPLOYEES_KEY, isEmployeeRow, INITIAL_EMPLOYEES),
+      policies: loadPersisted(POLICIES_KEY, isPolicyRow, INITIAL_POLICIES),
+    }),
+    [],
+  );
 
+  const [employees, setEmployees] = useState<Employee[]>(initialLoad.employees.rows);
   const [departments] = useState(INITIAL_DEPARTMENTS);
   const [locations] = useState(INITIAL_LOCATIONS);
   const [tracker] = useState(INITIAL_TRACKER);
@@ -51,14 +82,12 @@ export const App: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
 
-  // Policies persistence in localStorage
-  const [policies, setPolicies] = useState<HRPolicy[]>(() => {
-    const saved = localStorage.getItem('omnihr_policies');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* fallback */ }
-    }
-    return INITIAL_POLICIES;
-  });
+  const [policies, setPolicies] = useState<HRPolicy[]>(initialLoad.policies.rows);
+
+  // One banner, one dismiss. A dismissed notice stays dismissed until the NEXT failed
+  // save: the effect is keyed to the roster, not to the banner, so a re-render has
+  // nothing to retry and nothing to re-raise.
+  const [notice, setNotice] = useState<AppNotice | null>(null);
 
   const handleNavigateToGuides = (sec: 'general' | 'excel' = 'general') => {
     setGuideInitialSection(sec);
@@ -77,18 +106,40 @@ export const App: React.FC = () => {
     setPolicies(prev => prev.filter(p => p.id !== id));
   };
 
+  // The reset is carried entirely by the state change; the sync effect below rewrites
+  // the key on the next render. The `localStorage.removeItem` call that used to sit here
+  // was dead code - it removed the key and the effect immediately put it back.
   const handleResetPolicies = () => {
     setPolicies(INITIAL_POLICIES);
-    localStorage.removeItem('omnihr_policies');
   };
 
-  // Sync to localStorage
+  // Sync to localStorage. `savePersisted` reports failure instead of throwing: an
+  // unguarded `setItem` raised `QuotaExceededError` at roughly 9,300 employees
+  // (~494 bytes a row against a 5 MB origin budget), which propagated out of this
+  // effect, unmounted the root, and did so AFTER the user had been told their import
+  // succeeded. A failure now becomes a visible notice and nothing else claims to have
+  // been saved.
+  //
+  // The setState-in-effect warnings below are suppressed on purpose. Writing to an
+  // external system and reporting that it failed is precisely an effect's job, and the
+  // alternative - persisting from each event handler - silently stops persisting the
+  // moment a future change arrives by some path that forgot to call the helper. This
+  // cannot cascade: the notice only changes the banner, and the effect's dependency is
+  // the roster, so the effect does not re-run.
   useEffect(() => {
-    localStorage.setItem('omnihr_employees', JSON.stringify(employees));
+    const result = savePersisted(EMPLOYEES_KEY, employees);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ scope: 'employees', reason: result.reason });
+    }
   }, [employees]);
 
   useEffect(() => {
-    localStorage.setItem('omnihr_policies', JSON.stringify(policies));
+    const result = savePersisted(POLICIES_KEY, policies);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ scope: 'policies', reason: result.reason });
+    }
   }, [policies]);
 
   // Global Filtered Employees
@@ -178,10 +229,11 @@ export const App: React.FC = () => {
     XLSX.writeFile(wb, `OmniHR_Payroll_Register_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  // As with `handleResetPolicies`, the state change is the whole reset; the sync effect
+  // rewrites the key. The `removeItem` call here was dead code that the effect undid.
   const handleResetData = () => {
     if (confirm('Reset application back to the 200 staff Master Demo state?')) {
       setEmployees(INITIAL_EMPLOYEES);
-      localStorage.removeItem('omnihr_employees');
       alert('OmniHR demo data successfully reset.');
     }
   };
@@ -195,6 +247,8 @@ export const App: React.FC = () => {
     setEmployees(newEmps);
     setActiveTab('directory');
   };
+
+  const noticeCopy = notice ? NOTICE_COPY[notice.reason] : '';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)' }}>
@@ -222,6 +276,31 @@ export const App: React.FC = () => {
           onNavigateToExcel={() => setActiveTab('excel')}
           onNavigateToGuides={() => handleNavigateToGuides('general')}
         />
+
+        {/*
+          Persistence problems are shown here, above the view and below the header, so
+          they stay visible on every tab: a failed write is not a property of the section
+          the user happens to be looking at. `tone-warning` supplies the colour through
+          the `--tone-*` tokens in index.css - no inline hex, no window.alert.
+        */}
+        {notice && (
+          <div className="alert tone-warning" role="alert">
+            <AlertTriangle size={16} aria-hidden="true" />
+            <div className="section-stack" style={{ flex: 1 }}>
+              <strong>Change not saved</strong>
+              <span>{noticeCopy}</span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss this message"
+            >
+              <X size={14} aria-hidden="true" />
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* View Switching */}
         {activeTab === 'overview' && (
