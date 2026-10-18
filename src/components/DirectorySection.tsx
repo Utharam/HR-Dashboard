@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
-import { clampPage, pageRangeLabel, totalPagesFor } from '../utils/pagination';
+import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
 import { statusBadgeClass, statusBadgeLabel } from './statusBadge';
 
 const PAGE_SIZE = 25;
+const TABLE_TITLE = 'Staff master register';
 
 interface DirectorySectionProps {
   employees: Employee[];
@@ -65,20 +66,28 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
           </span>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, currentItems.length, employees.length, page, totalPages)}
+            </caption>
             <thead>
               <tr>
-                <th>Emp ID</th>
-                <th>Staff Member</th>
-                <th>Department</th>
-                <th>Designation / Role</th>
-                <th>Location</th>
-                <th>DOJ</th>
-                <th>Annual CTC</th>
-                <th>Monthly Basic</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th scope="col">Emp ID</th>
+                <th scope="col">Staff Member</th>
+                <th scope="col">Department</th>
+                <th scope="col">Designation / Role</th>
+                <th scope="col">Location</th>
+                <th scope="col">DOJ</th>
+                <th scope="col">Annual CTC</th>
+                <th scope="col">Monthly Basic</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>

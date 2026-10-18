@@ -81,6 +81,11 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose 
 
           {payslip ? (
             <table className="omni-table" style={{ fontSize: 'var(--fs-sm)' }}>
+              {/* Outside the brief's original list of tables, but the same defect: without a
+                  caption a screen reader announces this as an unnamed two-column grid. It has
+                  no column headers to `scope` - it is a line-item breakdown, not a data
+                  register - so the caption is all it needs. */}
+              <caption className="sr-only">Monthly payslip breakdown for {employee.name}</caption>
               <tbody>
                 <tr>
                   <td>Monthly Gross CTC (Fixed)</td>

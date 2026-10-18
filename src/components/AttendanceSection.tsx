@@ -5,9 +5,10 @@ import { formatINR } from '../utils/formatters';
 import { computeLOP } from '../utils/payroll';
 import { computeAttendancePct } from '../utils/dates';
 import { sumLeaveBalances } from '../utils/leave';
-import { clampPage, pageRangeLabel, totalPagesFor } from '../utils/pagination';
+import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
 
 const PAGE_SIZE = 25;
+const TABLE_TITLE = 'Monthly attendance and absence register';
 
 interface AttendanceSectionProps {
   employees: Employee[];
@@ -96,20 +97,28 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
           </span>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, currentItems.length, employees.length, page, totalPages)}
+            </caption>
             <thead>
               <tr>
-                <th>Emp ID</th>
-                <th>Employee Name</th>
-                <th>Department</th>
-                <th>Present Days</th>
-                <th>CL Remaining</th>
-                <th>SL Remaining</th>
-                <th>EL Remaining</th>
-                <th>LOP Days</th>
-                <th>LOP Deduction (₹)</th>
-                <th>Attendance %</th>
+                <th scope="col">Emp ID</th>
+                <th scope="col">Employee Name</th>
+                <th scope="col">Department</th>
+                <th scope="col">Present Days</th>
+                <th scope="col">CL Remaining</th>
+                <th scope="col">SL Remaining</th>
+                <th scope="col">EL Remaining</th>
+                <th scope="col">LOP Days</th>
+                <th scope="col">LOP Deduction (₹)</th>
+                <th scope="col">Attendance %</th>
               </tr>
             </thead>
             <tbody>

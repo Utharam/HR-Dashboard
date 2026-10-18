@@ -1,5 +1,8 @@
 import React from 'react';
 import type { JobRequisition } from '../types';
+import { describeTable, scrollRegionLabel } from '../utils/pagination';
+
+const TABLE_TITLE = 'Corporate hiring pipeline and requisitions';
 
 interface RecruitmentSectionProps {
   requisitions: JobRequisition[];
@@ -58,18 +61,26 @@ export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({ requisit
           </div>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, requisitions.length, requisitions.length, 1, 1)}
+            </caption>
             <thead>
               <tr>
-                <th>Req ID</th>
-                <th>Position Title</th>
-                <th>Department</th>
-                <th>Location</th>
-                <th>Salary Band</th>
-                <th>Applicants</th>
-                <th>Current Stage</th>
-                <th>Target DOJ</th>
+                <th scope="col">Req ID</th>
+                <th scope="col">Position Title</th>
+                <th scope="col">Department</th>
+                <th scope="col">Location</th>
+                <th scope="col">Salary Band</th>
+                <th scope="col">Applicants</th>
+                <th scope="col">Current Stage</th>
+                <th scope="col">Target DOJ</th>
               </tr>
             </thead>
             <tbody>

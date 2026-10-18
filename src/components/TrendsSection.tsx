@@ -3,6 +3,9 @@ import { Line } from 'react-chartjs-2';
 import 'chart.js/auto';
 import type { MonthlyTracker } from '../types';
 import { formatCrores, formatINR } from '../utils/formatters';
+import { describeTable, scrollRegionLabel } from '../utils/pagination';
+
+const TABLE_TITLE = 'Historical monthly HR ledger';
 
 interface TrendsSectionProps {
   tracker: MonthlyTracker[];
@@ -24,6 +27,10 @@ const CHART = {
 const axisTickFont = { family: CHART.font, size: 11 };
 
 export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
+  // The ledger is the same window the caption describes. Derived once so the caption, the
+  // row count a screen reader announces and the rendered rows cannot disagree.
+  const ledgerRows = tracker.slice(-12).reverse();
+
   // Read the recorded headcount directly, matching the payroll read below.
   // `|| 200` published a fabricated 200-person workforce whenever the tracker
   // was empty or the last month recorded a genuine zero — so an empty tracker
@@ -179,21 +186,29 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
           </div>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, ledgerRows.length, ledgerRows.length, 1, 1)}
+            </caption>
             <thead>
               <tr>
-                <th>Month</th>
-                <th>Headcount</th>
-                <th>Gross Payroll (INR)</th>
-                <th>Monthly Hires</th>
-                <th>Monthly Exits</th>
-                <th>Attrition Rate</th>
-                <th>Average Attendance</th>
+                <th scope="col">Month</th>
+                <th scope="col">Headcount</th>
+                <th scope="col">Gross Payroll (INR)</th>
+                <th scope="col">Monthly Hires</th>
+                <th scope="col">Monthly Exits</th>
+                <th scope="col">Attrition Rate</th>
+                <th scope="col">Average Attendance</th>
               </tr>
             </thead>
             <tbody>
-              {tracker.slice(-12).reverse().map(t => (
+              {ledgerRows.map(t => (
                 <tr key={t.month}>
                   <td className="cell-strong">{t.month}</td>
                   <td>{t.headcount} staff</td>

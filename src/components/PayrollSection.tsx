@@ -3,9 +3,10 @@ import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatCrores } from '../utils/formatters';
 import { computePayroll, isActive, PROFESSIONAL_TAX } from '../utils/payroll';
-import { clampPage, pageRangeLabel, totalPagesFor } from '../utils/pagination';
+import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
 
 const PAGE_SIZE = 25;
+const TABLE_TITLE = 'Compensation structure and take-home salary breakdown';
 
 interface PayrollSectionProps {
   employees: Employee[];
@@ -87,21 +88,29 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
           </span>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, currentItems.length, employees.length, page, totalPages)}
+            </caption>
             <thead>
               <tr>
-                <th>Emp ID</th>
-                <th>Employee Name</th>
-                <th>Department</th>
-                <th>Monthly CTC</th>
-                <th>Basic (50%)</th>
-                <th>HRA (25%)</th>
-                <th>Special Allow.</th>
-                <th>EPF (12%)</th>
-                <th>PT</th>
-                <th>Net Disbursable</th>
-                <th>Payslip</th>
+                <th scope="col">Emp ID</th>
+                <th scope="col">Employee Name</th>
+                <th scope="col">Department</th>
+                <th scope="col">Monthly CTC</th>
+                <th scope="col">Basic (50%)</th>
+                <th scope="col">HRA (25%)</th>
+                <th scope="col">Special Allow.</th>
+                <th scope="col">EPF (12%)</th>
+                <th scope="col">PT</th>
+                <th scope="col">Net Disbursable</th>
+                <th scope="col">Payslip</th>
               </tr>
             </thead>
             <tbody>

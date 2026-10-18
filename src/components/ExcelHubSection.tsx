@@ -15,6 +15,10 @@ import type { Employee } from '../types';
 import { parseExcelBuffer, ExcelImportError } from '../utils/excelParser';
 import type { ExcelErrorCode } from '../utils/excelParser';
 import { formatINR } from '../utils/formatters';
+import { describeTable, scrollRegionLabel } from '../utils/pagination';
+
+const PREVIEW_ROWS = 10;
+const TABLE_TITLE = 'Pre-sync import preview';
 
 /**
  * Short, plain heading for each rejection the parser can raise.
@@ -75,7 +79,11 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
     | { type: 'success'; text: string }
     | { type: 'error'; title: string; text: string }
     | null
-  >(null);
+>(null);
+
+  // The preview is capped at 10 rows; the caption says so, so a screen reader is not told
+  // about records that are not on screen. Derived once so the two cannot disagree.
+  const previewRows = parsedPreview?.slice(0, PREVIEW_ROWS) ?? [];
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -313,22 +321,31 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
               </div>
             )}
 
-            <div className="omni-table-wrap" style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-md)' }}>
+            <div
+              className="omni-table-wrap"
+              role="region"
+              aria-label={scrollRegionLabel(TABLE_TITLE)}
+              tabIndex={0}
+              style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-md)' }}
+            >
               <table className="omni-table">
+                <caption className="sr-only">
+                  {describeTable(TABLE_TITLE, previewRows.length, parsedPreview.length, 1, 1)}
+                </caption>
                 <thead>
                   <tr>
-                    <th>Emp ID</th>
-                    <th>Full Name</th>
-                    <th>Department</th>
-                    <th>Role / Designation</th>
-                    <th>Location</th>
-                    <th>Monthly CTC</th>
-                    <th>Attendance</th>
-                    <th>Status</th>
+                    <th scope="col">Emp ID</th>
+                    <th scope="col">Full Name</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Role / Designation</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Monthly CTC</th>
+                    <th scope="col">Attendance</th>
+                    <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {parsedPreview.slice(0, 10).map(p => (
+                  {previewRows.map(p => (
                     <tr key={p.id}>
                       <td className="cell-id">{p.id}</td>
                       <td className="cell-strong">{p.name}</td>
@@ -343,9 +360,9 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
                 </tbody>
               </table>
             </div>
-            {parsedPreview.length > 10 && (
+            {parsedPreview.length > PREVIEW_ROWS && (
               <p className="text-dim" style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--space-2)', textAlign: 'right' }}>
-                Showing first 10 of {parsedPreview.length} records. All rows will sync into the dashboard.
+                Showing first {PREVIEW_ROWS} of {parsedPreview.length} records. All rows will sync into the dashboard.
               </p>
             )}
           </div>
