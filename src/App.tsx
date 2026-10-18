@@ -29,11 +29,20 @@ import {
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
 import { computePayroll, isActive } from './utils/payroll';
-import { loadPersisted, savePersisted } from './utils/storage';
+import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
 import { isEmployeeRow, isPolicyRow } from './utils/rowValidators';
 
 const EMPLOYEES_KEY = 'omnihr_employees';
 const POLICIES_KEY = 'omnihr_policies';
+/**
+ * A one-shot snapshot of the register as it stood immediately before an import.
+ *
+ * Written through the same versioned envelope as the live key, so it comes back through
+ * the same validating loader and a payload that cannot be trusted is refused rather than
+ * restored. Cleared the moment it is used, so an old snapshot can never undo a later,
+ * deliberate import.
+ */
+const EMPLOYEES_BACKUP_KEY = 'omnihr_employees_backup';
 
 /**
  * Something the user has to know about their data, shown as one banner.
@@ -121,7 +130,9 @@ export const App: React.FC = () => {
   // about to be lost, and told a screen-reader user nothing until focus came back.
   const [isResetRequested, setIsResetRequested] = useState(false);
   // Confirmation of something that DID happen, shown inline and dismissible.
-  const [confirmation, setConfirmation] = useState<string | null>(null);
+  // `undoable` is carried here rather than as a second piece of state so the banner and
+  // its Undo button cannot disagree about whether there is anything to undo.
+  const [confirmation, setConfirmation] = useState<{ text: string; undoable?: boolean } | null>(null);
 
   const [policies, setPolicies] = useState<HRPolicy[]>(initialLoad.policies.rows);
 
@@ -289,17 +300,67 @@ export const App: React.FC = () => {
   const handleConfirmResetData = () => {
     setEmployees(INITIAL_EMPLOYEES);
     setIsResetRequested(false);
-    setConfirmation('Demo data reset: the register is back to the 200 staff Master Dataset.');
+    setConfirmation({
+      text: 'Demo data reset: the register is back to the 200 staff Master Dataset.',
+    });
   };
 
   const handleAddEmployee = (newEmp: Employee) => {
     setEmployees(prev => [newEmp, ...prev]);
-    setConfirmation(`${newEmp.name} (${newEmp.id}) was added to the employee register.`);
+    setConfirmation({
+      text: `${newEmp.name} (${newEmp.id}) was added to the employee register.`,
+    });
   };
 
-  const handleImportEmployees = (newEmps: Employee[]) => {
-    setEmployees(newEmps);
+  /**
+   * The roster is only replaced once the user has answered the question in
+   * `ExcelHubSection`, and the answer arrives as a MODE rather than as an implicit
+   * "and you meant destroy everything".
+   *
+   * The snapshot is written HERE, before `setEmployees`, in the same tick as the caller's
+   * click. Waiting for the persistence effect to take one would capture the register
+   * AFTER the replacement and make the Undo a no-op that reports success.
+   */
+  const handleImportEmployees = (
+    newEmps: Employee[],
+    mode: 'replace' | 'append',
+  ) => {
+    savePersisted(EMPLOYEES_BACKUP_KEY, employees);
+    setEmployees(mode === 'replace' ? newEmps : [...employees, ...newEmps]);
     setActiveTab('directory');
+    setConfirmation({
+      text:
+        mode === 'replace'
+          ? `Replaced the register with ${newEmps.length} imported staff records.`
+          : `Added ${newEmps.length} imported staff records to the register.`,
+      undoable: true,
+    });
+  };
+
+  /**
+   * Puts the register back from the snapshot and destroys the snapshot.
+   *
+   * An unreadable snapshot is reported as such rather than swallowed. Restoring the
+   * current roster and calling it an undo would leave the user believing their data was
+   * back when nothing changed, which is the same failure this whole mechanism exists to
+   * stop.
+   */
+  const handleUndoImport = () => {
+    const restored = loadPersisted(EMPLOYEES_BACKUP_KEY, isEmployeeRow, employees);
+    clearPersisted(EMPLOYEES_BACKUP_KEY);
+
+    if (restored.status !== 'loaded' || restored.rows.length === 0) {
+      setConfirmation({
+        text:
+          'There is nothing left to undo: the pre-import snapshot could not be read back.',
+      });
+      return;
+    }
+
+    setEmployees(restored.rows);
+    setConfirmation({
+      text: `Undo complete: the register is back to its ${restored.rows.length} pre-import records.`,
+    });
   };
 
   const noticeCopy = notice
@@ -379,8 +440,12 @@ export const App: React.FC = () => {
           apart so a failed save can never be mistaken for this.
         */}
         {confirmation && (
-          <Callout tone="success" onDismiss={() => setConfirmation(null)}>
-            {confirmation}
+          <Callout
+            tone="success"
+            onDismiss={() => setConfirmation(null)}
+            action={confirmation.undoable ? { label: 'Undo', onClick: handleUndoImport } : undefined}
+          >
+            {confirmation.text}
           </Callout>
         )}
 
@@ -439,8 +504,9 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'excel' && (
-          <ExcelHubSection 
+          <ExcelHubSection
             employees={filteredEmployees}
+            registerSize={employees.length}
             onImportEmployees={handleImportEmployees}
             onExportEmployees={handleExportEmployees}
             onExportPayroll={handleExportPayroll}

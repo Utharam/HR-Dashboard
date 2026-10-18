@@ -11,6 +11,16 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   /** `danger` for anything irreversible; `primary` for a routine choice. */
   tone?: 'danger' | 'primary';
+  /**
+   * An optional THIRD outcome, rendered between Cancel and the confirm button.
+   *
+   * A dialog that has two destructive outcomes of different severity cannot express the
+   * milder one as "cancel": routing a user who wanted to ADD to a register through the
+   * Cancel button teaches them that cancelling means "no, and do not ask again", and the
+   * first time it does they stop reading the dialog at all. Importing a roster is exactly
+   * that case - replace or append - and append is what most people meant.
+   */
+  secondaryAction?: { label: string; onClick: () => void };
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -35,6 +45,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmLabel,
   cancelLabel = 'Cancel',
   tone = 'danger',
+  secondaryAction,
   onConfirm,
   onCancel,
 }) => {
@@ -65,6 +76,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <button type="button" onClick={onCancel} className="btn btn-secondary">
           {cancelLabel}
         </button>
+        {secondaryAction && (
+          <button type="button" onClick={secondaryAction.onClick} className="btn btn-secondary">
+            {secondaryAction.label}
+          </button>
+        )}
         <button
           type="button"
           onClick={onConfirm}

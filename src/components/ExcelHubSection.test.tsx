@@ -9,6 +9,7 @@ const renderHub = () =>
   render(
     <ExcelHubSection
       employees={[]}
+      registerSize={0}
       onImportEmployees={noop}
       onExportEmployees={noop}
       onExportPayroll={noop}

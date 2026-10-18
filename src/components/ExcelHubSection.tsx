@@ -15,10 +15,19 @@ import type { Employee } from '../types';
 import { parseExcelBuffer, ExcelImportError } from '../utils/excelParser';
 import type { ExcelErrorCode } from '../utils/excelParser';
 import { formatINR } from '../utils/formatters';
-import { describeTable, scrollRegionLabel } from '../utils/pagination';
+import { describeTable } from '../utils/pagination';
+import { ConfirmDialog } from './ConfirmDialog';
 
 const PREVIEW_ROWS = 10;
 const TABLE_TITLE = 'Pre-sync import preview';
+
+/**
+ * The preview wrapper is BOTH scroll containers: `.omni-table-wrap` gives it
+ * `overflow-x: auto`, and the inline cap below gives it `max-height` + `overflow-y: auto`.
+ * `scrollRegionLabel` names only the horizontal axis, which is half the truth a screen
+ * reader user needs in order to know the rows continue downwards.
+ */
+const PREVIEW_REGION_LABEL = `${TABLE_TITLE} table, horizontally and vertically scrollable`;
 
 /**
  * Short, plain heading for each rejection the parser can raise.
@@ -55,8 +64,18 @@ const describeImportError = (err: unknown): { title: string; hint: string } => {
 };
 
 interface ExcelHubSectionProps {
+  /** The rows the exports will write - the CURRENT FILTER, not the whole register. */
   employees: Employee[];
-  onImportEmployees: (newEmps: Employee[]) => void;
+  /**
+   * How many records the whole register holds, unfiltered.
+   *
+   * Deliberately separate from `employees`: the confirmation has to say how much is about
+   * to be destroyed, and a number that silently became "3" because a search box was filled
+   * in would understate the loss by two orders of magnitude on the one screen where the
+   * user is deciding whether to lose it.
+   */
+  registerSize: number;
+  onImportEmployees: (newEmps: Employee[], mode: 'replace' | 'append') => void;
   onExportEmployees: () => void;
   onExportPayroll: () => void;
   onNavigateToGuides?: (guideSection?: 'general' | 'excel') => void;
@@ -64,6 +83,7 @@ interface ExcelHubSectionProps {
 
 export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
   employees,
+  registerSize,
   onImportEmployees,
   onExportEmployees,
   onExportPayroll,
@@ -75,11 +95,14 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [uploadedSheetName, setUploadedSheetName] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<
+const [statusMessage, setStatusMessage] = useState<
     | { type: 'success'; text: string }
     | { type: 'error'; title: string; text: string }
     | null
->(null);
+  >(null);
+  // The roster is not touched until one of these two is set. The preview alone is harmless;
+  // holding the parsed rows is not the same as having written them.
+  const [pendingImport, setPendingImport] = useState<Employee[] | null>(null);
 
   // The preview is capped at 10 rows; the caption says so, so a screen reader is not told
   // about records that are not on screen. Derived once so the two cannot disagree.
@@ -111,18 +134,27 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
       setParsedPreview(null);
       setRecognizedCols([]);
       setParseWarnings([]);
+      setPendingImport(null);
     }
   };
 
-  const handleCommitImport = () => {
-    if (parsedPreview && parsedPreview.length > 0) {
-      onImportEmployees(parsedPreview);
-      setStatusMessage({ 
-        type: 'success', 
-        text: `Successfully synchronized ${parsedPreview.length} staff records into the live dashboard!` 
-      });
-      setParsedPreview(null);
-    }
+  // A destructive action is a QUESTION, and the question is state. This used to be a
+  // button that called `onImportEmployees` and immediately reported success - which meant
+  // the panel claimed the register had been synchronized while App's persistence banner
+  // was free to say the same write never reached storage. Two claims about one action, one
+  // of them green, neither of them this panel's to make.
+  const handleRequestImport = () => {
+    if (parsedPreview && parsedPreview.length > 0) setPendingImport(parsedPreview);
+  };
+
+  const handleCommitImport = (mode: 'replace' | 'append') => {
+    if (!pendingImport || pendingImport.length === 0) return;
+    onImportEmployees(pendingImport, mode);
+    setPendingImport(null);
+    setStatusMessage(null);
+    setParsedPreview(null);
+    setRecognizedCols([]);
+    setParseWarnings([]);
   };
 
   const handleCancelPreview = () => {
@@ -130,6 +162,7 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
     setRecognizedCols([]);
     setParseWarnings([]);
     setStatusMessage(null);
+    setPendingImport(null);
   };
 
   const handleDownloadTemplate = () => {
@@ -284,8 +317,8 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
                 <button onClick={handleCancelPreview} className="btn btn-secondary">
                   <X size={15} /> Cancel Preview
                 </button>
-                <button onClick={handleCommitImport} className="btn btn-primary">
-                  <CheckCircle size={16} /> Sync into Live Dashboard
+                <button onClick={handleRequestImport} className="btn btn-primary">
+                  <CheckCircle size={16} /> Sync into Live Dashboard…
                 </button>
               </div>
             </div>
@@ -324,7 +357,7 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
             <div
               className="omni-table-wrap"
               role="region"
-              aria-label={scrollRegionLabel(TABLE_TITLE)}
+              aria-label={PREVIEW_REGION_LABEL}
               tabIndex={0}
               style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-md)' }}
             >
@@ -410,6 +443,25 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
           </button>
         </div>
       </div>
+
+      {/*
+        Rendered last so it stacks above the cards behind it. Two destructive outcomes of
+        different severity, so the dialog carries three answers: replace the register,
+        add to it, or change nothing. Nothing is committed until one of the first two is
+        pressed, and Escape and Cancel are refusals.
+      */}
+      <ConfirmDialog
+        isOpen={pendingImport !== null}
+        title={`Replace ${registerSize} staff records with ${pendingImport?.length ?? 0} imported records?`}
+        message={`Every record currently in the register - all ${registerSize} of them - will be discarded and replaced by the ${pendingImport?.length ?? 0} rows parsed from '${uploadedFileName}'. Append instead to keep them. A snapshot is taken first, so either can be undone from the banner afterwards.`}
+        confirmLabel="Replace roster"
+        secondaryAction={{
+          label: `Append to the existing ${registerSize} records`,
+          onClick: () => handleCommitImport('append'),
+        }}
+        onConfirm={() => handleCommitImport('replace')}
+        onCancel={() => setPendingImport(null)}
+      />
     </div>
   );
 };
