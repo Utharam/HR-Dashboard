@@ -12,12 +12,70 @@ import {
   X
 } from 'lucide-react';
 import type { Employee } from '../types';
-import { parseExcelBuffer } from '../utils/excelParser';
+import { parseExcelBuffer, ExcelImportError } from '../utils/excelParser';
+import type { ExcelErrorCode } from '../utils/excelParser';
 import { formatINR } from '../utils/formatters';
+import { describeTable } from '../utils/pagination';
+import { ConfirmDialog } from './ConfirmDialog';
+
+const PREVIEW_ROWS = 10;
+const TABLE_TITLE = 'Pre-sync import preview';
+
+/**
+ * The preview wrapper is BOTH scroll containers: `.omni-table-wrap` gives it
+ * `overflow-x: auto`, and the inline cap below gives it `max-height` + `overflow-y: auto`.
+ * `scrollRegionLabel` names only the horizontal axis, which is half the truth a screen
+ * reader user needs in order to know the rows continue downwards.
+ */
+const PREVIEW_REGION_LABEL = `${TABLE_TITLE} table, horizontally and vertically scrollable`;
+
+/**
+ * Short, plain heading for each rejection the parser can raise.
+ *
+ * The parser owns the sentence that tells the user what to DO (`hint`); this is only the
+ * headline above it. Keeping them separate means a new `ExcelErrorCode` shows up as an
+ * obvious missing entry rather than as a raw library message leaking through.
+ */
+const ERROR_TITLE: Record<ExcelErrorCode, string> = {
+  UNREADABLE_FILE: 'That file could not be opened',
+  NO_SHEET: 'That workbook is empty',
+  NO_MATCHING_COLUMNS: 'Not an OmniHR staff roster',
+  NO_DATA_ROWS: 'No staff rows in that sheet',
+  TOO_MANY_ROWS: 'Too many rows to import',
+  UNSUPPORTED_FILE: 'Wrong kind of OmniHR file',
+};
+
+/**
+ * Turns a rejection into something a user can act on.
+ *
+ * An `ExcelImportError` carries its own hint. Anything else is an unexpected failure and
+ * gets a fixed sentence: the old code interpolated `err.message`, which is how SheetJS
+ * text like "Invalid HTML: could not find <table>" ended up on screen. The raw error is
+ * still logged for debugging - it just is not what the user is shown.
+ */
+const describeImportError = (err: unknown): { title: string; hint: string } => {
+  if (err instanceof ExcelImportError) {
+    return { title: ERROR_TITLE[err.code] ?? 'Import failed', hint: err.hint };
+  }
+  return {
+    title: 'Import failed',
+    hint: 'Something went wrong while reading that file. Check that it is an Excel workbook exported from your HR system, and try again.',
+  };
+};
 
 interface ExcelHubSectionProps {
+  /** The rows the exports will write - the CURRENT FILTER, not the whole register. */
   employees: Employee[];
-  onImportEmployees: (newEmps: Employee[]) => void;
+  /**
+   * How many records the whole register holds, unfiltered.
+   *
+   * Deliberately separate from `employees`: the confirmation has to say how much is about
+   * to be destroyed, and a number that silently became "3" because a search box was filled
+   * in would understate the loss by two orders of magnitude on the one screen where the
+   * user is deciding whether to lose it.
+   */
+  registerSize: number;
+  onImportEmployees: (newEmps: Employee[], mode: 'replace' | 'append') => void;
   onExportEmployees: () => void;
   onExportPayroll: () => void;
   onNavigateToGuides?: (guideSection?: 'general' | 'excel') => void;
@@ -25,6 +83,7 @@ interface ExcelHubSectionProps {
 
 export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
   employees,
+  registerSize,
   onImportEmployees,
   onExportEmployees,
   onExportPayroll,
@@ -36,7 +95,18 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [uploadedSheetName, setUploadedSheetName] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+const [statusMessage, setStatusMessage] = useState<
+    | { type: 'success'; text: string }
+    | { type: 'error'; title: string; text: string }
+    | null
+  >(null);
+  // The roster is not touched until one of these two is set. The preview alone is harmless;
+  // holding the parsed rows is not the same as having written them.
+  const [pendingImport, setPendingImport] = useState<Employee[] | null>(null);
+
+  // The preview is capped at 10 rows; the caption says so, so a screen reader is not told
+  // about records that are not on screen. Derived once so the two cannot disagree.
+  const previewRows = parsedPreview?.slice(0, PREVIEW_ROWS) ?? [];
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -53,25 +123,38 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
         type: 'success',
         text: `Successfully parsed ${result.totalRows} employee records from '${file.name}' (Sheet: ${result.sheetName}). Review preview below and sync.`
       });
-    } catch (err: any) {
+    } catch (err) {
+      // Kept for the developer console; deliberately not shown to the user.
       console.error(err);
-      setStatusMessage({ 
-        type: 'error', 
-        text: `Failed to parse Excel file: ${err.message || 'Unknown error. Check file format.'}` 
-      });
+      const { title, hint } = describeImportError(err);
+      setStatusMessage({ type: 'error', title, text: hint });
+      // A stale preview from a previous file must not survive a failed parse: the sync
+      // button acts on `parsedPreview`, so leaving it in place would let a user commit
+      // the PREVIOUS file's employees while reading a message about this one.
       setParsedPreview(null);
+      setRecognizedCols([]);
+      setParseWarnings([]);
+      setPendingImport(null);
     }
   };
 
-  const handleCommitImport = () => {
-    if (parsedPreview && parsedPreview.length > 0) {
-      onImportEmployees(parsedPreview);
-      setStatusMessage({ 
-        type: 'success', 
-        text: `Successfully synchronized ${parsedPreview.length} staff records into the live dashboard!` 
-      });
-      setParsedPreview(null);
-    }
+  // A destructive action is a QUESTION, and the question is state. This used to be a
+  // button that called `onImportEmployees` and immediately reported success - which meant
+  // the panel claimed the register had been synchronized while App's persistence banner
+  // was free to say the same write never reached storage. Two claims about one action, one
+  // of them green, neither of them this panel's to make.
+  const handleRequestImport = () => {
+    if (parsedPreview && parsedPreview.length > 0) setPendingImport(parsedPreview);
+  };
+
+  const handleCommitImport = (mode: 'replace' | 'append') => {
+    if (!pendingImport || pendingImport.length === 0) return;
+    onImportEmployees(pendingImport, mode);
+    setPendingImport(null);
+    setStatusMessage(null);
+    setParsedPreview(null);
+    setRecognizedCols([]);
+    setParseWarnings([]);
   };
 
   const handleCancelPreview = () => {
@@ -79,6 +162,7 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
     setRecognizedCols([]);
     setParseWarnings([]);
     setStatusMessage(null);
+    setPendingImport(null);
   };
 
   const handleDownloadTemplate = () => {
@@ -169,7 +253,7 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
           Spreadsheet Ingestion & Synchronization Hub
         </h3>
         <p className="omni-card-sub" style={{ marginBottom: 'var(--space-5)' }}>
-          Upload any HR master list, attendance punch sheet, or payroll register (.xlsx, .xls, .csv). Columns and formulas are automatically recognized.
+          Upload an HR master list or attendance punch sheet (.xlsx, .xls, .csv). Columns and formulas are automatically recognized. A payroll register is not a staff roster and will be rejected.
         </p>
 
         <div 
@@ -205,11 +289,14 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
         {statusMessage && (
           <div
             className={`alert ${statusMessage.type === 'success' ? 'tone-success' : 'tone-danger'}`}
-            role="status"
+            role={statusMessage.type === 'error' ? 'alert' : 'status'}
             style={{ marginTop: 'var(--space-4)' }}
           >
             {statusMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-            <span>{statusMessage.text}</span>
+            <span>
+              {statusMessage.type === 'error' && <strong>{statusMessage.title}. </strong>}
+              {statusMessage.text}
+            </span>
           </div>
         )}
 
@@ -230,8 +317,8 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
                 <button onClick={handleCancelPreview} className="btn btn-secondary">
                   <X size={15} /> Cancel Preview
                 </button>
-                <button onClick={handleCommitImport} className="btn btn-primary">
-                  <CheckCircle size={16} /> Sync into Live Dashboard
+                <button onClick={handleRequestImport} className="btn btn-primary">
+                  <CheckCircle size={16} /> Sync into Live Dashboard…
                 </button>
               </div>
             </div>
@@ -267,22 +354,31 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
               </div>
             )}
 
-            <div className="omni-table-wrap" style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-md)' }}>
+            <div
+              className="omni-table-wrap"
+              role="region"
+              aria-label={PREVIEW_REGION_LABEL}
+              tabIndex={0}
+              style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-md)' }}
+            >
               <table className="omni-table">
+                <caption className="sr-only">
+                  {describeTable(TABLE_TITLE, previewRows.length, parsedPreview.length, 1, 1)}
+                </caption>
                 <thead>
                   <tr>
-                    <th>Emp ID</th>
-                    <th>Full Name</th>
-                    <th>Department</th>
-                    <th>Role / Designation</th>
-                    <th>Location</th>
-                    <th>Monthly CTC</th>
-                    <th>Attendance</th>
-                    <th>Status</th>
+                    <th scope="col">Emp ID</th>
+                    <th scope="col">Full Name</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Role / Designation</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Monthly CTC</th>
+                    <th scope="col">Attendance</th>
+                    <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {parsedPreview.slice(0, 10).map(p => (
+                  {previewRows.map(p => (
                     <tr key={p.id}>
                       <td className="cell-id">{p.id}</td>
                       <td className="cell-strong">{p.name}</td>
@@ -297,9 +393,9 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
                 </tbody>
               </table>
             </div>
-            {parsedPreview.length > 10 && (
+            {parsedPreview.length > PREVIEW_ROWS && (
               <p className="text-dim" style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--space-2)', textAlign: 'right' }}>
-                Showing first 10 of {parsedPreview.length} records. All rows will sync into the dashboard.
+                Showing first {PREVIEW_ROWS} of {parsedPreview.length} records. All rows will sync into the dashboard.
               </p>
             )}
           </div>
@@ -314,7 +410,7 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
             <h4 className="omni-card-title">Export Complete Master Roster</h4>
           </div>
           <p className="omni-card-sub" style={{ marginBottom: 'var(--space-4)' }}>
-            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles, reporting managers, PF UANs, and leave balances.
+            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles matching the current filters, with reporting managers, PF UANs, and leave balances.
           </p>
           <button onClick={onExportEmployees} className="btn btn-primary btn-block">
             <Download size={16} /> Download Employee Master (.xlsx)
@@ -347,6 +443,25 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
           </button>
         </div>
       </div>
+
+      {/*
+        Rendered last so it stacks above the cards behind it. Two destructive outcomes of
+        different severity, so the dialog carries three answers: replace the register,
+        add to it, or change nothing. Nothing is committed until one of the first two is
+        pressed, and Escape and Cancel are refusals.
+      */}
+      <ConfirmDialog
+        isOpen={pendingImport !== null}
+        title={`Replace ${registerSize} staff records with ${pendingImport?.length ?? 0} imported records?`}
+        message={`Every record currently in the register - all ${registerSize} of them - will be discarded and replaced by the ${pendingImport?.length ?? 0} rows parsed from '${uploadedFileName}'. Append instead to keep them. A snapshot is taken first, so either can be undone from the banner afterwards.`}
+        confirmLabel="Replace roster"
+        secondaryAction={{
+          label: `Append to the existing ${registerSize} records`,
+          onClick: () => handleCommitImport('append'),
+        }}
+        onConfirm={() => handleCommitImport('replace')}
+        onCancel={() => setPendingImport(null)}
+      />
     </div>
   );
 };

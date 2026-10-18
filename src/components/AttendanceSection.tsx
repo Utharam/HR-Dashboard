@@ -2,30 +2,59 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR } from '../utils/formatters';
+import { computeLOP } from '../utils/payroll';
+import { computeAttendancePct } from '../utils/dates';
+import { sumLeaveBalances } from '../utils/leave';
+import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
+
+const PAGE_SIZE = 25;
+const TABLE_TITLE = 'Monthly attendance and absence register';
 
 interface AttendanceSectionProps {
   employees: Employee[];
 }
 
 export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
-  const totalPresentSum = employees.reduce((acc, e) => acc + (e.presentDays || 25), 0);
-  const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '24.8';
+  // Summed directly: `e.presentDays || 25` silently promoted a genuine 0 (someone
+  // absent all month) to 25, inflating the "Workforce Present Avg" KPI.
+  const totalPresentSum = employees.reduce((acc, e) => acc + e.presentDays, 0);
+  // Both fallbacks below used to be invented statistics — '24.8' days and a hardcoded
+  // '95.4% Workforce Availability' in the JSX — shown for a roster with no employees to
+  // measure. An empty roster reports 0.0 for both, and the sub-label is now derived from
+  // the same array as the card above it instead of being typed into the markup.
+  const avgPresent = employees.length ? (totalPresentSum / employees.length).toFixed(1) : '0.0';
+  const workforceAvailabilityPct = employees.length
+    ? (employees.reduce((acc, e) => acc + computeAttendancePct(e.presentDays), 0) / employees.length).toFixed(1)
+    : '0.0';
   
-  // Total LOP Deductions (Basic / 26 * LOP Days)
-  const totalLOPAmount = employees.reduce((acc, e) => {
-    const dailyWage = e.basicSalary / 26;
-    return acc + Math.round(dailyWage * (e.lopDays || 0));
-  }, 0);
+  // Total LOP Deductions. computeLOP is the single owner of this arithmetic, so
+  // the Attendance tab and the Payroll tab can never quote different LOP figures
+  // for the same employee — including the [0, 26] day clamp it enforces.
+  const totalLOPAmount = employees.reduce((acc, e) => acc + computeLOP(e.basicSalary, e.lopDays), 0);
 
-  const totalCL = employees.reduce((acc, e) => acc + (12 - (e.clBalance || 8)), 0);
-  const totalSL = employees.reduce((acc, e) => acc + (12 - (e.slBalance || 8)), 0);
-  const totalEL = employees.reduce((acc, e) => acc + (15 - (e.elBalance || 10)), 0);
+  // The roster holds remaining balances, not consumption, so this card states the
+  // balance. The previous site derived "days availed" by subtracting a hardcoded
+  // entitlement (12 / 12 / 15) from a remaining balance and defaulted each bucket
+  // with `|| 8` / `|| 10`, which turned a genuine 0 into a positive figure and
+  // produced a NEGATIVE contribution for the 52 of 200 seed staff holding EL
+  // above the 15-day cap. sumLeaveBalances is the single owner of the arithmetic.
+  const leave = sumLeaveBalances(employees);
 
-  const totalPages = Math.ceil(employees.length / pageSize) || 1;
-  const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // The page control follows the data: reset to page 1 when the roster changes size, and
+  // re-derive the page on every render so a page one render behind the data cannot slice
+  // an empty table. Done during render rather than in an effect - see DirectorySection for
+  // why. utils/pagination owns the arithmetic, so this section cannot drift from the
+  // Directory and Payroll registers.
+  const [pageState, setPageState] = useState({ size: employees.length, page: 1 });
+  if (pageState.size !== employees.length) {
+    setPageState({ size: employees.length, page: 1 });
+  }
+
+  const totalPages = totalPagesFor(employees.length, pageSize);
+  const page = clampPage(pageState.page, totalPages);
+  const currentItems = employees.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="section-stack">
@@ -40,13 +69,13 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Workforce Present Avg</span>
           <div className="kpi-value text-success">{avgPresent} Days</div>
-          <span className="kpi-sub">95.4% Workforce Availability</span>
+          <span className="kpi-sub">{workforceAvailabilityPct}% Workforce Availability</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Leaves Availed (MTD)</span>
-          <div className="kpi-value text-info">{totalCL + totalSL + totalEL}</div>
-          <span className="kpi-sub">{totalCL} CL • {totalSL} SL • {totalEL} EL</span>
+          <span className="kpi-label">Total Leave Balance</span>
+          <div className="kpi-value text-info">{leave.total} Days</div>
+          <span className="kpi-sub">{leave.casual} CL • {leave.sick} SL • {leave.earned} EL</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
@@ -64,30 +93,38 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
             <p className="omni-card-sub">Real-time synchronization with biometric punch cards & manual regularization.</p>
           </div>
           <span className="pagination__count">
-            Showing {employees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, employees.length)} of {employees.length}
+            {pageRangeLabel(page, pageSize, employees.length)}
           </span>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, currentItems.length, employees.length, page, totalPages)}
+            </caption>
             <thead>
               <tr>
-                <th>Emp ID</th>
-                <th>Employee Name</th>
-                <th>Department</th>
-                <th>Present Days</th>
-                <th>CL Remaining</th>
-                <th>SL Remaining</th>
-                <th>EL Remaining</th>
-                <th>LOP Days</th>
-                <th>LOP Deduction (₹)</th>
-                <th>Attendance %</th>
+                <th scope="col">Emp ID</th>
+                <th scope="col">Employee Name</th>
+                <th scope="col">Department</th>
+                <th scope="col">Present Days</th>
+                <th scope="col">CL Remaining</th>
+                <th scope="col">SL Remaining</th>
+                <th scope="col">EL Remaining</th>
+                <th scope="col">LOP Days</th>
+                <th scope="col">LOP Deduction (₹)</th>
+                <th scope="col">Attendance %</th>
               </tr>
             </thead>
             <tbody>
               {currentItems.map(emp => {
-                const lopDed = Math.round((emp.basicSalary / 26) * emp.lopDays);
-                const attPct = ((emp.presentDays / 26) * 100).toFixed(1);
+                const lopDed = computeLOP(emp.basicSalary, emp.lopDays);
+                const attPct = computeAttendancePct(emp.presentDays);
                 return (
                   <tr key={emp.id}>
                     <td className="cell-id">{emp.id}</td>
@@ -102,7 +139,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
                     </td>
                     <td>₹{formatINR(lopDed)}</td>
                     <td>
-                      <span className={`badge ${Number(attPct) >= 95 ? 'badge-active' : 'badge-notice'}`}>
+                      <span className={`badge ${attPct >= 95 ? 'badge-active' : 'badge-notice'}`}>
                         {attPct}%
                       </span>
                     </td>
@@ -125,19 +162,19 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({ employees 
         {/* Pagination Bar */}
         <div className="pagination">
           <span>
-            Page {currentPage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <div className="pagination__controls">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            <button
+              disabled={page === 1}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page - 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               <ChevronLeft size={16} /> Prev
             </button>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page + 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               Next <ChevronRight size={16} />

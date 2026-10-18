@@ -218,7 +218,7 @@ Historical macro workforce analytics spanning **January 2024 through September 2
 The central data interchange module:
 - **Ingestion:** Drag-and-drop parsing of `.xlsx`, `.xls`, and `.csv` files.
 - **Live Preview:** Displays recognized column mappings, warnings, and table preview before committing.
-- **Export Master Roster:** Downloads the complete 200-employee directory with all 21 columns.
+- **Export Master Roster:** Downloads the complete 200-employee directory with all 24 columns, including the canonical department ID and reporting line; the workbook can be re-imported without losing either.
 - **Export Payroll Register:** Downloads bank-ready payroll register with earnings and deductions.
 - **Download Standard Template:** Generates a pre-formatted template with sample rows.
 

@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatCrores } from '../utils/formatters';
+import { computePayroll, isActive } from '../utils/payroll';
+import { statusBadgeClass, statusBadgeLabel } from './statusBadge';
+import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
+
+const PAGE_SIZE = 25;
+const TABLE_TITLE = 'Compensation structure and take-home salary breakdown';
 
 interface PayrollSectionProps {
   employees: Employee[];
@@ -12,19 +18,38 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   employees,
   onSelectEmployee
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
-  const totalMonthlyGross = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
-  const totalBasic = employees.reduce((acc, e) => acc + e.basicSalary, 0);
-  
-  // Total Statutory Deductions: EPF + ESI/PT
-  const totalEPF = employees.reduce((acc, e) => acc + Math.round(Math.min(e.basicSalary, 15000) * 0.12), 0);
-  const totalPT = employees.length * 200; // Standard ₹200/mo
-  const totalNetDisbursable = totalMonthlyGross - (totalEPF + totalPT);
+  // Payroll run figures come from employees.filter(isActive) — resigned staff are
+  // not paid, and neither is an `Unknown` status: an unresolved import is not
+  // evidence that the person is on the roster, so they must not be charged PF,
+  // professional tax or appear in the aggregates until the status is resolved.
+  const activeRoster = employees.filter(isActive);
+  const payroll = activeRoster.map(computePayroll);
 
-  const totalPages = Math.ceil(employees.length / pageSize) || 1;
-  const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalMonthlyGross = payroll.reduce((acc, p) => acc + p.gross, 0);
+  const totalBasic = payroll.reduce((acc, p) => acc + p.basic, 0);
+  const totalEPF = payroll.reduce((acc, p) => acc + p.epf, 0);
+  // Read the per-row figures rather than `activeRoster.length * PROFESSIONAL_TAX` and the
+  // gross-minus-deductions formula: `computePayroll` floors a net at zero, so a run that
+  // contains a zero-CTC row must sum what the table's Net column prints, not a parallel
+  // formula that would disagree with it.
+  const totalPT = payroll.reduce((acc, p) => acc + p.professionalTax, 0);
+  const totalNetDisbursable = payroll.reduce((acc, p) => acc + p.netPayable, 0);
+
+  // The page control follows the data: reset to page 1 when the roster changes size, and
+  // re-derive the page on every render so a page one render behind the data cannot slice
+  // an empty table. Done during render rather than in an effect - see DirectorySection for
+  // why. utils/pagination owns the arithmetic, so this section cannot drift from the
+  // Directory and Attendance registers.
+  const [pageState, setPageState] = useState({ size: employees.length, page: 1 });
+  if (pageState.size !== employees.length) {
+    setPageState({ size: employees.length, page: 1 });
+  }
+
+  const totalPages = totalPagesFor(employees.length, pageSize);
+  const page = clampPage(pageState.page, totalPages);
+  const currentItems = employees.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="section-stack">
@@ -33,7 +58,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Total Monthly CTC</span>
           <div className="kpi-value">{formatCrores(totalMonthlyGross)}</div>
-          <span className="kpi-sub">Across {employees.length} active roster</span>
+          <span className="kpi-sub">Across {activeRoster.length} active roster</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
@@ -60,48 +85,67 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         <div className="omni-card-header">
           <div>
             <h3 className="omni-card-title">Compensation Structure & Take-Home Salary Breakdown</h3>
-            <p className="omni-card-sub">Standard Indian wage formula: 50% Basic, 25% HRA, 25% Special Allowance minus EPF and PT.</p>
+            <p className="omni-card-sub">Standard Indian wage formula: 50% Basic, 25% HRA, 25% Special Allowance minus EPF, Professional Tax and LOP.</p>
           </div>
           <span className="pagination__count">
-            Showing {employees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, employees.length)} of {employees.length}
+            {pageRangeLabel(page, pageSize, employees.length)}
           </span>
         </div>
 
-        <div className="omni-table-wrap">
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(TABLE_TITLE)}
+          tabIndex={0}
+        >
           <table className="omni-table">
+            <caption className="sr-only">
+              {describeTable(TABLE_TITLE, currentItems.length, employees.length, page, totalPages)}
+            </caption>
             <thead>
               <tr>
-                <th>Emp ID</th>
-                <th>Employee Name</th>
-                <th>Department</th>
-                <th>Monthly CTC</th>
-                <th>Basic (50%)</th>
-                <th>HRA (25%)</th>
-                <th>Special Allow.</th>
-                <th>EPF (12%)</th>
-                <th>PT</th>
-                <th>Net Disbursable</th>
-                <th>Payslip</th>
+                {/* `col-optional`: an identifier and a flat tax line are the two columns a
+                    reader can most afford to lose when the register has to fit a laptop.
+                    Both the heading and its cells carry it - a `<th>` left behind with no
+                    `<td>` under it is a header for nothing. */}
+                <th scope="col" className="col-optional">Emp ID</th>
+                <th scope="col">Employee Name</th>
+                <th scope="col">Department</th>
+                <th scope="col">Status</th>
+                <th scope="col">Monthly CTC</th>
+                <th scope="col">Basic (50%)</th>
+                <th scope="col">HRA (25%)</th>
+                <th scope="col">Special Allow.</th>
+                <th scope="col">EPF (12%)</th>
+                <th scope="col" className="col-optional">PT</th>
+                <th scope="col">Net Disbursable</th>
+                <th scope="col">Payslip</th>
               </tr>
             </thead>
             <tbody>
               {currentItems.map(emp => {
-                const epf = Math.round(Math.min(emp.basicSalary, 15000) * 0.12);
-                const pt = 200;
-                const net = emp.monthlyCTC - (epf + pt);
+                const p = computePayroll(emp);
 
                 return (
                   <tr key={emp.id}>
-                    <td className="cell-id">{emp.id}</td>
+                    <td className="cell-id col-optional">{emp.id}</td>
                     <td className="cell-strong">{emp.name}</td>
                     <td>{emp.department}</td>
+                    {/* Resigned and Unknown rows stay visible - a master register is a
+                        record of who is on file - but the Status column is what tells a
+                        reader why their Net does not sit in the active-only card above. */}
+                    <td>
+                      <span className={`badge ${statusBadgeClass(emp.status)}`}>
+                        {statusBadgeLabel(emp.status)}
+                      </span>
+                    </td>
                     <td className="cell-strong">₹{formatINR(emp.monthlyCTC)}</td>
                     <td>₹{formatINR(emp.basicSalary)}</td>
                     <td>₹{formatINR(emp.hra)}</td>
                     <td>₹{formatINR(emp.specialAllowance)}</td>
-                    <td className="text-danger-soft">−₹{formatINR(epf)}</td>
-                    <td className="text-danger-soft">−₹{pt}</td>
-                    <td className="cell-strong text-success">₹{formatINR(net)}</td>
+                    <td className="text-danger-soft">−₹{formatINR(p.epf)}</td>
+                    <td className="text-danger-soft col-optional">−₹{p.professionalTax}</td>
+                    <td className="cell-strong text-success">₹{formatINR(p.netPayable)}</td>
                     <td>
                       <button 
                         onClick={() => onSelectEmployee(emp)}
@@ -115,7 +159,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
               })}
               {currentItems.length === 0 && (
                 <tr>
-                  <td colSpan={11}>
+                  <td colSpan={12}>
                     <div className="empty-cell">
                       No payroll records match the current search and filters.
                     </div>
@@ -129,19 +173,19 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         {/* Pagination Bar */}
         <div className="pagination">
           <span>
-            Page {currentPage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <div className="pagination__controls">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            <button
+              disabled={page === 1}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page - 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               <ChevronLeft size={16} /> Prev
             </button>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page + 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               Next <ChevronRight size={16} />

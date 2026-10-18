@@ -21,13 +21,20 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   onExportExcel: () => void;
   onResetData: () => void;
+  /**
+   * Whether the drawer is open. Below the collapse breakpoint the sidebar leaves the grid
+   * and becomes a fixed panel, so App owns the open state and the header's toggle owns the
+   * only transition into it.
+   */
+  isOpen?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   onExportExcel,
-  onResetData
+  onResetData,
+  isOpen = false,
 }) => {
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard size={18} /> },
@@ -44,35 +51,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside style={{
-      width: 'var(--sidebar-w)',
-      background: 'var(--bg-card)',
-      borderRight: '1px solid var(--border)',
-      padding: 'var(--space-6) var(--space-4)',
-      display: 'flex',
-      flexDirection: 'column',
-      minHeight: '100vh',
-      flexShrink: 0
-    }} className="no-print">
+    <aside
+      id="app-sidebar"
+      data-open={isOpen}
+      className="app-sidebar no-print"
+    >
       {/* Brand Header */}
-      <div style={{ marginBottom: 'var(--space-7)', paddingLeft: 'var(--space-2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="brand-mark">
-            Ω
-          </div>
-          <div>
-            <h1 className="brand-name">
-              Omni<span className="text-primary">HR</span>
-            </h1>
-            <p className="brand-tagline">
-              Enterprise Workforce Suite v3.0
-            </p>
-          </div>
+      <div className="app-sidebar__brand">
+        <div className="brand-mark">
+          Ω
+        </div>
+        <div className="app-sidebar__brand-text">
+          <h1 className="brand-name">
+            Omni<span className="text-primary">HR</span>
+          </h1>
+          <p className="brand-tagline">
+            Enterprise Workforce Suite v3.0
+          </p>
         </div>
       </div>
 
       {/* Navigation Links */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', flex: 1 }}>
+      <nav className="app-sidebar__nav" aria-label="Main navigation">
         {navItems.map(item => {
           const isActive = activeTab === item.id;
           return (
@@ -81,29 +81,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setActiveTab(item.id)}
               className={`nav-item${isActive ? ' nav-item--active' : ''}`}
               aria-current={isActive ? 'page' : undefined}
+              // The label is hidden when the sidebar collapses to an icon rail, so the
+              // native tooltip has to carry it from then on. It is redundant above the
+              // breakpoint and load-bearing below it.
+              title={item.label}
             >
-              <span className="nav-item__icon">
+              <span className="nav-item__icon" aria-hidden="true">
                 {item.icon}
               </span>
-              <span>{item.label}</span>
+              <span className="app-sidebar__label">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
       {/* Sidebar Footer Quick Actions */}
-      <div style={{ paddingTop: 'var(--space-4)', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-inline)' }}>
+      <div className="app-sidebar__footer">
         <button 
           onClick={onExportExcel} 
           className="btn btn-secondary btn-block btn-sm" 
+          title="Export the staff roster to Excel"
         >
-          <Download size={15} /> Export Roster (Excel)
+          <Download size={15} aria-hidden="true" /> <span className="app-sidebar__label">Export Roster (Excel)</span>
         </button>
         <button 
           onClick={onResetData} 
           className="btn btn-secondary btn-block btn-sm text-dim" 
+          title="Reset the register to the master demo dataset"
         >
-          <RotateCcw size={14} /> Reset Demo State
+          <RotateCcw size={14} aria-hidden="true" /> <span className="app-sidebar__label">Reset Demo State</span>
         </button>
       </div>
     </aside>

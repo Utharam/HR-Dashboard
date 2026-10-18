@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   BookOpen, 
   FileSpreadsheet, 
@@ -15,6 +15,52 @@ import {
   ArrowRight
 } from 'lucide-react';
 import type { ActiveTab } from '../types';
+import { describeTable, scrollRegionLabel } from '../utils/pagination';
+import { STAFF_ROSTER_COLUMNS } from '../utils/excelSchema';
+
+const STATUTE_TITLE = 'Indian statutory and legal formulation reference';
+const ALIAS_TITLE = 'Excel column header aliases';
+
+/**
+ * The statutory reference table, hoisted so its caption can state the same row count the
+ * table renders. Same shape as the column-alias table below it: a literal array mapped
+ * into rows, with the count read off it rather than typed a second time.
+ */
+const STATUTE_ROWS: [string, string, string][] = [
+  ['Employees\' Provident Fund (EPF)', '₹15,000 monthly basic ceiling', 'Math.min(Basic, 15000) * 0.12 (= max ₹1,800/mo)'],
+  ['Payment of Gratuity Act 1972', '₹20,00,000 (20 Lakhs) statutory cap', 'min(2000000, (15 * Basic * RoundedTenure) / 26)'],
+  ['Gratuity Tenure Rounding', 'Fraction ≥ 6 months (0.5 yrs)', 'fraction ≥ 0.5 ? ceil(tenure) : floor(tenure)'],
+  ['Gratuity Eligibility', 'Minimum 5 completed continuous years', 'tenure < 5 ? ₹0 (Not eligible) : Gratuity Payable'],
+  ['Section 25F Industrial Disputes Act', 'Retrenchment / Layoff in lieu', '1 Month Notice Basic + (15 * Basic * Tenure / 30)'],
+  ['Loss of Pay (LOP)', '26-day working cycle deduction', '(Basic / 26) * LOP Days'],
+  ['Privilege Leave Encashment', 'Maximum 30 accumulated days', '(Basic / 30) * min(Unused Leaves, 30)'],
+];
+
+/**
+ * The column-alias table. Hoisted for the same reason as STATUTE_ROWS: the caption quotes
+ * the row count, and a count typed at the caption would be free to drift from the rows.
+ */
+const ALIAS_ROWS = [
+  { field: 'Employee ID', aliases: 'Employee ID, Emp ID, EmployeeID, id, ID, Staff ID', type: 'String', def: 'EMP-1201 + index', copy: 'Employee ID' },
+  { field: 'Full Name', aliases: 'Full Name, Employee Name, Name, name, Employee, Staff Name', type: 'String', def: 'Staff Member {idx}', copy: 'Full Name' },
+  { field: 'Department', aliases: 'Department, department, Dept, Dept Name, Division', type: 'String', def: 'Engineering & Technology', copy: 'Department' },
+  { field: 'Designation / Role', aliases: 'Designation / Role, Designation, Role, role, Title, Job Title', type: 'String', def: 'Software Engineer', copy: 'Designation / Role' },
+  { field: 'Office Location', aliases: 'Office Location, Location, location, Branch, City, Office', type: 'String', def: 'Bengaluru HQ', copy: 'Office Location' },
+  { field: 'Date of Joining', aliases: 'DOJ, Date of Joining, Joining Date, Hire Date, doj', type: 'Date / Serial / Str', def: 'Blank (with a warning)', copy: 'Date of Joining' },
+  { field: 'Monthly CTC', aliases: 'Monthly CTC, MonthlyCTC, Monthly Gross CTC, CTC, salary', type: 'Number (INR)', def: 'Annual / 12 or ₹1,20,000', copy: 'Monthly CTC' },
+  { field: 'Annual CTC', aliases: 'Annual CTC (INR), Annual CTC, AnnualCTC, Yearly CTC, Annual Salary', type: 'Number (INR)', def: 'Monthly CTC * 12', copy: 'Annual CTC (INR)' },
+  { field: 'Basic Salary', aliases: 'Monthly Basic Salary, Basic Salary, BasicSalary, Basic', type: 'Number (INR)', def: '50% of Monthly CTC', copy: 'Basic Salary' },
+  { field: 'HRA', aliases: 'HRA, House Rent Allowance, hra', type: 'Number (INR)', def: '50% of Basic (25% CTC)', copy: 'HRA' },
+  { field: 'Special Allowance', aliases: 'Special Allowance, SpecialAllowance', type: 'Number (INR)', def: 'CTC - (Basic + HRA)', copy: 'Special Allowance' },
+  { field: 'Status', aliases: 'Status, status, Employment Status', type: 'Active | Probation | Notice | Resigned | Unknown', def: 'Unknown (if unmapped)', copy: 'Status' },
+  { field: 'Gender', aliases: 'Gender, gender, Sex', type: 'Female | Male | Non-Binary | Prefer Not to Say | Unknown', def: 'Unknown (if unmapped)', copy: 'Gender' },
+  { field: 'Performance Rating', aliases: 'Performance Rating, Rating, performanceRating, Score', type: 'Number (1 - 5)', def: '4 (Exceeds Exp.)', copy: 'Performance Rating' },
+  { field: 'Attendance Days', aliases: 'Attendance (Days Present), Attendance Days, Present Days, PresentDays', type: 'Number (0 - 26)', def: '25 Days', copy: 'Attendance (Days Present)' },
+  { field: 'Leave Balances', aliases: 'CL Balance, Casual Leave Balance, SL Balance, Sick Leave Balance, EL Balance, Earned Leave Balance, Privilege Leave Balance, LOP Days, Loss of Pay Days', type: 'Number', def: 'CL: 8, SL: 8, EL: 12, LOP: derived', copy: 'CL Balance' },
+  { field: 'Work Email', aliases: 'Work Email, Work email, Email, email', type: 'String', def: '{name}@omnixhr.io', copy: 'Work Email' },
+  { field: 'Phone Number', aliases: 'Phone, Phone Number, Mobile, Contact', type: 'String', def: '+91 9876543210', copy: 'Phone' },
+  { field: 'PF UAN', aliases: 'PF UAN, UAN, UAN Number, uan', type: 'String (12 digits)', def: '100123456789', copy: 'PF UAN' },
+];
 
 interface GuidesSectionProps {
   initialGuide?: 'general' | 'excel';
@@ -27,13 +73,39 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
 }) => {
   const [activeGuideTab, setActiveGuideTab] = useState<'general' | 'excel'>(initialGuide);
   const [guideSearch, setGuideSearch] = useState('');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // An OBJECT, not the bare key. Clicking the same column twice in a row has to restart
+  // the two-second countdown; storing just the key would set the same string twice, React
+  // would bail out of the re-render, and the first timer would expire mid-interaction and
+  // wipe the confirmation.
+  const [copied, setCopied] = useState<{ key: string } | null>(null);
 
   const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
+    // `navigator.clipboard` does not exist on any origin the browser considers insecure -
+    // plain http on an intranet, some corporate proxies. `writeText` is then not a rejected
+    // promise but a synchronous TypeError thrown out of this handler, which took the whole
+    // click with it and left an uncaught error in the console for every user on that origin.
+    if (!navigator.clipboard) return;
+
+    // The confirmation is only claimed once the write has actually succeeded. Setting it
+    // optimistically told the user their text was on the clipboard when the browser had
+    // refused, and they went off to paste something stale.
+    navigator.clipboard
+      .writeText(text)
+      .then(() => setCopied({ key }))
+      .catch(() => {
+        // Denied by permission policy, or the document lost focus. The column name is on
+        // screen either way, so there is nothing to recover and nothing to say.
+      });
   };
+
+  // The timer lives in an effect so it is cancelled when the countdown restarts and when
+  // the section unmounts. A bare `setTimeout` in the handler survived unmount and could
+  // set state on a component that was no longer there.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const q = guideSearch.toLowerCase().trim();
 
@@ -293,51 +365,31 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <Calculator size={18} color="var(--warning)" /> 3. Indian Statutory & Legal Formulation Reference
               </h3>
 
-              <div className="omni-table-wrap">
+              <div
+                className="omni-table-wrap"
+                role="region"
+                aria-label={scrollRegionLabel(STATUTE_TITLE)}
+                tabIndex={0}
+              >
                 <table className="omni-table">
+                  <caption className="sr-only">
+                    {describeTable(STATUTE_TITLE, STATUTE_ROWS.length, STATUTE_ROWS.length, 1, 1)}
+                  </caption>
                   <thead>
                     <tr>
-                      <th>Statute / Rule</th>
-                      <th>Legal Ceiling / Threshold</th>
-                      <th>OmniHR Mathematical Formula</th>
+                      <th scope="col">Statute / Rule</th>
+                      <th scope="col">Legal Ceiling / Threshold</th>
+                      <th scope="col">OmniHR Mathematical Formula</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td><strong>Employees' Provident Fund (EPF)</strong></td>
-                      <td>₹15,000 monthly basic ceiling</td>
-                      <td><code>Math.min(Basic, 15000) * 0.12</code> (= max ₹1,800/mo)</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Payment of Gratuity Act 1972</strong></td>
-                      <td>₹20,00,000 (20 Lakhs) statutory cap</td>
-                      <td><code>min(2000000, (15 * Basic * RoundedTenure) / 26)</code></td>
-                    </tr>
-                    <tr>
-                      <td><strong>Gratuity Tenure Rounding</strong></td>
-                      <td>Fraction &ge; 6 months (0.5 yrs)</td>
-                      <td><code>fraction &ge; 0.5 ? ceil(tenure) : floor(tenure)</code></td>
-                    </tr>
-                    <tr>
-                      <td><strong>Gratuity Eligibility</strong></td>
-                      <td>Minimum 5 completed continuous years</td>
-                      <td><code>tenure &lt; 5 ? ₹0 (Not eligible) : Gratuity Payable</code></td>
-                    </tr>
-                    <tr>
-                      <td><strong>Section 25F Industrial Disputes Act</strong></td>
-                      <td>Retrenchment / Layoff in lieu</td>
-                      <td><code>1 Month Notice Basic + (15 * Basic * Tenure / 30)</code></td>
-                    </tr>
-                    <tr>
-                      <td><strong>Loss of Pay (LOP)</strong></td>
-                      <td>26-day working cycle deduction</td>
-                      <td><code>(Basic / 26) * LOP Days</code></td>
-                    </tr>
-                    <tr>
-                      <td><strong>Privilege Leave Encashment</strong></td>
-                      <td>Maximum 30 accumulated days</td>
-                      <td><code>(Basic / 30) * min(Unused Leaves, 30)</code></td>
-                    </tr>
+                    {STATUTE_ROWS.map(([statute, ceiling, formula]) => (
+                      <tr key={statute}>
+                        <td><strong>{statute}</strong></td>
+                        <td>{ceiling}</td>
+                        <td><code>{formula}</code></td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -410,39 +462,27 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
               </div>
             </div>
 
-            <div className="omni-table-wrap">
+            <div
+              className="omni-table-wrap"
+              role="region"
+              aria-label={scrollRegionLabel(ALIAS_TITLE)}
+              tabIndex={0}
+            >
               <table className="omni-table">
+                <caption className="sr-only">
+                  {describeTable(ALIAS_TITLE, ALIAS_ROWS.length, ALIAS_ROWS.length, 1, 1)}
+                </caption>
                 <thead>
                   <tr>
-                    <th>Target OmniHR Field</th>
-                    <th>Accepted Excel Column Headers (Aliases)</th>
-                    <th>Data Type</th>
-                    <th>Default Fallback Value</th>
-                    <th>Quick Copy</th>
+                    <th scope="col">Target OmniHR Field</th>
+                    <th scope="col">Accepted Excel Column Headers (Aliases)</th>
+                    <th scope="col">Data Type</th>
+                    <th scope="col">Default Fallback Value</th>
+                    <th scope="col">Quick Copy</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { field: 'Employee ID', aliases: 'Employee ID, Emp ID, EmployeeID, id, ID, Staff ID', type: 'String', def: 'EMP-1201 + index', copy: 'Employee ID' },
-                    { field: 'Full Name', aliases: 'Full Name, Employee Name, Name, name, Employee, Staff Name', type: 'String', def: 'Staff Member {idx}', copy: 'Full Name' },
-                    { field: 'Department', aliases: 'Department, department, Dept, Dept Name, Division', type: 'String', def: 'Engineering & Technology', copy: 'Department' },
-                    { field: 'Designation / Role', aliases: 'Designation / Role, Designation, Role, role, Title, Job Title', type: 'String', def: 'Software Engineer', copy: 'Designation / Role' },
-                    { field: 'Office Location', aliases: 'Office Location, Location, location, Branch, City, Office', type: 'String', def: 'Bengaluru HQ', copy: 'Office Location' },
-                    { field: 'Date of Joining', aliases: 'DOJ, Date of Joining, Joining Date, Hire Date, doj', type: 'Date / Serial / Str', def: '2023-01-15', copy: 'Date of Joining' },
-                    { field: 'Monthly CTC', aliases: 'Monthly CTC, MonthlyCTC, Monthly Gross CTC, CTC, salary', type: 'Number (INR)', def: 'Annual / 12 or ₹1,20,000', copy: 'Monthly CTC' },
-                    { field: 'Annual CTC', aliases: 'Annual CTC (INR), Annual CTC, AnnualCTC, Yearly CTC', type: 'Number (INR)', def: 'Monthly CTC * 12', copy: 'Annual CTC (INR)' },
-                    { field: 'Basic Salary', aliases: 'Monthly Basic Salary, Basic Salary, BasicSalary, Basic', type: 'Number (INR)', def: '50% of Monthly CTC', copy: 'Basic Salary' },
-                    { field: 'HRA', aliases: 'HRA, House Rent Allowance, hra', type: 'Number (INR)', def: '50% of Basic (25% CTC)', copy: 'HRA' },
-                    { field: 'Special Allowance', aliases: 'Special Allowance, SpecialAllowance', type: 'Number (INR)', def: 'CTC - (Basic + HRA)', copy: 'Special Allowance' },
-                    { field: 'Status', aliases: 'Status, status, Employment Status', type: 'Active | Probation | Notice | Resigned', def: 'Active', copy: 'Status' },
-                    { field: 'Gender', aliases: 'Gender, gender, Sex', type: 'Female | Male | Non-Binary', def: 'Female', copy: 'Gender' },
-                    { field: 'Performance Rating', aliases: 'Performance Rating, Rating, performanceRating', type: 'Number (1 - 5)', def: '4 (Exceeds Exp.)', copy: 'Performance Rating' },
-                    { field: 'Attendance Days', aliases: 'Attendance (Days Present), Attendance Days, PresentDays', type: 'Number (0 - 26)', def: '25 Days', copy: 'Attendance (Days Present)' },
-                    { field: 'Leave Balances', aliases: 'CL Balance, SL Balance, EL Balance, LOP Days', type: 'Number', def: 'CL: 8, SL: 8, EL: 12, LOP: derived', copy: 'CL Balance' },
-                    { field: 'Work Email', aliases: 'Work Email, Work email, Email, email', type: 'String', def: '{name}@omnixhr.io', copy: 'Work Email' },
-                    { field: 'Phone Number', aliases: 'Phone, Phone Number, Mobile, Contact', type: 'String', def: '+91 9876543210', copy: 'Phone' },
-                    { field: 'PF UAN', aliases: 'PF UAN, UAN, UAN Number, uan', type: 'String (12 digits)', def: '100123456789', copy: 'PF UAN' }
-                  ].map((row) => (
+                  {ALIAS_ROWS.map((row) => (
                     <tr key={row.field}>
                       <td><strong className="text-bright">{row.field}</strong></td>
                       <td className="cell-muted text-mono">{row.aliases}</td>
@@ -454,8 +494,8 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                           onClick={() => handleCopy(row.copy, row.field)}
                           className="btn btn-secondary btn-sm"
                         >
-                          {copiedKey === row.field ? <Check size={12} className="text-success-soft" /> : <Copy size={12} />}
-                          {copiedKey === row.field ? 'Copied' : 'Copy'}
+                          {copied?.key === row.field ? <Check size={12} className="text-success-soft" /> : <Copy size={12} />}
+                          {copied?.key === row.field ? 'Copied' : 'Copy'}
                         </button>
                       </td>
                     </tr>
@@ -548,7 +588,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
               <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                 <strong className="text-purple-soft">• Status & Gender Normalization:</strong>
                 <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                  Text values like "active", "probation", "notice", "exit", "resigned" are automatically mapped to valid enum states. Gender values ("F", "Female", "M", "Male", "Other") are normalized gracefully.
+                  Text values like "active", "probation", "notice", "exit", "resigned" are mapped to the matching enum state; "active" is matched exactly, so "inactive" is not read as "Active". Gender values ("F", "Female", "M", "Male", "Non-Binary", "Other") are mapped too, and a declined answer ("prefer not to say") is kept as "Prefer Not to Say". Anything else is recorded as <strong>Unknown</strong> rather than guessed: an unmapped Status no longer becomes "Active" (which would put the person in the payroll run), and an unmapped Gender no longer becomes "Female" (which would skew the diversity ratio). Unknown-status staff are excluded from the payroll run and their badge is neutral.
                 </p>
               </div>
             </div>
@@ -566,7 +606,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                   <Download size={16} /> <strong>Staff Master Roster (.xlsx)</strong>
                 </div>
                 <p className="prose">
-                  Multi-column complete workbook containing all 21 employee attributes, reporting managers, PF UANs, and contact emails.
+                  Multi-column complete workbook containing all {STAFF_ROSTER_COLUMNS.length} employee attributes, reporting managers, PF UANs, and contact emails.
                 </p>
               </div>
 

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { X, Sparkles, Plus, Gift, Check } from 'lucide-react';
 import type { HRPolicy, PolicyCategory } from '../types';
+import { Dialog } from './Dialog';
 import { 
   MATERNAL_GIFT_PRESETS, 
   PATERNAL_GIFT_PRESETS, 
@@ -19,6 +20,22 @@ const ALL_GIFT_PRESETS = [
   'Custom (Type Below)'
 ];
 
+/** `<select>` values are strings; these guards narrow them without asserting. */
+const POLICY_CATEGORIES: ReadonlyArray<PolicyCategory> = [
+  'Parental Provisions',
+  'Leave & Quotas',
+  'Separation & Notice',
+  'Extended & Sabbatical',
+  'Wellness & Special Perks',
+  'Custom Rules',
+];
+const isPolicyCategory = (value: string): value is PolicyCategory =>
+  (POLICY_CATEGORIES as readonly string[]).includes(value);
+
+const TIME_UNITS: ReadonlyArray<HRPolicy['timeUnit']> = ['Days', 'Weeks', 'Months'];
+const isTimeUnit = (value: string): value is HRPolicy['timeUnit'] =>
+  (TIME_UNITS as readonly string[]).includes(value);
+
 interface PolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,12 +47,15 @@ interface PolicyFormProps {
   onClose: () => void;
   onSavePolicy: (policy: HRPolicy) => void;
   policyToEdit?: HRPolicy | null;
+  /** Owned by `PolicyModal` so two policy dialogs cannot share one `aria-labelledby`. */
+  titleId: string;
 }
 
 const PolicyForm: React.FC<PolicyFormProps> = ({
   onClose,
   onSavePolicy,
-  policyToEdit
+  policyToEdit,
+  titleId
 }) => {
   const isEditing = !!policyToEdit;
 
@@ -94,13 +114,13 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
   };
 
   return (
-    <div className="modal-window" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEditing ? 'Edit HR policy' : 'Create HR policy'}>
+    <>
       <button 
         onClick={onClose}
         aria-label="Close"
         className="modal-close"
       >
-        <X size={20} />
+        <X size={20} aria-hidden="true" />
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-5)', paddingRight: 'var(--space-10)' }}>
@@ -114,10 +134,10 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
           justifyContent: 'center',
           flexShrink: 0
         }}>
-          <Sparkles size={20} className="text-primary" />
+          <Sparkles size={20} className="text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h2 className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
+          <h2 id={titleId} className="omni-card-title" style={{ fontSize: 'var(--fs-2xl)' }}>
             {isEditing ? 'Edit HR Policy & Provisions' : 'Create Custom HR Policy / Rule'}
           </h2>
           <p className="omni-card-sub">
@@ -153,7 +173,9 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
               id="policy-category"
               className="omni-select" 
               value={category}
-              onChange={(e) => setCategory(e.target.value as PolicyCategory)}
+              onChange={(e) => {
+                if (isPolicyCategory(e.target.value)) setCategory(e.target.value);
+              }}
             >
               <option value="Parental Provisions">Parental Provisions (Maternal / Paternal)</option>
               <option value="Leave & Quotas">Leave & Quotas (CL, SL, EL, Comp-Off)</option>
@@ -207,7 +229,9 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
               id="policy-unit"
               className="omni-select" 
               value={timeUnit}
-              onChange={(e) => setTimeUnit(e.target.value as any)}
+              onChange={(e) => {
+                if (isTimeUnit(e.target.value)) setTimeUnit(e.target.value);
+              }}
             >
               <option value="Days">Days</option>
               <option value="Weeks">Weeks</option>
@@ -334,7 +358,7 @@ const PolicyForm: React.FC<PolicyFormProps> = ({
           </button>
         </div>
       </form>
-    </div>
+    </>
   );
 };
 
@@ -344,16 +368,25 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
   onSavePolicy,
   policyToEdit
 }) => {
-  if (!isOpen) return null;
+  // The form keeps its own `key` so that switching between policies re-runs its state
+  // initialisers. The scrim and the focus lifecycle belong to `Dialog`, which stays
+  // mounted either side of the open edge so it can capture and restore the opener.
+  //
+  // The heading id is minted here rather than in `PolicyForm` and passed down, because
+  // `PolicyForm` is remounted whenever the edited policy changes while `Dialog` is not. A
+  // literal would also be wrong the moment a second policy dialog existed: `aria-labelledby`
+  // resolves to the first matching id in the document, so both would announce the first title.
+  const titleId = useId();
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Dialog isOpen={isOpen} onClose={onClose} labelledBy={titleId} className="modal-window--narrow">
       <PolicyForm 
         key={policyToEdit?.id || 'new_policy'}
         onClose={onClose}
         onSavePolicy={onSavePolicy}
         policyToEdit={policyToEdit}
+        titleId={titleId}
       />
-    </div>
+    </Dialog>
   );
 };

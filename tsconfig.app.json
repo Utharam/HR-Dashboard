@@ -17,10 +17,17 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* Every *.test.ts / *.test.tsx is type-checked by tsconfig.test.json instead, which adds
+     the Node types a filesystem-reading test needs. Keyed on the test EXTENSION rather than
+     the __tests__ directory, because tests live beside the code they cover as well as in it -
+     src/App.test.tsx and src/components/ExcelHubSection.test.tsx are co-located. Matching
+     vitest.config.ts's own globs is what keeps the two from drifting apart. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

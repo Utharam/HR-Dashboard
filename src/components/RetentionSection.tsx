@@ -2,15 +2,33 @@ import React, { useState } from 'react';
 import { ShieldCheck, Calculator } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, computeStatutoryGratuity } from '../utils/formatters';
+import { computeTenureYears } from '../utils/dates';
+import { earnedLeaveBalance } from '../utils/leave';
 
 interface RetentionSectionProps {
   employees: Employee[];
+  /** See `OverviewSection`: offered only where the empty list is the filter's doing. */
+  onClearFilters?: () => void;
 }
 
-export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees }) => {
+/**
+ * The settlement engine has exactly two separation categories.
+ *
+ * `<select>` yields a string; a cast would assert one of these without checking. The guard
+ * narrows it, and an unrecognised value leaves the current category in place.
+ */
+const SEPARATION_TYPES = ['resignation', 'retrenchment'] as const;
+type SeparationType = (typeof SEPARATION_TYPES)[number];
+const isSeparationType = (value: string): value is SeparationType =>
+  (SEPARATION_TYPES as readonly string[]).includes(value);
+
+export const RetentionSection: React.FC<RetentionSectionProps> = ({
+  employees,
+  onClearFilters
+}) => {
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [basicSalary, setBasicSalary] = useState(45000);
-  const [tenureYears, setTenureYears] = useState(5.5);
+  const [tenureYears, setTenureYears] = useState<number | null>(5.5);
   const [unusedLeaves, setUnusedLeaves] = useState(15);
   const [separationType, setSeparationType] = useState<'resignation' | 'retrenchment'>('resignation');
   const [hasCalculated, setHasCalculated] = useState(false);
@@ -20,26 +38,57 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
     const emp = employees.find(e => e.id === empId);
     if (emp) {
       setBasicSalary(emp.basicSalary);
-      const doj = new Date(emp.doj);
-      const now = new Date(2026, 9, 1);
-      const diffYears = (now.getTime() - doj.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-      setTenureYears(parseFloat(Math.max(0.5, diffYears).toFixed(1)));
-      setUnusedLeaves(emp.elBalance || 12);
+      // Service is measured against the real current date, not a frozen "today".
+      // A blank or unreadable doj yields null, which computeStatutoryGratuity
+      // reports as invalid, so no settlement statement is rendered at all.
+      const service = computeTenureYears(emp.doj);
+      setTenureYears(service === null ? null : parseFloat(service.toFixed(1)));
+      setUnusedLeaves(earnedLeaveBalance(emp));
     }
   };
 
   // Statutory calculation
   const gratuityResult = computeStatutoryGratuity(basicSalary, tenureYears);
-  const leaveEncashment = Math.round((basicSalary / 30) * Math.min(unusedLeaves, 30));
-  
+  // An unusable input yields no settlement at all: a ₹0 total would read as a
+  // legitimate finding on a statement an employee may act on.
+  const settlementInvalid = gratuityResult.invalid;
+  const leaveEncashment = Math.max(0, Math.round((basicSalary / 30) * Math.min(unusedLeaves, 30)));
+
   let noticePay = 0;
   let retrenchmentComp = 0;
-  if (separationType === 'retrenchment') {
-    noticePay = Math.round(basicSalary); // 1 month notice in lieu
-    retrenchmentComp = Math.round((15 * basicSalary * tenureYears) / 30); // 15 days avg pay/yr
+  if (tenureYears !== null && !settlementInvalid && separationType === 'retrenchment') {
+    noticePay = Math.max(0, Math.round(basicSalary)); // 1 month notice in lieu
+    retrenchmentComp = Math.max(0, Math.round((15 * basicSalary * tenureYears) / 30)); // 15 days avg pay/yr
   }
 
-  const totalSettlement = gratuityResult.gratuity + leaveEncashment + noticePay + retrenchmentComp;
+  const totalSettlement = Math.max(
+    0,
+    (settlementInvalid ? 0 : gratuityResult.gratuity) + leaveEncashment + noticePay + retrenchmentComp
+  );
+
+  // Every field on the settlement engine is chosen from this list, and the Compute button
+  // settles whoever happens to be selected. With nothing in it, the page offered a
+  // calculation against nobody: the default basic salary and a fabricated 5.5 years of
+  // tenure were sitting there ready to be declared a statutory entitlement.
+  if (employees.length === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No staff match the current filters</p>
+          <p className="empty-state__body">
+            A final settlement can only be computed for a profile in the register. Nothing
+            matched the current search and filters, so there is nobody to settle &mdash;
+            this is not an organisation with no end-of-service liability.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-stack">
@@ -77,10 +126,11 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-basic"
               type="number"
+              min={0}
               className="omni-input"
               style={{ width: '100%' }}
               value={basicSalary}
-              onChange={(e) => setBasicSalary(Number(e.target.value))}
+              onChange={(e) => setBasicSalary(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -89,11 +139,12 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-tenure"
               type="number"
+              min={0}
               step="0.1"
               className="omni-input"
               style={{ width: '100%' }}
-              value={tenureYears}
-              onChange={(e) => setTenureYears(Number(e.target.value))}
+              value={tenureYears ?? ''}
+              onChange={(e) => setTenureYears(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -102,10 +153,11 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
             <input 
               id="settle-leaves"
               type="number"
+              min={0}
               className="omni-input"
               style={{ width: '100%' }}
               value={unusedLeaves}
-              onChange={(e) => setUnusedLeaves(Number(e.target.value))}
+              onChange={(e) => setUnusedLeaves(Math.max(0, Number(e.target.value)))}
             />
           </div>
 
@@ -116,7 +168,9 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
               className="omni-select"
               style={{ width: '100%' }}
               value={separationType}
-              onChange={(e) => setSeparationType(e.target.value as any)}
+              onChange={(e) => {
+                if (isSeparationType(e.target.value)) setSeparationType(e.target.value);
+              }}
             >
               <option value="resignation">Voluntary Resignation (Notice Served)</option>
               <option value="retrenchment">Involuntary Layoff / Retrenchment (Employer Terminated)</option>
@@ -133,7 +187,7 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
         </button>
 
         {/* Calculation Result Breakdown */}
-        {hasCalculated && (
+        {hasCalculated && !settlementInvalid && (
           <div className="settlement">
             <h4 className="omni-card-title">
               Official Final Settlement Statement
@@ -190,6 +244,22 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
                   ₹{formatINR(totalSettlement)}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Withheld panel: an unusable input must not print a ₹0 settlement. */}
+        {hasCalculated && settlementInvalid && (
+          <div className="settlement">
+            <h4 className="omni-card-title">
+              Official Final Settlement Statement
+            </h4>
+
+            <div className="settlement__line settlement__line--void" style={{ display: 'block' }}>
+              Enter a valid basic salary and date of joining
+              <span className="settlement__flag">
+                No settlement can be stated: the tenure or basic salary on this profile could not be read.
+              </span>
             </div>
           </div>
         )}

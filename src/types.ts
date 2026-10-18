@@ -12,8 +12,12 @@ export interface Employee {
   basicSalary: number;
   hra: number;
   specialAllowance: number;
-  status: 'Active' | 'Probation' | 'Notice Period' | 'Resigned';
-  gender: 'Female' | 'Male' | 'Non-Binary';
+  // `Unknown` is a first-class value, not an absence: an imported row whose
+  // status cannot be resolved must NOT be coerced to `Active` (billable, attending,
+  // PF/PE-generating) nor to `Female` (biasing the diversity ratio). Consumers that
+  // act on a status have to handle it explicitly — see `isActive` in utils/payroll.
+  status: 'Active' | 'Probation' | 'Notice Period' | 'Resigned' | 'Unknown';
+  gender: 'Female' | 'Male' | 'Non-Binary' | 'Prefer Not to Say' | 'Unknown';
   performanceRating: number;
   reportsTo: string | null;
   presentDays: number;
@@ -22,7 +26,6 @@ export interface Employee {
   elBalance: number;
   lopDays: number;
   uan: string;
-  attendancePct: number;
 }
 
 export interface Department {
