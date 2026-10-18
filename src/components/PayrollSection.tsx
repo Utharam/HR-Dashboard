@@ -3,6 +3,9 @@ import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatCrores } from '../utils/formatters';
 import { computePayroll, isActive, PROFESSIONAL_TAX } from '../utils/payroll';
+import { clampPage, pageRangeLabel, totalPagesFor } from '../utils/pagination';
+
+const PAGE_SIZE = 25;
 
 interface PayrollSectionProps {
   employees: Employee[];
@@ -13,8 +16,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   employees,
   onSelectEmployee
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
   // Payroll run figures come from employees.filter(isActive) — resigned staff are
   // not paid, and neither is an `Unknown` status: an unresolved import is not
@@ -30,8 +32,19 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   const totalLOP = payroll.reduce((acc, p) => acc + p.lossOfPay, 0);
   const totalNetDisbursable = totalMonthlyGross - (totalEPF + totalPT + totalLOP);
 
-  const totalPages = Math.ceil(employees.length / pageSize) || 1;
-  const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // The page control follows the data: reset to page 1 when the roster changes size, and
+  // re-derive the page on every render so a page one render behind the data cannot slice
+  // an empty table. Done during render rather than in an effect - see DirectorySection for
+  // why. utils/pagination owns the arithmetic, so this section cannot drift from the
+  // Directory and Attendance registers.
+  const [pageState, setPageState] = useState({ size: employees.length, page: 1 });
+  if (pageState.size !== employees.length) {
+    setPageState({ size: employees.length, page: 1 });
+  }
+
+  const totalPages = totalPagesFor(employees.length, pageSize);
+  const page = clampPage(pageState.page, totalPages);
+  const currentItems = employees.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="section-stack">
@@ -70,7 +83,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
             <p className="omni-card-sub">Standard Indian wage formula: 50% Basic, 25% HRA, 25% Special Allowance minus EPF, Professional Tax and LOP.</p>
           </div>
           <span className="pagination__count">
-            Showing {employees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, employees.length)} of {employees.length}
+            {pageRangeLabel(page, pageSize, employees.length)}
           </span>
         </div>
 
@@ -134,19 +147,19 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         {/* Pagination Bar */}
         <div className="pagination">
           <span>
-            Page {currentPage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <div className="pagination__controls">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            <button
+              disabled={page === 1}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page - 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               <ChevronLeft size={16} /> Prev
             </button>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page + 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               Next <ChevronRight size={16} />

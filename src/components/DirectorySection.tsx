@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatLakhs } from '../utils/formatters';
+import { clampPage, pageRangeLabel, totalPagesFor } from '../utils/pagination';
 import { statusBadgeClass, statusBadgeLabel } from './statusBadge';
+
+const PAGE_SIZE = 25;
 
 interface DirectorySectionProps {
   employees: Employee[];
@@ -13,11 +16,30 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
   employees,
   onSelectEmployee
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
-  const totalPages = Math.ceil(employees.length / pageSize) || 1;
-  const currentItems = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // The page control follows the data. `currentPage` used to be plain state that only the
+  // Prev/Next handlers moved, and those clamped against `totalPages` at click time - never
+  // on a dataset that shrank underneath them. Paging to 8 of 200 records and then typing a
+  // search matching 3 people left `currentPage` at 8: `employees.slice(175, 200)` on a
+  // 3-element array is `[]`, so the register showed "No staff records found" over three
+  // matching records and the header read "Showing 176 - 3 of 3".
+  //
+  // The reset happens during render, not in an effect: an effect paints the stale page one
+  // more time first, and a synchronous setState inside an effect is the cascading render
+  // `react/set-state-in-effect` exists to prevent. `clampPage` below is what makes this
+  // safe in the render that precedes it - it is the second half of the fix, not a backup.
+  const [pageState, setPageState] = useState({ size: employees.length, page: 1 });
+  if (pageState.size !== employees.length) {
+    setPageState({ size: employees.length, page: 1 });
+  }
+
+  // Re-derived from the current roster on every render, so a page that is one render
+  // behind the data still yields a valid window. utils/pagination owns this arithmetic,
+  // which is what stops the three paginated sections drifting apart again.
+  const totalPages = totalPagesFor(employees.length, pageSize);
+  const page = clampPage(pageState.page, totalPages);
+  const currentItems = employees.slice((page - 1) * pageSize, page * pageSize);
 
   // Tone and label both come from statusBadge, which is keyed by the full
   // Employee['status'] union - so an `Unknown` import renders as neutral here instead
@@ -39,7 +61,7 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
             </p>
           </div>
           <span className="pagination__count">
-            Showing {employees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, employees.length)} of {employees.length}
+            {pageRangeLabel(page, pageSize, employees.length)}
           </span>
         </div>
 
@@ -100,19 +122,19 @@ export const DirectorySection: React.FC<DirectorySectionProps> = ({
         {/* Pagination Bar */}
         <div className="pagination">
           <span>
-            Page {currentPage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <div className="pagination__controls">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            <button
+              disabled={page === 1}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page - 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               <ChevronLeft size={16} /> Prev
             </button>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPageState((s) => ({ ...s, page: clampPage(page + 1, totalPages) }))}
               className="btn btn-secondary btn-sm"
             >
               Next <ChevronRight size={16} />
