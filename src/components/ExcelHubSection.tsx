@@ -12,8 +12,43 @@ import {
   X
 } from 'lucide-react';
 import type { Employee } from '../types';
-import { parseExcelBuffer } from '../utils/excelParser';
+import { parseExcelBuffer, ExcelImportError } from '../utils/excelParser';
+import type { ExcelErrorCode } from '../utils/excelParser';
 import { formatINR } from '../utils/formatters';
+
+/**
+ * Short, plain heading for each rejection the parser can raise.
+ *
+ * The parser owns the sentence that tells the user what to DO (`hint`); this is only the
+ * headline above it. Keeping them separate means a new `ExcelErrorCode` shows up as an
+ * obvious missing entry rather than as a raw library message leaking through.
+ */
+const ERROR_TITLE: Record<ExcelErrorCode, string> = {
+  UNREADABLE_FILE: 'That file could not be opened',
+  NO_SHEET: 'That workbook is empty',
+  NO_MATCHING_COLUMNS: 'Not an OmniHR staff roster',
+  NO_DATA_ROWS: 'No staff rows in that sheet',
+  TOO_MANY_ROWS: 'Too many rows to import',
+  UNSUPPORTED_FILE: 'Wrong kind of OmniHR file',
+};
+
+/**
+ * Turns a rejection into something a user can act on.
+ *
+ * An `ExcelImportError` carries its own hint. Anything else is an unexpected failure and
+ * gets a fixed sentence: the old code interpolated `err.message`, which is how SheetJS
+ * text like "Invalid HTML: could not find <table>" ended up on screen. The raw error is
+ * still logged for debugging - it just is not what the user is shown.
+ */
+const describeImportError = (err: unknown): { title: string; hint: string } => {
+  if (err instanceof ExcelImportError) {
+    return { title: ERROR_TITLE[err.code] ?? 'Import failed', hint: err.hint };
+  }
+  return {
+    title: 'Import failed',
+    hint: 'Something went wrong while reading that file. Check that it is an Excel workbook exported from your HR system, and try again.',
+  };
+};
 
 interface ExcelHubSectionProps {
   employees: Employee[];
@@ -36,7 +71,11 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [uploadedSheetName, setUploadedSheetName] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<
+    | { type: 'success'; text: string }
+    | { type: 'error'; title: string; text: string }
+    | null
+  >(null);
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -53,13 +92,17 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
         type: 'success',
         text: `Successfully parsed ${result.totalRows} employee records from '${file.name}' (Sheet: ${result.sheetName}). Review preview below and sync.`
       });
-    } catch (err: any) {
+    } catch (err) {
+      // Kept for the developer console; deliberately not shown to the user.
       console.error(err);
-      setStatusMessage({ 
-        type: 'error', 
-        text: `Failed to parse Excel file: ${err.message || 'Unknown error. Check file format.'}` 
-      });
+      const { title, hint } = describeImportError(err);
+      setStatusMessage({ type: 'error', title, text: hint });
+      // A stale preview from a previous file must not survive a failed parse: the sync
+      // button acts on `parsedPreview`, so leaving it in place would let a user commit
+      // the PREVIOUS file's employees while reading a message about this one.
       setParsedPreview(null);
+      setRecognizedCols([]);
+      setParseWarnings([]);
     }
   };
 
@@ -205,11 +248,14 @@ export const ExcelHubSection: React.FC<ExcelHubSectionProps> = ({
         {statusMessage && (
           <div
             className={`alert ${statusMessage.type === 'success' ? 'tone-success' : 'tone-danger'}`}
-            role="status"
+            role={statusMessage.type === 'error' ? 'alert' : 'status'}
             style={{ marginTop: 'var(--space-4)' }}
           >
             {statusMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-            <span>{statusMessage.text}</span>
+            <span>
+              {statusMessage.type === 'error' && <strong>{statusMessage.title}. </strong>}
+              {statusMessage.text}
+            </span>
           </div>
         )}
 
