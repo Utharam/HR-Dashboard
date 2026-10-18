@@ -243,6 +243,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
   // report how many rows it is not showing. The `kind` tag is what lets the overflow
   // note say WHICH warnings it is hiding.
   const unresolvedEnumWarnings: Warning[] = [];
+  const statutoryWarnings: Warning[] = [];
   const rowWarnings: Warning[] = [];
   const recognizedColSet = new Set<string>();
 
@@ -373,6 +374,16 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
         text: shownValue
           ? `Row ${idx + 1} (${name}): salary "${shownValue}" could not be read as an amount. Defaulted to ₹1,20,000/mo.`
           : `Row ${idx + 1} (${name}): no salary column found in the sheet. Defaulted to ₹1,20,000/mo.`,
+      });
+    }
+
+    // A genuine zero is kept (parseCurrencyCell is right to read it as an amount), but
+    // it still needs saying: the payslip is floored at ₹0 and the row adds nothing to
+    // the disbursable total, which is a payroll question someone has to answer.
+    if (readMonthlyCTC === 0) {
+      rowWarnings.push({
+        kind: 'row',
+        text: `Row ${idx + 1} (${name}): salary is ₹0/mo in the sheet. The payslip is floored at ₹0; correct the figure if that is not intended.`,
       });
     }
 
@@ -511,13 +522,32 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
     if (row['Work Email'] || row['Work email'] || row.Email || row.email) recognizedColSet.add('Work Email');
 
     const phone = String(row.Phone ?? row['Phone Number'] ?? row.Mobile ?? row.Contact ?? '+91 9876543210').trim();
-    if (row.Phone || row['Phone Number'] || row.Mobile) recognizedColSet.add('Phone');
+    const hasPhoneColumn = Boolean(row.Phone || row['Phone Number'] || row.Mobile || row.Contact);
+    if (hasPhoneColumn) {
+      recognizedColSet.add('Phone');
+    } else {
+      rowWarnings.push({
+        kind: 'row',
+        text: `Row ${idx + 1} (${name}): no Phone column found in the sheet. Recorded the placeholder +91 9876543210; replace it before using it to contact staff.`,
+      });
+    }
 
     // 17. PF UAN
+    const hasUanColumn = Boolean(row['PF UAN'] || row.UAN || row['UAN Number'] || row.uan);
     const uan = String(
       row['PF UAN'] ?? row.UAN ?? row['UAN Number'] ?? row.uan ?? '100123456789',
     ).trim();
-    if (row['PF UAN'] || row.UAN || row['UAN Number'] || row.uan) recognizedColSet.add('PF UAN');
+    if (hasUanColumn) {
+      recognizedColSet.add('PF UAN');
+    } else {
+      // This one reaches a statutory form. A two-column sheet otherwise imports a whole
+      // roster carrying the same invented EPFO number, silently. Kept in its own list so
+      // the display cap cannot hide it behind a salary or phone message.
+      statutoryWarnings.push({
+        kind: 'row',
+        text: `Row ${idx + 1} (${name}): no PF UAN column found in the sheet. Recorded the placeholder 100123456789; replace it before filing any EPF return.`,
+      });
+    }
 
     // 18. Reporting line
     //
@@ -558,15 +588,17 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
   });
 
   // Unresolved Status / Gender rows lead the list: they are the failures with no route
-  // out of the app, and every one of them changes what the Payroll tab totals. The cap
-  // is the pre-existing 5-line display limit, and the last line always states how many
-  // are hidden - a truncated list must not read as "that was all of them".
+  // out of the app, and every one of them changes what the Payroll tab totals. The
+  // fabricated-PF-UAN warning sits next because it is the per-row message that reaches a
+  // statutory form; salary, date, attendance and phone follow. The cap is the pre-existing
+  // 5-line display limit, and the last line always states how many are hidden - a truncated
+  // list must not read as "that was all of them".
   //
   // The overflow line is computed over the COMBINED list, and assembled before it is
   // sliced. The previous version appended row warnings after the overflow note and then
   // sliced the whole thing to 5, so on a sheet that produced both kinds the note filled
   // the cap and every per-row salary and date warning was dropped without a word.
-  const ordered: Warning[] = [...unresolvedEnumWarnings, ...rowWarnings];
+  const ordered: Warning[] = [...unresolvedEnumWarnings, ...statutoryWarnings, ...rowWarnings];
   const shown = ordered.slice(0, MAX_WARNINGS - 1);
   const hidden = ordered.slice(MAX_WARNINGS - 1);
   const hiddenEnums = hidden.filter((w) => w.kind === 'enum').length;
@@ -578,7 +610,7 @@ export function mapExcelRowsToEmployees(rows: Record<string, unknown>[]): {
       : [
           `+ ${hidden.length} more row(s) in this sheet had a value that could not be read` +
             ` (${hiddenEnums > 0 ? `${hiddenEnums} Status or Gender, ` : ''}` +
-            `${hiddenRows > 0 ? `${hiddenRows} salary, date or attendance` : ''}` +
+            `${hiddenRows > 0 ? `${hiddenRows} salary, date, attendance or identity` : ''}` +
             `); each was recorded as Unknown or defaulted rather than guessed.`,
         ];
 

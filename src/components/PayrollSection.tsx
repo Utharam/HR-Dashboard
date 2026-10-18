@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Employee } from '../types';
 import { formatINR, formatCrores } from '../utils/formatters';
-import { computePayroll, isActive, PROFESSIONAL_TAX } from '../utils/payroll';
+import { computePayroll, isActive } from '../utils/payroll';
+import { statusBadgeClass, statusBadgeLabel } from './statusBadge';
 import { clampPage, describeTable, pageRangeLabel, scrollRegionLabel, totalPagesFor } from '../utils/pagination';
 
 const PAGE_SIZE = 25;
@@ -29,9 +30,12 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
   const totalMonthlyGross = payroll.reduce((acc, p) => acc + p.gross, 0);
   const totalBasic = payroll.reduce((acc, p) => acc + p.basic, 0);
   const totalEPF = payroll.reduce((acc, p) => acc + p.epf, 0);
-  const totalPT = activeRoster.length * PROFESSIONAL_TAX; // Standard ₹200/mo
-  const totalLOP = payroll.reduce((acc, p) => acc + p.lossOfPay, 0);
-  const totalNetDisbursable = totalMonthlyGross - (totalEPF + totalPT + totalLOP);
+  // Read the per-row figures rather than `activeRoster.length * PROFESSIONAL_TAX` and the
+  // gross-minus-deductions formula: `computePayroll` floors a net at zero, so a run that
+  // contains a zero-CTC row must sum what the table's Net column prints, not a parallel
+  // formula that would disagree with it.
+  const totalPT = payroll.reduce((acc, p) => acc + p.professionalTax, 0);
+  const totalNetDisbursable = payroll.reduce((acc, p) => acc + p.netPayable, 0);
 
   // The page control follows the data: reset to page 1 when the roster changes size, and
   // re-derive the page on every render so a page one render behind the data cannot slice
@@ -107,6 +111,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                 <th scope="col" className="col-optional">Emp ID</th>
                 <th scope="col">Employee Name</th>
                 <th scope="col">Department</th>
+                <th scope="col">Status</th>
                 <th scope="col">Monthly CTC</th>
                 <th scope="col">Basic (50%)</th>
                 <th scope="col">HRA (25%)</th>
@@ -126,6 +131,14 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                     <td className="cell-id col-optional">{emp.id}</td>
                     <td className="cell-strong">{emp.name}</td>
                     <td>{emp.department}</td>
+                    {/* Resigned and Unknown rows stay visible - a master register is a
+                        record of who is on file - but the Status column is what tells a
+                        reader why their Net does not sit in the active-only card above. */}
+                    <td>
+                      <span className={`badge ${statusBadgeClass(emp.status)}`}>
+                        {statusBadgeLabel(emp.status)}
+                      </span>
+                    </td>
                     <td className="cell-strong">₹{formatINR(emp.monthlyCTC)}</td>
                     <td>₹{formatINR(emp.basicSalary)}</td>
                     <td>₹{formatINR(emp.hra)}</td>
@@ -146,7 +159,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
               })}
               {currentItems.length === 0 && (
                 <tr>
-                  <td colSpan={11}>
+                  <td colSpan={12}>
                     <div className="empty-cell">
                       No payroll records match the current search and filters.
                     </div>

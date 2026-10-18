@@ -46,7 +46,7 @@ const ALIAS_ROWS = [
   { field: 'Department', aliases: 'Department, department, Dept, Dept Name, Division', type: 'String', def: 'Engineering & Technology', copy: 'Department' },
   { field: 'Designation / Role', aliases: 'Designation / Role, Designation, Role, role, Title, Job Title', type: 'String', def: 'Software Engineer', copy: 'Designation / Role' },
   { field: 'Office Location', aliases: 'Office Location, Location, location, Branch, City, Office', type: 'String', def: 'Bengaluru HQ', copy: 'Office Location' },
-  { field: 'Date of Joining', aliases: 'DOJ, Date of Joining, Joining Date, Hire Date, doj', type: 'Date / Serial / Str', def: '2023-01-15', copy: 'Date of Joining' },
+  { field: 'Date of Joining', aliases: 'DOJ, Date of Joining, Joining Date, Hire Date, doj', type: 'Date / Serial / Str', def: 'Blank (with a warning)', copy: 'Date of Joining' },
   { field: 'Monthly CTC', aliases: 'Monthly CTC, MonthlyCTC, Monthly Gross CTC, CTC, salary', type: 'Number (INR)', def: 'Annual / 12 or ₹1,20,000', copy: 'Monthly CTC' },
   { field: 'Annual CTC', aliases: 'Annual CTC (INR), Annual CTC, AnnualCTC, Yearly CTC, Annual Salary', type: 'Number (INR)', def: 'Monthly CTC * 12', copy: 'Annual CTC (INR)' },
   { field: 'Basic Salary', aliases: 'Monthly Basic Salary, Basic Salary, BasicSalary, Basic', type: 'Number (INR)', def: '50% of Monthly CTC', copy: 'Basic Salary' },

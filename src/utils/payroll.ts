@@ -68,7 +68,10 @@ export function computePayroll(employee: Employee): PayrollBreakdown {
     professionalTax,
     lossOfPay,
     totalDeductions,
-    netPayable: gross - totalDeductions,
+    // Floored at zero: an explicit ₹0 CTC (which `parseCurrencyCell` correctly reads as a
+    // real amount) would otherwise carry a ₹200 Professional Tax deduction and a payslip
+    // of -₹200, deflating the disbursable total. A negative net is never a real payment.
+    netPayable: Math.max(0, gross - totalDeductions),
   }
 }
 
@@ -88,6 +91,18 @@ export function computePayroll(employee: Employee): PayrollBreakdown {
  * record of who is on file, not a statement of who is being paid, and batch B keeps
  * Resigned staff visible in the payroll table for the same reason.
  */
+const PAYROLL_RUN_STATUSES: ReadonlySet<string> = new Set<Employee['status']>([
+  'Active',
+  'Probation',
+  'Notice Period',
+]);
+
 export function isActive(employee: Employee): boolean {
-  return employee.status !== 'Resigned' && employee.status !== 'Unknown';
+  // An ALLOW-LIST, not `status !== 'Resigned' && status !== 'Unknown'`. The old test was
+  // fail-open: any unrecognised string (only reachable through hand-edited storage, since
+  // the parser normalises to the union) counted as evidence of employment. Naming the
+  // includable members is the only version that actually fails closed - and `rowValidators`
+  // is allowed to keep an unrecognised status on the roster because this predicate, its
+  // consumer, now rejects it rather than paying it.
+  return PAYROLL_RUN_STATUSES.has(employee.status);
 }

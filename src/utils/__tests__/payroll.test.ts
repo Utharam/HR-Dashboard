@@ -64,6 +64,13 @@ describe('computePayroll', () => {
     const p = computePayroll(emp({ monthlyCTC: NaN }))
     expect(Number.isFinite(p.netPayable)).toBe(true)
   })
+  it('floors net payable at zero for a zero-CTC row', () => {
+    // Professional Tax used to be charged unconditionally, so an explicit ₹0 CTC
+    // produced netPayable = -200 and deflated the disbursable total.
+    const p = computePayroll(emp({ monthlyCTC: 0, basicSalary: 0, hra: 0, specialAllowance: 0 }))
+    expect(p.gross).toBe(0)
+    expect(p.netPayable).toBe(0)
+  })
 })
 
 describe('isActive', () => {
@@ -76,5 +83,10 @@ describe('isActive', () => {
   })
   it('excludes Unknown staff: an unresolved import is not evidence of employment', () => {
     expect(isActive(emp({ status: 'Unknown' }))).toBe(false)
+  })
+  it('fails closed on a status outside the roster union', () => {
+    // Only reachable through hand-edited storage, but a value the app does not
+    // recognise must not be treated as evidence of employment.
+    expect(isActive(emp({ status: 'Retiring' as Employee['status'] }))).toBe(false)
   })
 })

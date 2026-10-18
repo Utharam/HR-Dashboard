@@ -363,4 +363,27 @@ describe('mapExcelRowsToEmployees does not invent values', () => {
     // A truncated list must not read as "that was all of them".
     expect(result.warnings.some((w) => /more row/i.test(w))).toBe(true);
   });
+
+  it('warns when it substitutes a fabricated PF UAN for a missing column', async () => {
+    // A two-column sheet now imports a roster carrying EPFO numbers nobody entered,
+    // and that field reaches a statutory return. The value is kept (the row is still
+    // usable) but the substitution is stated for the row that carries it.
+    const result = await parseExcelBuffer(
+      workbook([{ 'Employee ID': 'EMP-1001', 'Full Name': 'Asha Menon' }]),
+    );
+
+    const uanWarning = result.warnings.find((w) => /UAN/i.test(w));
+    expect(uanWarning).toBeDefined();
+    expect(uanWarning).toContain('Row 1 (Asha Menon)');
+  });
+
+  it('keeps an explicit zero salary at zero and warns that the payslip is zero', async () => {
+    // `parseCurrencyCell` correctly reads 0 as a real amount, not as missing data.
+    // The value must survive, but a zero-CTC row is still worth flagging: it floors
+    // the payslip at zero (computePayroll) and deflates the disbursable total.
+    const result = await parseExcelBuffer(workbook([rosterRow({ 'Monthly CTC': 0 })]));
+
+    expect(result.employees[0].monthlyCTC).toBe(0);
+    expect(result.warnings.some((w) => /₹0/.test(w))).toBe(true);
+  });
 });

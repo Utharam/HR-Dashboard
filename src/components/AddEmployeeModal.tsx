@@ -2,6 +2,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import type { Employee, Department } from '../types';
 import { toISODate } from '../utils/dates';
+import { resolveDeptId } from '../utils/excelSchema';
 import { Dialog } from './Dialog';
 
 interface AddEmployeeModalProps {
@@ -135,7 +136,7 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
       email: `${name.trim().toLowerCase().replace(/\s+/g, '.')}@omnixhr.io`,
       phone: phone.trim(),
       department,
-      deptId: department.toLowerCase().slice(0, 4),
+      deptId: resolveDeptId(department),
       role: role.trim(),
       location,
       doj,

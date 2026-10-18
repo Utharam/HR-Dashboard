@@ -76,8 +76,18 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const noticeCount = employees.filter(e => e.status === 'Notice Period').length;
   const unknownStatusCount = employees.filter(e => e.status === 'Unknown').length;
 
-  const totalMonthlyPayroll = employees.reduce((acc, e) => acc + e.monthlyCTC, 0);
-  const avgMonthlyCTC = totalHeadcount ? totalMonthlyPayroll / totalHeadcount : 0;
+  // Headcount on the payroll run. `isActive` excludes Resigned and Unknown, which is what
+  // every other payable figure in this app is derived from - a tile that disagreed with the
+  // payroll tab was disagreeing about who counts as staff at all.
+  const activeEmployees = employees.filter(isActive);
+  const payrollRunHeadcount = activeEmployees.length;
+
+  // The payroll tab derives its identically-named tile from the active roster, so this one
+  // must too: summing every record here made the two tabs report two different "monthly
+  // payroll CTC" totals with no basis label to reconcile them. The average uses the same
+  // active denominator, so it cannot quietly average over resigned staff either.
+  const totalMonthlyPayroll = activeEmployees.reduce((acc, e) => acc + e.monthlyCTC, 0);
+  const avgMonthlyCTC = payrollRunHeadcount ? totalMonthlyPayroll / payrollRunHeadcount : 0;
   // An empty roster has no attendance to average. The old fallback published a literal
   // '95.2', which is a plausible-looking workforce statistic for a dataset that does
   // not exist. 0.0 is the honest reading and matches the empty-roster ratio fallback
@@ -106,11 +116,6 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
   // High Performers (5-star rating)
   const topPerformers = employees.filter(e => e.performanceRating === 5).slice(0, 5);
-
-  // Headcount on the payroll run. `isActive` excludes Resigned and Unknown, which is what
-  // every other payable figure in this app is derived from - a tile that disagreed with the
-  // payroll tab was disagreeing about who counts as staff at all.
-  const payrollRunHeadcount = employees.filter(isActive).length;
 
   // Attrition, over the records actually in view.
   //

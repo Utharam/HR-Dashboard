@@ -108,4 +108,15 @@ describe('AddEmployeeModal', () => {
       monthlyCTC: 275000,
     });
   });
+
+  it('stores the canonical department id, not the deleted four-character slug', async () => {
+    const onAddEmployee = vi.fn();
+    render(<Harness onAddEmployee={onAddEmployee} />);
+    await open();
+    await completeTheForm();
+
+    // The old `toLowerCase().slice(0, 4)` produced `engi` for a department whose
+    // canonical id is `eng`, so a future deptId-keyed feature would never match.
+    expect(onAddEmployee.mock.calls[0][0]).toMatchObject({ deptId: 'eng' });
+  });
 });

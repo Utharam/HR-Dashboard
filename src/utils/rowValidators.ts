@@ -23,12 +23,14 @@
  *
  * WHAT IS DELIBERATELY NOT CHECKED
  *
- * Enum membership. `status` and `gender` are widened unions in `types.ts`, and both
- * consumers (`isActive`, the diversity ratios) already fail closed on a value they do
- * not recognise. Rejecting a whole roster because one HRMS cell read "Retiring" would
- * cost a user their entire register to fix one string - the exact trade this batch is
- * trying to stop making. A string is enough; which string is a data question, not a
- * shape question.
+ * Enum membership. `status` and `gender` are widened unions in `types.ts`. This validator
+ * still does not reject an out-of-union value: discarding a whole roster because one HRMS
+ * cell read "Retiring" would cost a user their entire register to fix one string - the
+ * exact trade this batch is trying to stop making. A string is enough here; which string
+ * is a data question, not a shape question. The consumers are what make that safe:
+ * `isActive` checks an allow-list of payable statuses, and the diversity ratios count the
+ * declared values explicitly, so an unrecognised status or gender is excluded rather than
+ * paid or averaged in.
  */
 
 import type { Employee, HRPolicy } from '../types';

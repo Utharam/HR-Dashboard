@@ -64,12 +64,15 @@ describe('normalizeGender', () => {
 
 describe('mapExcelRowsToEmployees warnings', () => {
   // Every field that would otherwise raise a warning is supplied, so each expectation
-  // below is about the Status / Gender warning alone.
+  // below is about the Status / Gender warning alone. PF UAN and Phone joined that set
+  // when a missing column there started warning (it used to substitute silently).
   const row = (over: Record<string, unknown>) => ({
     'Employee ID': 'EMP-1',
     'Full Name': 'Asha Menon',
     DOJ: '2024-01-15',
     'Monthly CTC': 150000,
+    'PF UAN': '100123456789',
+    Phone: '+91 9000000000',
     ...over,
   })
 

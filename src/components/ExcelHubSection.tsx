@@ -253,7 +253,7 @@ const [statusMessage, setStatusMessage] = useState<
           Spreadsheet Ingestion & Synchronization Hub
         </h3>
         <p className="omni-card-sub" style={{ marginBottom: 'var(--space-5)' }}>
-          Upload any HR master list, attendance punch sheet, or payroll register (.xlsx, .xls, .csv). Columns and formulas are automatically recognized.
+          Upload an HR master list or attendance punch sheet (.xlsx, .xls, .csv). Columns and formulas are automatically recognized. A payroll register is not a staff roster and will be rejected.
         </p>
 
         <div 
@@ -410,7 +410,7 @@ const [statusMessage, setStatusMessage] = useState<
             <h4 className="omni-card-title">Export Complete Master Roster</h4>
           </div>
           <p className="omni-card-sub" style={{ marginBottom: 'var(--space-4)' }}>
-            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles, reporting managers, PF UANs, and leave balances.
+            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles matching the current filters, with reporting managers, PF UANs, and leave balances.
           </p>
           <button onClick={onExportEmployees} className="btn btn-primary btn-block">
             <Download size={16} /> Download Employee Master (.xlsx)
