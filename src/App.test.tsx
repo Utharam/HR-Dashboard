@@ -91,14 +91,71 @@ describe('App persistence', () => {
   });
 
   it('shows no banner at all when nothing has gone wrong', async () => {
-    // A first visit has no saved payload, and `loadPersisted` reports `recovered` for
-    // that as well as for a poisoned one. The app must not greet a new user with a
-    // recovery notice for data that never existed.
+    // A first visit has no saved payload, which `loadPersisted` reports as `empty` - the
+    // same state as a register the user deliberately emptied. Neither is a loss, so
+    // neither may produce a warning.
     render(<App />);
     await waitFor(() => {
       expect(readEnvelope('omnihr_employees').rows.length).toBeGreaterThan(0);
     });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows no banner when the saved register is a deliberate empty roster', async () => {
+    // The subtle case: a user who deleted everyone must get an EMPTY dashboard - not 200
+    // seed staff back, and not a recovery warning about data that was never lost.
+    localStorage.setItem(
+      'omnihr_employees',
+      JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [] }),
+    );
+
+    const { container } = render(<App />);
+
+    expect(await screen.findByRole('button', { name: /employee directory/i })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    // The decisive check: the app kept the empty dataset. If seed data had been
+    // substituted, the round trip below would write 200 rows back to the key.
+    await waitFor(() => {
+      expect(readEnvelope('omnihr_employees').rows).toEqual([]);
+    });
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it.each([
+    ['a legacy bare array', '{"employees":[{}]}'],
+    ['an array of nulls', '[null,null]'],
+    ['a stale schema version', '{"v":1,"rows":[{"id":"EMP-1","name":"Ghost"}]}'],
+  ])('tells the user their saved register was discarded, not restored: %s', async (_label, payload) => {
+    // The user DID have data stored and it was thrown away. That is the one case where
+    // the banner is owed to them - and it is exactly the case the old boolean contract
+    // could not separate from a first visit.
+    localStorage.setItem('omnihr_employees', payload);
+
+    render(<App />);
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/could not be read/i);
+    expect(banner).toHaveTextContent(/demo dataset is showing in its place/i);
+    // It must not claim anything was saved, and must not use a blocking dialog.
+    expect(banner).not.toHaveTextContent(/successfully|saved successfully/i);
+  });
+
+  it('lets the discarded-data banner be dismissed', async () => {
+    localStorage.setItem('omnihr_employees', '{"employees":[{}]}');
+    render(<App />);
+
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('names HR policies when the policy payload was the one discarded', async () => {
+    localStorage.setItem('omnihr_policies', '[null,null]');
+    render(<App />);
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/HR policies saved in this browser could not be read/i);
   });
 
   it('warns that a quota failure did NOT save the change, and never claims success', async () => {

@@ -49,10 +49,29 @@ interface Envelope<T> {
   rows: T[]
 }
 
+/**
+ * What happened to the payload that was found (or not found) at `key`.
+ *
+ * The three states exist because the previous boolean could not express the difference
+ * that matters to a user. `recovered: true` was returned both when a stored payload was
+ * unusable AND when the key had never existed, so any message built on it greeted every
+ * first-time visitor with "your saved data could not be read" about data that never
+ * existed.
+ *
+ * - `loaded`    a current envelope was found and every row passed the validator.
+ * - `empty`     nothing usable was stored, and nothing was lost: either the key was
+ *               absent, or a well-formed envelope held zero rows. The second case is a
+ *               state a user creates on purpose by deleting everyone, and it must render
+ *               as an empty dashboard rather than 200 demo staff.
+ * - `recovered` something WAS stored and could not be used, so the fallback was
+ *               substituted. This is the only state that warrants telling the user their
+ *               saved data was discarded.
+ */
+export type LoadStatus = 'loaded' | 'empty' | 'recovered'
+
 export interface LoadResult<T> {
   rows: T[]
-  /** True when the persisted payload was rejected and seed data was substituted. */
-  recovered: boolean
+  status: LoadStatus
 }
 
 /**
@@ -104,33 +123,41 @@ function classifyWriteError(err: unknown): 'quota' | 'unavailable' {
  * indistinguishable from a mass deletion.
  *
  * An EMPTY `rows` array is a valid dataset and is returned as one — an HR user who
- * genuinely cleared the register should not be repopulated with 200 demo staff.
- * `recovered` distinguishes "seed data substituted for something unusable" from
- * "loaded exactly what was stored", so a caller can warn the user in the first case
- * only.
+ * genuinely cleared the register should not be repopulated with 200 demo staff, and
+ * nothing was lost in that case, so it reports `'empty'` rather than `'recovered'`.
+ *
+ * `status` tells the caller which of those happened, so a user is warned only when their
+ * stored data was actually discarded.
  */
 export function loadPersisted<T>(
   key: string,
   isValidRow: (row: unknown) => boolean,
   fallback: T[],
 ): LoadResult<T> {
-  const rejected: LoadResult<T> = { rows: fallback, recovered: true }
+  // `nothingStored` covers both "the key was never written" and "the read itself was
+  // refused". A hardened profile throws `SecurityError` from `getItem`, which is
+  // indistinguishable from an absent key and is not evidence that anything was lost;
+  // claiming `recovered` there would warn about data the app may never have held. The
+  // locked-profile user is still told, by the save side: storage that refuses to read
+  // also refuses to write, and that surfaces as `unavailable`.
+  const nothingStored: LoadResult<T> = { rows: fallback, status: 'empty' }
+  const discarded: LoadResult<T> = { rows: fallback, status: 'recovered' }
 
   const saved = readItem(key)
-  if (saved === null) return rejected
+  if (saved === null) return nothingStored
 
   let parsed: unknown
   try {
     parsed = JSON.parse(saved)
   } catch {
-    return rejected
+    return discarded
   }
 
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return rejected
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return discarded
 
   const envelope = parsed as Partial<Envelope<T>>
-  if (envelope.v !== DATA_SCHEMA_VERSION) return rejected
-  if (!Array.isArray(envelope.rows)) return rejected
+  if (envelope.v !== DATA_SCHEMA_VERSION) return discarded
+  if (!Array.isArray(envelope.rows)) return discarded
 
   // The row guard runs before `isValidRow` so the validator is handed a real object
   // and never has to defend against `null` itself. `[null, null]` is a payload this
@@ -139,9 +166,14 @@ export function loadPersisted<T>(
   const rowsAreValid = envelope.rows.every(
     (row) => row !== null && typeof row === 'object' && isValidRow(row),
   )
-  if (!rowsAreValid) return rejected
+  if (!rowsAreValid) return discarded
 
-  return { rows: envelope.rows as T[], recovered: false }
+  // A valid envelope with zero rows is 'empty', not 'loaded': nothing came back, and
+  // nothing was lost. Both render the same way - an empty dashboard the user can fill.
+  return {
+    rows: envelope.rows as T[],
+    status: envelope.rows.length === 0 ? 'empty' : 'loaded',
+  }
 }
 
 /**

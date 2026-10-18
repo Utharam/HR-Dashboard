@@ -41,36 +41,94 @@ describe('loadPersisted', () => {
   it('falls back to seed data when the key is absent', () => {
     const r = loadPersisted('k', () => true, [{ id: 'seed' }])
     expect(r.rows).toEqual([{ id: 'seed' }])
-    expect(r.recovered).toBe(true)
+    // Absent is NOT a recovery: a first visit has nothing to recover FROM.
+    expect(r.status).toBe('empty')
   })
   it('falls back when the payload is not valid JSON', () => {
     localStorage.setItem('k', '{not json')
     expect(loadPersisted('k', () => true, [{ id: 'seed' }]).rows).toEqual([{ id: 'seed' }])
+    expect(loadPersisted('k', () => true, [{ id: 'seed' }]).status).toBe('recovered')
   })
   it('falls back when the payload is valid JSON of the wrong shape', () => {
     localStorage.setItem('k', JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ nope: 1 }] }))
-    expect(loadPersisted('k', (r) => typeof (r as any).id === 'string', [{ id: 'seed' }]).rows)
-      .toEqual([{ id: 'seed' }])
+    expect(loadPersisted('k', (r) => typeof (r as any).id === 'string', [{ id: 'seed' }]).status)
+      .toBe('recovered')
   })
   it('falls back when the schema version does not match', () => {
     localStorage.setItem('k', JSON.stringify({ v: 1, rows: [{ id: 'x' }] }))
-    expect(loadPersisted('k', () => true, [{ id: 'seed' }]).rows).toEqual([{ id: 'seed' }])
+    expect(loadPersisted('k', () => true, [{ id: 'seed' }]).status).toBe('recovered')
   })
   it('accepts a valid empty array as an empty dataset, not seed data', () => {
     localStorage.setItem('k', JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [] }))
     const r = loadPersisted('k', () => true, [{ id: 'seed' }])
     expect(r.rows).toEqual([])
-    expect(r.recovered).toBe(false)
+    // The subtle one: a user who deleted everyone must get an EMPTY dashboard, not 200
+    // seed staff back. Nothing was lost and nothing was recovered, so this is 'empty'.
+    expect(r.status).toBe('empty')
   })
   it('does not throw when localStorage access is denied', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
     expect(() => loadPersisted('k', () => true, [{ id: 'seed' }])).not.toThrow()
   })
 
+  // The three states, asserted together. The point of the union is that each one is
+  // reachable and distinguishable, and in particular that the two "we threw your data
+  // away" shapes - a wrong VERSION and a garbage payload - agree, while a first visit
+  // and a deliberately emptied register do not.
+  it('distinguishes loaded, empty and recovered', () => {
+    const seed = [{ id: 'seed' }]
+    // The validator is a parameter because "a row the app would reject" is a fourth way
+    // to be recovered, and a permissive `() => true` cannot demonstrate it.
+    const load = (raw?: string, isValidRow: (row: unknown) => boolean = () => true) => {
+      if (raw !== undefined) localStorage.setItem('k', raw)
+      return loadPersisted('k', isValidRow, seed)
+    }
+    const idsAreStrings = (row: unknown) => typeof (row as { id?: unknown }).id === 'string'
+
+    // loaded: a current envelope was found and used.
+    localStorage.clear()
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ id: 'a' }] })).status).toBe('loaded')
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ id: 'a' }] })).rows).toEqual([{ id: 'a' }])
+
+    // empty: a first visit, and a register the user deliberately cleared.
+    localStorage.clear()
+    expect(load().status).toBe('empty')
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [] })).status).toBe('empty')
+
+    // recovered: something WAS stored and it was unusable.
+    localStorage.clear()
+    expect(load('{not json').status).toBe('recovered')
+    expect(load('42').status).toBe('recovered')
+    expect(load('null').status).toBe('recovered')
+    expect(load('[null,null]').status).toBe('recovered')
+    // A current envelope whose rows the app's own validator rejects.
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ id: 42 }] }), idsAreStrings).status)
+      .toBe('recovered')
+    // Older AND newer schema versions are both unusable, in both directions.
+    localStorage.clear()
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION - 1, rows: [{ id: 'a' }] })).status).toBe('recovered')
+    localStorage.clear()
+    expect(load(JSON.stringify({ v: DATA_SCHEMA_VERSION + 1, rows: [{ id: 'a' }] })).status).toBe('recovered')
+    // A missing version is not a current envelope either.
+    localStorage.clear()
+    expect(load(JSON.stringify({ rows: [{ id: 'a' }] })).status).toBe('recovered')
+  })
+
+  // A read that could not happen at all is reported as 'empty', not 'recovered': there
+  // is no evidence anything was stored, and claiming otherwise would warn a user whose
+  // storage is merely locked about losing data they may never have had. The realistic
+  // locked-profile case is still covered by the save side - a storage that refuses to
+  // read also refuses to write, and that raises the 'unavailable' notice.
+  it('reports a denied read as empty, not recovered', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
+    expect(loadPersisted('k', () => true, [{ id: 'seed' }]).status).toBe('empty')
+  })
+
   // The two payloads measured as white-screening the app before this module existed.
   // They are valid JSON, so the old `catch {}` around `JSON.parse` let both through
   // and the throw happened downstream in a render - by which point the persistence
-  // effect had never run and the bad payload could not be overwritten.
+  // effect had never run and the bad payload could not be overwritten. Both are also
+  // real data loss: the user HAD something stored, so both are 'recovered'.
   it.each([
     ['a legacy bare-array payload', '{"employees":[{}]}'],
     ['a bare JSON scalar', '42'],
@@ -81,7 +139,7 @@ describe('loadPersisted', () => {
     localStorage.setItem('k', raw)
     const r = loadPersisted('k', () => true, [{ id: 'seed' }])
     expect(r.rows).toEqual([{ id: 'seed' }])
-    expect(r.recovered).toBe(true)
+    expect(r.status).toBe('recovered')
   })
 
   // All-or-nothing, not filter: a partially-valid roster would silently shrink the
@@ -94,7 +152,7 @@ describe('loadPersisted', () => {
     }))
     const r = loadPersisted('k', (row) => typeof (row as any).id === 'string', [{ id: 'seed' }])
     expect(r.rows).toEqual([{ id: 'seed' }])
-    expect(r.recovered).toBe(true)
+    expect(r.status).toBe('recovered')
   })
 
   it('never hands a null row to the validator', () => {
@@ -104,9 +162,9 @@ describe('loadPersisted', () => {
     expect(seen).toEqual([])
   })
 
-  it('does not treat a rejected payload as recovered data', () => {
+  it('does not report a stale payload as loaded', () => {
     localStorage.setItem('k', JSON.stringify({ v: 99, rows: [{ id: 'x' }] }))
-    expect(loadPersisted('k', () => true, []).recovered).toBe(true)
+    expect(loadPersisted('k', () => true, []).status).toBe('recovered')
   })
 })
 

@@ -34,31 +34,42 @@ const EMPLOYEES_KEY = 'omnihr_employees';
 const POLICIES_KEY = 'omnihr_policies';
 
 /**
- * A failure to PERSIST, shown to the user.
+ * Something the user has to know about their data, shown as one banner.
  *
- * `savePersisted` reports failure instead of throwing, and this is what the report
- * becomes. It deliberately says only one thing - the change on screen was not written
- * down - because an import that "succeeded" and then vanished on refresh is the failure
- * this replaces.
+ * - `discarded` (read side): a stored payload existed and could not be used, so seed data
+ *   was substituted. This is the state the previous boolean contract could not express:
+ *   it reported the same thing for a first visit, where nothing was lost, so any banner
+ *   built on it greeted every new user with a warning about data that never existed.
+ * - `not-saved` (write side): the change is on screen but was NOT written down.
+ *
+ * A user must never have to guess whether the register they are looking at is the one
+ * that will survive a refresh.
  */
-type AppNotice = { scope: 'employees' | 'policies'; reason: 'quota' | 'unavailable' };
+type AppNotice =
+  | { kind: 'discarded'; scope: 'employees' | 'policies' }
+  | { kind: 'not-saved'; scope: 'employees' | 'policies'; reason: 'quota' | 'unavailable' };
 
-const NOTICE_COPY: Record<AppNotice['reason'], string> = {
+const SAVE_NOTICE_COPY: Record<'quota' | 'unavailable', string> = {
   quota:
     'Your change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.',
   unavailable:
     'Your change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
 };
 
+const DISCARDED_NOTICE_COPY: Record<'employees' | 'policies', string> = {
+  employees:
+    'The staff register saved in this browser could not be read and has been set aside. The demo dataset is showing in its place - anything you imported earlier is gone. Re-import your roster to continue.',
+  policies:
+    'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
+};
+
 export const App: React.FC = () => {
   // Read once per mount through the validating loader. `loadPersisted` is a pure read of
   // storage, so a re-run is harmless and returns the same answer.
   //
-  // `recovered` is deliberately NOT surfaced as a notice here: it is true both for "the
-  // saved payload was unusable" and for "this is a first visit and nothing was ever
-  // saved", and the contract does not distinguish them. Warning on both would greet
-  // every new user with a recovery notice for data that never existed. Telling the
-  // difference needs a signal `storage.ts` does not expose yet.
+  // Only `status === 'recovered'` produces a notice. `'empty'` covers both a first visit
+  // and a register the user deliberately emptied, and warning about either would be a
+  // lie about data that does not exist.
   const initialLoad = useMemo(
     () => ({
       employees: loadPersisted(EMPLOYEES_KEY, isEmployeeRow, INITIAL_EMPLOYEES),
@@ -84,10 +95,18 @@ export const App: React.FC = () => {
 
   const [policies, setPolicies] = useState<HRPolicy[]>(initialLoad.policies.rows);
 
-  // One banner, one dismiss. A dismissed notice stays dismissed until the NEXT failed
-  // save: the effect is keyed to the roster, not to the banner, so a re-render has
-  // nothing to retry and nothing to re-raise.
-  const [notice, setNotice] = useState<AppNotice | null>(null);
+  // One banner, one dismiss. A dismissed notice stays dismissed until the NEXT thing that
+  // goes wrong: the save effect is keyed to the roster, not to the banner, so a re-render
+  // has nothing to retry and nothing to re-raise.
+  const [notice, setNotice] = useState<AppNotice | null>(() => {
+    if (initialLoad.employees.status === 'recovered') {
+      return { kind: 'discarded', scope: 'employees' };
+    }
+    if (initialLoad.policies.status === 'recovered') {
+      return { kind: 'discarded', scope: 'policies' };
+    }
+    return null;
+  });
 
   const handleNavigateToGuides = (sec: 'general' | 'excel' = 'general') => {
     setGuideInitialSection(sec);
@@ -130,7 +149,7 @@ export const App: React.FC = () => {
     const result = savePersisted(EMPLOYEES_KEY, employees);
     if (!result.ok) {
       // oxlint-disable-next-line react/set-state-in-effect -- see the note above
-      setNotice({ scope: 'employees', reason: result.reason });
+      setNotice({ kind: 'not-saved', scope: 'employees', reason: result.reason });
     }
   }, [employees]);
 
@@ -138,7 +157,7 @@ export const App: React.FC = () => {
     const result = savePersisted(POLICIES_KEY, policies);
     if (!result.ok) {
       // oxlint-disable-next-line react/set-state-in-effect -- see the note above
-      setNotice({ scope: 'policies', reason: result.reason });
+      setNotice({ kind: 'not-saved', scope: 'policies', reason: result.reason });
     }
   }, [policies]);
 
@@ -248,7 +267,12 @@ export const App: React.FC = () => {
     setActiveTab('directory');
   };
 
-  const noticeCopy = notice ? NOTICE_COPY[notice.reason] : '';
+  const noticeCopy = notice
+    ? notice.kind === 'not-saved'
+      ? SAVE_NOTICE_COPY[notice.reason]
+      : DISCARDED_NOTICE_COPY[notice.scope]
+    : '';
+  const noticeTitle = notice?.kind === 'discarded' ? 'Saved data could not be read' : 'Change not saved';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)' }}>
@@ -287,7 +311,7 @@ export const App: React.FC = () => {
           <div className="alert tone-warning" role="alert">
             <AlertTriangle size={16} aria-hidden="true" />
             <div className="section-stack" style={{ flex: 1 }}>
-              <strong>Change not saved</strong>
+              <strong>{noticeTitle}</strong>
               <span>{noticeCopy}</span>
             </div>
             <button
