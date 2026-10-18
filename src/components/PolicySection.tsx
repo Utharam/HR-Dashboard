@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { HRPolicy, PolicyCategory } from '../types';
 import { PolicyModal } from './PolicyModal';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface PolicySectionProps {
   policies: HRPolicy[];
@@ -27,6 +28,13 @@ interface PolicySectionProps {
   onDeletePolicy: (id: string) => void;
   onResetPolicies: () => void;
 }
+
+/**
+ * A destructive request waiting for an answer. Both destructive actions in this section used
+ * to be blocking native prompts; holding the request as state lets one themed dialog serve
+ * either of them, and lets the dialog name what is about to be lost.
+ */
+type PendingAction = { kind: 'reset' } | { kind: 'delete'; id: string; title: string };
 
 export const PolicySection: React.FC<PolicySectionProps> = ({
   policies,
@@ -39,6 +47,7 @@ export const PolicySection: React.FC<PolicySectionProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<HRPolicy | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
 
   // Statistics
   const activeCount = policies.filter(p => p.isActive).length;
@@ -94,6 +103,14 @@ export const PolicySection: React.FC<PolicySectionProps> = ({
       ...policy,
       giftOrPerk: newGift
     });
+  };
+
+  const pendingDelete = pending?.kind === 'delete' ? pending : null;
+
+  const handleConfirmPending = () => {
+    if (pendingDelete) onDeletePolicy(pendingDelete.id);
+    else onResetPolicies();
+    setPending(null);
   };
 
 const getCategoryIcon = (category: PolicyCategory) => {
@@ -217,11 +234,7 @@ const getCategoryIcon = (category: PolicyCategory) => {
             </button>
 
             <button 
-              onClick={() => {
-                if (confirm('Reset policies to standard corporate defaults (including statutory maternity, paternity, quotas, sabbatical, and gifts)?')) {
-                  onResetPolicies();
-                }
-              }} 
+              onClick={() => setPending({ kind: 'reset' })}
               className="btn btn-secondary"
               title="Reset to default policies"
             >
@@ -370,11 +383,7 @@ const getCategoryIcon = (category: PolicyCategory) => {
 
               {policy.isCustom && (
                 <button 
-                  onClick={() => {
-                    if (confirm(`Delete custom policy "${policy.title}"?`)) {
-                      onDeletePolicy(policy.id);
-                    }
-                  }}
+                  onClick={() => setPending({ kind: 'delete', id: policy.id, title: policy.title })}
                   className="btn btn-danger btn-sm"
                 >
                   <Trash2 size={13} /> Delete
@@ -415,6 +424,29 @@ const getCategoryIcon = (category: PolicyCategory) => {
           }
         }}
         policyToEdit={editingPolicy}
+      />
+
+      {/*
+        One dialog for both destructive actions. The reset message is the one the native
+        prompt could never give: not "are you sure?" but what specifically is destroyed and
+        that it cannot be brought back, because a custom policy the user spent an afternoon
+        writing is not recoverable by resetting a filter.
+      */}
+      <ConfirmDialog
+        isOpen={pending !== null}
+        title={
+          pendingDelete
+            ? `Delete the custom policy "${pendingDelete.title}"?`
+            : 'Reset all policies to the corporate defaults?'
+        }
+        message={
+          pendingDelete
+            ? `"${pendingDelete.title}" will be removed from the policy register. It cannot be recovered once deleted.`
+            : 'Every custom policy you added or edited will be lost, and the statutory maternity, paternity, leave-quota, sabbatical and gift policies will be restored to their defaults. Custom policies cannot be recovered afterwards.'
+        }
+        confirmLabel={pendingDelete ? 'Delete policy' : 'Reset all policies'}
+        onConfirm={handleConfirmPending}
+        onCancel={() => setPending(null)}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import type { Employee, Department } from '../types';
 import { toISODate } from '../utils/dates';
@@ -13,6 +13,15 @@ interface AddEmployeeModalProps {
   totalEmployeesCount: number;
 }
 
+// What "an empty form" means. Stated once because the state below is initialised from these
+// AND the reset effect puts every field back to them: when the modal was reopened it kept
+// the last person's name, designation, salary and phone, so a user adding several people in
+// a row silently duplicated the previous one into the register.
+const DEFAULT_ROLE = 'Senior Software Engineer';
+const DEFAULT_CTC = 150000;
+const DEFAULT_DEPARTMENT = 'Engineering & Technology';
+const DEFAULT_LOCATION = 'Bengaluru HQ';
+
 export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   isOpen,
   onClose,
@@ -22,14 +31,14 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   totalEmployeesCount
 }) => {
   const [name, setName] = useState('');
-  const [department, setDepartment] = useState(departments[0]?.name || 'Engineering & Technology');
-  const [role, setRole] = useState('Senior Software Engineer');
-  const [location, setLocation] = useState(locations[0] || 'Bengaluru HQ');
+  const [department, setDepartment] = useState(departments[0]?.name || DEFAULT_DEPARTMENT);
+  const [role, setRole] = useState(DEFAULT_ROLE);
+  const [location, setLocation] = useState(locations[0] || DEFAULT_LOCATION);
   // toISODate reads local components, so a hire created between 00:00 and 05:30 IST
-// is stamped with today's date. `new Date().toISOString().slice(0, 10)` would give
-// it yesterday's - wrong on the field that drives tenure and statutory gratuity.
+  // is stamped with today's date. `new Date().toISOString().slice(0, 10)` would give
+  // it yesterday's - wrong on the field that drives tenure and statutory gratuity.
 const [doj, setDoj] = useState(() => toISODate(new Date()));
-  const [ctc, setCtc] = useState(150000);
+  const [ctc, setCtc] = useState(DEFAULT_CTC);
   // Keyed off Employee['gender'] rather than a hand-written union, so this form cannot
   // drift from the roster vocabulary. A new hire is always on the roster, so the honest
   // default is 'Active' and the picker offers a declined answer rather than forcing one
@@ -45,7 +54,41 @@ const [doj, setDoj] = useState(() => toISODate(new Date()));
   // records a decline that nobody made.
   const [gender, setGender] = useState<Employee['gender'] | ''>('');
   const [genderError, setGenderError] = useState(false);
-  const [phone, setPhone] = useState('+91 9876543210');
+  // Empty, not '+91 9876543210'. A realistic-looking number in the VALUE is one the user
+  // reads, judges plausible, and submits into the employee register unchanged - a contact
+  // detail belonging to nobody, recorded as though it were somebody's. The same number
+  // sits in `placeholder`, where it demonstrates the expected format without being data.
+  const [phone, setPhone] = useState('');
+
+  // Keyed on the open edge, not on every render: this is the difference between "opening
+  // the Add Staff form gives me a blank form" and "opening it gives me the last person I
+  // added". The date is re-stamped here too, so a modal left open across midnight offers
+  // tomorrow's date of joining rather than the one it was opened on.
+  //
+  // `departments` and `locations` are listed because they feed the reset. Every caller
+  // passes module-level constants, so their identity never changes and the effect does not
+  // re-run on an unrelated parent render - but a caller that DID swap them should have the
+  // pickers reset to the new options, so the dependency is real rather than suppressed.
+  //
+  // The setState calls below are the thing this lint rule exists to catch, and here they are
+  // the point: the reset is driven by an external edge (the modal opening), not by any event
+  // this component handled. Deriving it during render would mean calling nine setters
+  // mid-render, and moving it to the trigger button would mean the caller has to remember to
+  // clear someone else's state. Keying a remount would be the other clean option and needs
+  // the whole form lifted into its own component.
+  useEffect(() => {
+    if (!isOpen) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+    setName('');
+    setDepartment(departments[0]?.name || DEFAULT_DEPARTMENT);
+    setRole(DEFAULT_ROLE);
+    setLocation(locations[0] || DEFAULT_LOCATION);
+    setDoj(toISODate(new Date()));
+    setCtc(DEFAULT_CTC);
+    setGender('');
+    setGenderError(false);
+    setPhone('');
+  }, [isOpen, departments, locations]);
 
   // No `if (!isOpen) return null` here: `Dialog` is the one place that decides whether a
   // modal exists, and it needs to stay mounted so it can see the `false -> true` edge and

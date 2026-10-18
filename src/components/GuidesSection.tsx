@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   BookOpen, 
   FileSpreadsheet, 
@@ -27,13 +27,39 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
 }) => {
   const [activeGuideTab, setActiveGuideTab] = useState<'general' | 'excel'>(initialGuide);
   const [guideSearch, setGuideSearch] = useState('');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // An OBJECT, not the bare key. Clicking the same column twice in a row has to restart
+  // the two-second countdown; storing just the key would set the same string twice, React
+  // would bail out of the re-render, and the first timer would expire mid-interaction and
+  // wipe the confirmation.
+  const [copied, setCopied] = useState<{ key: string } | null>(null);
 
   const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
+    // `navigator.clipboard` does not exist on any origin the browser considers insecure -
+    // plain http on an intranet, some corporate proxies. `writeText` is then not a rejected
+    // promise but a synchronous TypeError thrown out of this handler, which took the whole
+    // click with it and left an uncaught error in the console for every user on that origin.
+    if (!navigator.clipboard) return;
+
+    // The confirmation is only claimed once the write has actually succeeded. Setting it
+    // optimistically told the user their text was on the clipboard when the browser had
+    // refused, and they went off to paste something stale.
+    navigator.clipboard
+      .writeText(text)
+      .then(() => setCopied({ key }))
+      .catch(() => {
+        // Denied by permission policy, or the document lost focus. The column name is on
+        // screen either way, so there is nothing to recover and nothing to say.
+      });
   };
+
+  // The timer lives in an effect so it is cancelled when the countdown restarts and when
+  // the section unmounts. A bare `setTimeout` in the handler survived unmount and could
+  // set state on a component that was no longer there.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const q = guideSearch.toLowerCase().trim();
 
@@ -454,8 +480,8 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                           onClick={() => handleCopy(row.copy, row.field)}
                           className="btn btn-secondary btn-sm"
                         >
-                          {copiedKey === row.field ? <Check size={12} className="text-success-soft" /> : <Copy size={12} />}
-                          {copiedKey === row.field ? 'Copied' : 'Copy'}
+                          {copied?.key === row.field ? <Check size={12} className="text-success-soft" /> : <Copy size={12} />}
+                          {copied?.key === row.field ? 'Copied' : 'Copy'}
                         </button>
                       </td>
                     </tr>

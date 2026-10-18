@@ -22,5 +22,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* Tests under __tests__ are type-checked by tsconfig.test.json instead, which adds the
+     Node types the filesystem-reading guard test needs. Without this the app project would
+     have to declare them, and application code would then be free to reference process and
+     node:fs without a single type error. */
+  "exclude": ["src/**/__tests__/**/*"]
 }

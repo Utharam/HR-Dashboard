@@ -5,7 +5,7 @@ export interface ConfirmDialogProps {
   isOpen: boolean;
   /** Asked as a question. Also the dialog's accessible name. */
   title: string;
-  /** What is lost, stated plainly. This is what `confirm()` could never tell the user. */
+  /** What is lost, stated plainly. A native confirmation prompt can never say this. */
   message: string;
   confirmLabel: string;
   cancelLabel?: string;

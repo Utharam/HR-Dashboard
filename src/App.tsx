@@ -16,6 +16,8 @@ import { PolicySection } from './components/PolicySection';
 import { GuidesSection } from './components/GuidesSection';
 import { EmployeeModal } from './components/EmployeeModal';
 import { AddEmployeeModal } from './components/AddEmployeeModal';
+import { Callout } from './components/Callout';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
 import type { Employee, ActiveTab, HRPolicy } from './types';
 import { 
@@ -92,6 +94,13 @@ export const App: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
+
+  // A destructive action is a QUESTION, and the question is state. It used to be a blocking
+  // native prompt that froze the main thread, could not be themed, could not say what was
+  // about to be lost, and told a screen-reader user nothing until focus came back.
+  const [isResetRequested, setIsResetRequested] = useState(false);
+  // Confirmation of something that DID happen, shown inline and dismissible.
+  const [confirmation, setConfirmation] = useState<string | null>(null);
 
   const [policies, setPolicies] = useState<HRPolicy[]>(initialLoad.policies.rows);
 
@@ -250,16 +259,21 @@ export const App: React.FC = () => {
 
   // As with `handleResetPolicies`, the state change is the whole reset; the sync effect
   // rewrites the key. The `removeItem` call here was dead code that the effect undid.
-  const handleResetData = () => {
-    if (confirm('Reset application back to the 200 staff Master Demo state?')) {
-      setEmployees(INITIAL_EMPLOYEES);
-      alert('OmniHR demo data successfully reset.');
-    }
+  //
+  // This now only ASKS. The roster is replaced when the answer comes back through
+  // `ConfirmDialog`, which is the only way the reset can now happen - so there is no
+  // branch here that can discard the register on a stray click.
+  const handleResetData = () => setIsResetRequested(true);
+
+  const handleConfirmResetData = () => {
+    setEmployees(INITIAL_EMPLOYEES);
+    setIsResetRequested(false);
+    setConfirmation('Demo data reset: the register is back to the 200 staff Master Dataset.');
   };
 
   const handleAddEmployee = (newEmp: Employee) => {
     setEmployees(prev => [newEmp, ...prev]);
-    alert(`Added ${newEmp.name} (${newEmp.id}) to employee register.`);
+    setConfirmation(`${newEmp.name} (${newEmp.id}) was added to the employee register.`);
   };
 
   const handleImportEmployees = (newEmps: Employee[]) => {
@@ -305,7 +319,7 @@ export const App: React.FC = () => {
           Persistence problems are shown here, above the view and below the header, so
           they stay visible on every tab: a failed write is not a property of the section
           the user happens to be looking at. `tone-warning` supplies the colour through
-          the `--tone-*` tokens in index.css - no inline hex, no window.alert.
+          the `--tone-*` tokens in index.css - no inline hex, no blocking browser dialog.
         */}
         {notice && (
           <div className="alert tone-warning" role="alert">
@@ -324,6 +338,20 @@ export const App: React.FC = () => {
               Dismiss
             </button>
           </div>
+        )}
+
+        {/*
+          A confirmation that something DID happen, in the same slot as the warnings above.
+          It is inline rather than modal because nothing is at stake: the user is not being
+          asked to decide anything, and a scrim over their own dashboard to say "saved" would
+          cost them their place. It is dismissed explicitly, and it never claims a write
+          succeeded - that is the `notice` banner's job, and the two are deliberately kept
+          apart so a failed save can never be mistaken for this.
+        */}
+        {confirmation && (
+          <Callout tone="success" onDismiss={() => setConfirmation(null)}>
+            {confirmation}
+          </Callout>
         )}
 
         {/* View Switching */}
@@ -421,6 +449,20 @@ export const App: React.FC = () => {
         locations={locations}
         onAddEmployee={handleAddEmployee}
         totalEmployeesCount={employees.length}
+      />
+
+      {/*
+        Asked last, and rendered last, so it stacks above the other modals. The message says
+        what is actually lost, which the native prompt it replaced could not: this discards
+        every imported and hand-added record, not merely the current view.
+      */}
+      <ConfirmDialog
+        isOpen={isResetRequested}
+        title="Reset application to the Master Demo state?"
+        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset. This cannot be undone."
+        confirmLabel="Reset demo data"
+        onConfirm={handleConfirmResetData}
+        onCancel={() => setIsResetRequested(false)}
       />
     </div>
   );
