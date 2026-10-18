@@ -121,6 +121,15 @@ export const App: React.FC = () => {
     setIsSidebarOpen(false);
   };
 
+  // The one thing a "nothing matches" page can usefully offer: the way back. Each section
+  // that can render an empty state takes this as its single action, so the reset lives here
+  // next to the three pieces of state that caused the emptiness.
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setSelectedDept('ALL');
+    setSelectedLocation('ALL');
+  };
+
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
@@ -451,10 +460,11 @@ export const App: React.FC = () => {
 
         {/* View Switching */}
         {activeTab === 'overview' && (
-          <OverviewSection 
+          <OverviewSection
             employees={filteredEmployees}
             departments={departments}
             onSelectEmployee={setSelectedEmployee}
+            onClearFilters={handleClearFilters}
           />
         )}
 
@@ -486,20 +496,31 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'recruitment' && (
-          <RecruitmentSection 
+          <RecruitmentSection
             requisitions={requisitions}
+            departments={departments}
+            onClearFilters={handleClearFilters}
           />
         )}
 
+        {/*
+          Every section that reads the register reads `filteredEmployees`, this one included.
+          It was the one exception, which made its "Clear filters" action a control that
+          could not help: the list it empties was never emptied by the filter in the first
+          place. Its empty state now has a cause the reader can act on, like every other
+          tab's.
+        */}
         {activeTab === 'retention' && (
-          <RetentionSection 
-            employees={employees}
+          <RetentionSection
+            employees={filteredEmployees}
+            onClearFilters={handleClearFilters}
           />
         )}
 
         {activeTab === 'trends' && (
-          <TrendsSection 
+          <TrendsSection
             tracker={tracker}
+            onClearFilters={handleClearFilters}
           />
         )}
 

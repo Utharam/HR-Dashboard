@@ -1,16 +1,33 @@
 import React from 'react';
-import type { JobRequisition } from '../types';
+import type { Department, JobRequisition } from '../types';
 import { describeTable, scrollRegionLabel } from '../utils/pagination';
 
 const TABLE_TITLE = 'Corporate hiring pipeline and requisitions';
 
 interface RecruitmentSectionProps {
   requisitions: JobRequisition[];
+  /**
+   * Used only to count the organisation units in the pipeline summary.
+   *
+   * Optional because the section can be rendered on its own; without it the summary says
+   * nothing about orgs rather than guessing. The sub-label used to read a hardcoded
+   * "Across 6 Functional Orgs" while the header filter one screen up read "7", which is
+   * the kind of contradiction a reader resolves by distrusting both.
+   */
+  departments?: Department[];
+  onClearFilters?: () => void;
 }
 
-export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({ requisitions }) => {
+export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({
+  requisitions,
+  departments,
+  onClearFilters
+}) => {
   const totalOpenings = requisitions.length;
   const totalApplicants = requisitions.reduce((acc, r) => acc + r.applicants, 0);
+  // Derived, not asserted. "Avg 36 Applicants per Opening" was a constant, and on a
+  // single requisition with 4 applicants it claimed 36.
+  const avgApplicants = totalOpenings ? (totalApplicants / totalOpenings).toFixed(0) : '0';
 
   const getStageBadge = (stage: string) => {
     switch (stage) {
@@ -21,6 +38,28 @@ export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({ requisit
     }
   };
 
+  // A bare `<thead>` over an empty `<tbody>` is a table that failed to load, not a page
+  // with nothing on it. There is a difference a user can act on, so it is stated.
+  if (requisitions.length === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No requisitions match the current filters</p>
+          <p className="empty-state__body">
+            The hiring pipeline is empty. Approved headcount budget and candidate stages
+            appear here as soon as a requisition is open &mdash; this is not a pipeline that
+            has stalled at zero.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="section-stack">
       {/* 4 Pipeline Metric Cards */}
@@ -28,27 +67,35 @@ export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({ requisit
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Active Requisitions</span>
           <div className="kpi-value">{totalOpenings} Roles</div>
-          <span className="kpi-sub">Across 6 Functional Orgs</span>
+          <span className="kpi-sub">
+            {departments ? `Across ${departments.length} Functional Orgs` : 'Across all functional orgs'}
+          </span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Total Active Candidates</span>
           <div className="kpi-value text-primary">{totalApplicants}</div>
-          <span className="kpi-sub">Avg 36 Applicants per Opening</span>
+          <span className="kpi-sub">Avg {avgApplicants} Applicants per Opening</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Average Time-to-Hire</span>
+          {/*
+            There is no time-to-hire field anywhere in the requisition data, so 24.5 was a
+            figure with no source. It stays on the page because a published reference is
+            useful, but it is labelled as a reference rather than presented as this
+            pipeline's average.
+          */}
+          <span className="kpi-label">Time-to-Hire Benchmark</span>
           <div className="kpi-value text-success">24.5 Days</div>
-          <span className="kpi-sub">Industry Benchmark: 32 Days</span>
+          <span className="kpi-sub">Industry reference figure, not measured from this pipeline</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Offers Extended (MTD)</span>
+          <span className="kpi-label">Offers Extended</span>
           <div className="kpi-value text-warning">
             {requisitions.filter(r => r.stage === 'Offer Extended').length} Offers
           </div>
-          <span className="kpi-sub">92% Offer Acceptance Ratio</span>
+          <span className="kpi-sub">Open requisitions at the offer stage</span>
         </div>
       </div>
 
@@ -96,13 +143,6 @@ export const RecruitmentSection: React.FC<RecruitmentSectionProps> = ({ requisit
                   <td className="cell-muted">{req.targetDOJ}</td>
                 </tr>
               ))}
-              {requisitions.length === 0 && (
-                <tr>
-                  <td colSpan={8}>
-                    <div className="empty-cell">No requisitions are currently open.</div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

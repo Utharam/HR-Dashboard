@@ -7,9 +7,14 @@ import { earnedLeaveBalance } from '../utils/leave';
 
 interface RetentionSectionProps {
   employees: Employee[];
+  /** See `OverviewSection`: offered only where the empty list is the filter's doing. */
+  onClearFilters?: () => void;
 }
 
-export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees }) => {
+export const RetentionSection: React.FC<RetentionSectionProps> = ({
+  employees,
+  onClearFilters
+}) => {
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [basicSalary, setBasicSalary] = useState(45000);
   const [tenureYears, setTenureYears] = useState<number | null>(5.5);
@@ -49,6 +54,30 @@ export const RetentionSection: React.FC<RetentionSectionProps> = ({ employees })
     0,
     (settlementInvalid ? 0 : gratuityResult.gratuity) + leaveEncashment + noticePay + retrenchmentComp
   );
+
+  // Every field on the settlement engine is chosen from this list, and the Compute button
+  // settles whoever happens to be selected. With nothing in it, the page offered a
+  // calculation against nobody: the default basic salary and a fabricated 5.5 years of
+  // tenure were sitting there ready to be declared a statutory entitlement.
+  if (employees.length === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No staff match the current filters</p>
+          <p className="empty-state__body">
+            A final settlement can only be computed for a profile in the register. Nothing
+            matched the current search and filters, so there is nobody to settle &mdash;
+            this is not an organisation with no end-of-service liability.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-stack">

@@ -9,6 +9,8 @@ const TABLE_TITLE = 'Historical monthly HR ledger';
 
 interface TrendsSectionProps {
   tracker: MonthlyTracker[];
+  /** See `OverviewSection`: offered only where the empty ledger is the filter's doing. */
+  onClearFilters?: () => void;
 }
 
 // Canvas cannot resolve CSS custom properties, so the chart palette is read
@@ -26,23 +28,72 @@ const CHART = {
 
 const axisTickFont = { family: CHART.font, size: 11 };
 
-export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
+export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFilters }) => {
   // The ledger is the same window the caption describes. Derived once so the caption, the
   // row count a screen reader announces and the rendered rows cannot disagree.
   const ledgerRows = tracker.slice(-12).reverse();
+
+  const latest = tracker[tracker.length - 1];
+  const earliest = tracker[0];
 
   // Read the recorded headcount directly, matching the payroll read below.
   // `|| 200` published a fabricated 200-person workforce whenever the tracker
   // was empty or the last month recorded a genuine zero — so an empty tracker
   // claimed 200 staff beside a ₹0 payroll. No record means no headcount.
-  const totalHeadcountCurrent = tracker[tracker.length - 1]?.headcount ?? 0;
+  const totalHeadcountCurrent = latest?.headcount ?? 0;
   // Read the recorded payroll directly. `|| 23000000` published a fabricated
   // ₹2.3 Cr monthly payroll whenever the tracker was empty or the last month
   // recorded a genuine zero — a payroll figure, not a placeholder, and the one
   // remaining `|| <numeric default>` on a payroll number in this section.
-  const currentPayroll = tracker[tracker.length - 1]?.grossPayroll ?? 0;
-  const avgAttendance = (tracker.reduce((acc, t) => acc + t.avgAttendance, 0) / tracker.length).toFixed(1);
-  const avgAttrition = (tracker.reduce((acc, t) => acc + t.attritionPct, 0) / tracker.length).toFixed(2);
+  const currentPayroll = latest?.grossPayroll ?? 0;
+
+  // The two averages divide by the tracker length, which is 0 for an empty ledger.
+  // `(0 / 0).toFixed(1)` is "NaN", which rendered on the page beside two honest zeros —
+  // the one number there that was provably false, and the only one a reader would be sure
+  // of. An empty ledger has no average to report, so it reports none.
+  const avgAttendance = tracker.length
+    ? (tracker.reduce((acc, t) => acc + t.avgAttendance, 0) / tracker.length).toFixed(1)
+    : '0.0';
+  const avgAttrition = tracker.length
+    ? (tracker.reduce((acc, t) => acc + t.attritionPct, 0) / tracker.length).toFixed(2)
+    : '0.00';
+
+  // Growth between the first and last month ON RECORD.
+  //
+  // This was a literal `+14.3%`. It was the number a chart of the ledger underneath it did
+  // not produce, so the tile and the chart beside it could contradict each other without
+  // either being obviously broken. A first month of zero has no growth rate to report.
+  const growthPct =
+    earliest && earliest.headcount > 0 && totalHeadcountCurrent > 0
+      ? ((totalHeadcountCurrent - earliest.headcount) / earliest.headcount) * 100
+      : null;
+  const growthLabel =
+    growthPct === null
+      ? 'Growth not derivable from this ledger'
+      : `${growthPct >= 0 ? '+' : '−'}${Math.abs(growthPct).toFixed(1)}% over ${tracker.length} recorded months`;
+
+  // An empty ledger is an absence of history, not a workforce that shrank to nothing. The
+  // table used to render a bare `<thead>` over an empty `<tbody>`, which reads as a broken
+  // table rather than as an answer.
+  if (tracker.length === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No monthly history has been recorded</p>
+          <p className="empty-state__body">
+            Headcount, payroll and attrition on this page are read from the historical
+            ledger. It holds no months, so there is no trend to plot &mdash; this is not a
+            workforce that has fallen to zero.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Chart
   const labels = tracker.map(t => t.month);
@@ -143,34 +194,44 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker }) => {
       {/* 4 Trend Cards */}
       <div className="grid grid--kpi-lg">
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Active Headcount</span>
+          <span className="kpi-label">Latest Recorded Headcount</span>
           <div className="kpi-value">{totalHeadcountCurrent}</div>
-          <span className="kpi-sub text-success">+14.3% Headcount Growth</span>
+          {/* "Active Headcount" was the old label, and it put a figure from a month that
+              has already closed next to live KPIs on the overview, as though both described
+              now. The tracker is history; it says so. */}
+          <span className="kpi-sub text-success">
+            Historical: as at {latest?.month} &bull; {growthLabel}
+          </span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Current Monthly Payroll</span>
+          <span className="kpi-label">Latest Recorded Monthly Payroll</span>
           <div className="kpi-value text-primary">{formatCrores(currentPayroll)}</div>
-          <span className="kpi-sub">₹{formatINR(currentPayroll)} / month</span>
+          <span className="kpi-sub">Historical: ₹{formatINR(currentPayroll)} for {latest?.month}</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Historical Attendance Avg</span>
           <div className="kpi-value text-info">{avgAttendance}%</div>
-          <span className="kpi-sub">Across 33 Consecutive Months</span>
+          {/* "Across 33 Consecutive Months" was a constant over a ledger that is appended to
+              and can be shorter than that; it now counts what is actually on file. */}
+          <span className="kpi-sub">Across {tracker.length} recorded months</span>
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Avg Monthly Attrition</span>
           <div className="kpi-value text-warning">{avgAttrition}%</div>
-          <span className="kpi-sub">Low Turnover Stability</span>
+          <span className="kpi-sub">Historical mean of {tracker.length} recorded months</span>
         </div>
       </div>
 
       {/* Main Historical Chart */}
       <div className="omni-card chart-card" style={{ height: '360px' }}>
+        {/* The title used to read "33-Month ... (Jan 2024 – Sep 2026)" whatever the ledger
+            held, which is the same unsourced claim the "Across 33 Consecutive Months"
+            sub-label was. It now describes the rows the chart is actually plotting. */}
         <h3 className="omni-card-title" style={{ marginBottom: 'var(--space-3)' }}>
-          33-Month Headcount vs Total Payroll Spend (Jan 2024 – Sep 2026)
+          Headcount vs Total Payroll Spend ({earliest?.month} – {latest?.month}, {tracker.length} months)
         </h3>
         <div className="chart-body">
           <Line data={trendChartData} options={chartOptions} />

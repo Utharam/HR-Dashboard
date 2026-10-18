@@ -5,12 +5,27 @@ import { Users, CreditCard, Award, CalendarCheck, TrendingDown, Sparkles } from 
 import type { Employee, Department } from '../types';
 import { formatINR, formatCrores, formatLakhs } from '../utils/formatters';
 import { computeAttendancePct } from '../utils/dates';
+import { isActive } from '../utils/payroll';
 
 interface OverviewSectionProps {
   employees: Employee[];
   departments: Department[];
   onSelectEmployee: (emp: Employee) => void;
+  /**
+   * Resets the global filters that emptied this view. Optional because the section is also
+   * rendered with a genuinely empty register, where there is nothing to clear and offering
+   * to clear it would be a control that does nothing.
+   */
+  onClearFilters?: () => void;
 }
+
+/**
+ * The published reference figure for tech attrition, kept as a constant so it can only ever
+ * change in one place - and quoted as a BENCHMARK rather than compared against the roster.
+ * The old sub-label read "Below 3.5% Tech Industry Avg" under a hardcoded 1.4%, which made
+ * an industry figure read as though the app had compared this organisation against it.
+ */
+const TECH_ATTRITION_BENCHMARK = '3.5% tech industry benchmark';
 
 // Canvas cannot resolve CSS custom properties, so the chart palette is read
 // from the token layer once. Change a token in index.css and the charts follow.
@@ -51,7 +66,8 @@ const axisTickFont = { family: CHART.font, size: 11 };
 export const OverviewSection: React.FC<OverviewSectionProps> = ({
   employees,
   departments,
-  onSelectEmployee
+  onSelectEmployee,
+  onClearFilters
 }) => {
   // Aggregate Metrics
   const totalHeadcount = employees.length;
@@ -90,6 +106,44 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
   // High Performers (5-star rating)
   const topPerformers = employees.filter(e => e.performanceRating === 5).slice(0, 5);
+
+  // Headcount on the payroll run. `isActive` excludes Resigned and Unknown, which is what
+  // every other payable figure in this app is derived from - a tile that disagreed with the
+  // payroll tab was disagreeing about who counts as staff at all.
+  const payrollRunHeadcount = employees.filter(isActive).length;
+
+  // Attrition, over the records actually in view.
+  //
+  // The denominator is stated in the sub-label because the figure is only meaningful with
+  // one: "20% attrition" over 10 records and over 10,000 are different claims, and a tile
+  // that shows one without the other is a riddle. It was a literal `1.4%` in the markup,
+  // which meant a search box returning three people still reported the organisation-wide
+  // figure as though it had been measured on those three.
+  const resignedCount = employees.filter(e => e.status === 'Resigned').length;
+  const attritionPct = (totalHeadcount ? (resignedCount / totalHeadcount) * 100 : 0).toFixed(1);
+
+  // A roster emptied by a filter is not a workforce of zero. Six KPI tiles of `0`, `0.0%`
+  // and `₹0` render exactly like a working dashboard whose numbers have gone to zero, so
+  // nothing tells anyone to look at the filter box. This returns instead of the tiles.
+  if (totalHeadcount === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No staff match the current filters</p>
+          <p className="empty-state__body">
+            Every figure on this page is computed from the register as it is currently
+            filtered. Nothing matched, so there is nothing to measure &mdash; this is not a
+            workforce of zero.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // 1. Department Headcount Chart Data
   const deptLabels = departments.map(d => d.name.split(' ')[0]);
@@ -211,12 +265,12 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       <div className="grid grid--kpi">
         <div className="omni-card kpi-card">
           <div className="kpi-head">
-            <span className="kpi-label">Total Headcount</span>
+            <span className="kpi-label">Active Headcount</span>
             <Users size={16} className="text-primary" />
           </div>
-          <div className="kpi-value">{totalHeadcount}</div>
+          <div className="kpi-value">{payrollRunHeadcount}</div>
           <div className="kpi-sub">
-            <span className="text-success">{activeCount} Active</span> • {probationCount} Probation
+            {totalHeadcount} records in view &bull; {resignedCount} resigned, {unknownStatusCount} unresolved
           </div>
         </div>
 
@@ -249,9 +303,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             <span className="kpi-label">Annual Attrition Rate</span>
             <TrendingDown size={16} className="text-warning" />
           </div>
-          <div className="kpi-value text-warning">1.4%</div>
+          <div className="kpi-value text-warning">{attritionPct}%</div>
           <div className="kpi-sub">
-            Below 3.5% Tech Industry Avg
+            {resignedCount} of {totalHeadcount} records in view are Resigned &bull; reference: {TECH_ATTRITION_BENCHMARK}
           </div>
         </div>
 
