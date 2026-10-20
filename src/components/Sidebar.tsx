@@ -12,7 +12,8 @@ import {
   BookOpen,
   Scale,
   Download,
-  RotateCcw
+  RotateCcw,
+  LogOut
 } from 'lucide-react';
 import type { ActiveTab } from '../types';
 
@@ -27,6 +28,12 @@ interface SidebarProps {
    * only transition into it.
    */
   isOpen?: boolean;
+  /**
+   * Ends the session and returns to the front door. Optional because the console
+   * is also rendered directly in tests and in isolation, where there is no
+   * session to end.
+   */
+  onSignOut?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onExportExcel,
   onResetData,
   isOpen = false,
+  onSignOut,
 }) => {
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard size={18} /> },
@@ -111,6 +119,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <RotateCcw size={14} aria-hidden="true" /> <span className="app-sidebar__label">Reset Demo State</span>
         </button>
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            className="btn btn-secondary btn-block btn-sm"
+            title="Sign out of OmniHR"
+          >
+            <LogOut size={15} aria-hidden="true" /> <span className="app-sidebar__label">Sign out</span>
+          </button>
+        )}
       </div>
     </aside>
   );

@@ -75,7 +75,7 @@ const DISCARDED_NOTICE_COPY: Record<'employees' | 'policies', string> = {
     'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
 };
 
-export const App: React.FC = () => {
+export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
   // Read once per mount through the validating loader. `loadPersisted` is a pure read of
   // storage, so a re-run is harmless and returns the same answer.
   //
@@ -373,6 +373,7 @@ export const App: React.FC = () => {
         onExportExcel={handleExportEmployees}
         onResetData={handleResetData}
         isOpen={isSidebarOpen}
+        onSignOut={onSignOut}
       />
 
       {/* Main Content Pane.

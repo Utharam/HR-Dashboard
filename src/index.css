@@ -808,6 +808,17 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   color: var(--text-bright);
 }
 
+/* Boot placeholder — the moment between reading the session and routing on it. */
+.boot-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
 /* Card ---------------------------------------------------------------- */
 .omni-card {
   background: var(--bg-card);
