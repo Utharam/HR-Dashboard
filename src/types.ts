@@ -69,6 +69,15 @@ export type ActiveTab =
   | 'policies'
   | 'guides';
 
+/**
+ * The theme preference the user chose. `system` is a preference, not a theme:
+ * it is resolved against `prefers-color-scheme` before anything reaches the DOM.
+ */
+export type ThemeMode = 'dark' | 'light' | 'system';
+
+/** What the DOM and CSS actually see. `system` never reaches them. */
+export type ResolvedTheme = 'dark' | 'light';
+
 export type PolicyCategory = 
   | 'Parental Provisions'
   | 'Leave & Quotas'
