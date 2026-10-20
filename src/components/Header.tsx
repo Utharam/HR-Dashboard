@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, UserPlus, FileSpreadsheet, Building2, MapPin, BookOpen, Menu } from 'lucide-react';
 import type { ActiveTab, Department } from '../types';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -153,6 +154,10 @@ export const Header: React.FC<HeaderProps> = ({
             <BookOpen size={16} /> Guides
           </button>
         )}
+
+        {/* Last in the action row: the same control sits top-right on the
+            landing and login, so the theme affordance never moves. */}
+        <ThemeToggle />
       </div>
     </header>
   );
