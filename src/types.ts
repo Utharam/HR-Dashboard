@@ -78,6 +78,32 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 /** What the DOM and CSS actually see. `system` never reaches them. */
 export type ResolvedTheme = 'dark' | 'light';
 
+/**
+ * The shape a backend will hand back. Kept deliberately small: identity and
+ * lifetime are the only things the front door needs to make a routing decision.
+ */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  org?: string;
+}
+
+export interface Session {
+  user: SessionUser;
+  issuedAt: string;
+  expiresAt?: string;
+}
+
+export interface Credentials {
+  email: string;
+  password: string;
+}
+
+export type SsoProvider = 'microsoft' | 'okta' | 'domain';
+
+export type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
+
 export type PolicyCategory = 
   | 'Parental Provisions'
   | 'Leave & Quotas'
