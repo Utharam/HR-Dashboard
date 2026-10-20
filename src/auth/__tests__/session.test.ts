@@ -16,4 +16,11 @@ describe('isSessionRow', () => {
     expect(isSessionRow(null)).toBe(false)
     expect(isSessionRow('session')).toBe(false)
   })
+  it('rejects an unparseable expiry rather than treating it as never-expiring', () => {
+    expect(isSessionRow({ ...valid, expiresAt: 'garbage' })).toBe(false)
+    expect(isSessionRow({ ...valid, expiresAt: '' })).toBe(false)
+  })
+  it('rejects an unparseable issue time', () => {
+    expect(isSessionRow({ ...valid, issuedAt: 'not-a-date' })).toBe(false)
+  })
 })

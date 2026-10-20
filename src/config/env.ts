@@ -1,4 +1,5 @@
 import type { AuthClient } from '../auth/AuthClient'
+import { AuthError } from '../auth/AuthClient'
 import { LocalAuthClient } from '../auth/LocalAuthClient'
 
 /**
@@ -11,9 +12,19 @@ export const AUTH_MODE: 'local' | 'http' =
   import.meta.env.VITE_AUTH_MODE === 'http' ? 'http' : 'local'
 
 /**
- * Where an `HttpAuthClient` would be selected from `AUTH_MODE` once it exists.
- * The local stub is the only implementation today; the interface is the seam.
+ * Where an `HttpAuthClient` would be selected. Until one exists, asking for HTTP
+ * mode is a deployment error, not a reason to silently accept any password.
  */
-export function createAuthClient(): AuthClient {
+export function createAuthClientFor(mode: 'local' | 'http'): AuthClient {
+  if (mode === 'http') {
+    throw new AuthError(
+      'not_configured',
+      'VITE_AUTH_MODE=http is set, but no HTTP auth client has been implemented.',
+    )
+  }
   return new LocalAuthClient()
+}
+
+export function createAuthClient(): AuthClient {
+  return createAuthClientFor(AUTH_MODE)
 }

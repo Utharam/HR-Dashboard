@@ -45,4 +45,15 @@ describe('AuthProvider', () => {
     await userEvent.click(screen.getByRole('button', { name: 'out' }))
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'))
   })
+  it('revalidates the session when the window regains focus', async () => {
+    const getSession = vi
+      .fn<() => Promise<typeof session | null>>()
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce(null)
+    render(<AuthProvider client={makeClient({ getSession })}><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'))
+    expect(getSession).toHaveBeenCalledTimes(2)
+  })
 })

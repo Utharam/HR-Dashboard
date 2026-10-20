@@ -20,14 +20,21 @@ export const ThemeToggle: React.FC<{ className?: string }> = ({ className }) => 
   const label = `Theme: ${mode} (switch to ${nextMode(mode)})`
 
   return (
-    <button
-      type="button"
-      className={`theme-toggle${className ? ` ${className}` : ''}`}
-      onClick={cycle}
-      aria-label={label}
-      title={label}
-    >
-      <Icon size={16} aria-hidden="true" />
-    </button>
+    <>
+      <button
+        type="button"
+        className={`theme-toggle${className ? ` ${className}` : ''}`}
+        onClick={cycle}
+        aria-label={label}
+        title={label}
+      >
+        <Icon size={16} aria-hidden="true" />
+      </button>
+      {/* Changing a focused button's accessible name is not reliably announced;
+          this live region is. It deliberately has no `role="status"`: that role
+          is also used by success Callouts, and two status landmarks make
+          `getByRole('status')` ambiguous for every consumer. */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">{`Theme: ${mode}`}</span>
+    </>
   )
 }

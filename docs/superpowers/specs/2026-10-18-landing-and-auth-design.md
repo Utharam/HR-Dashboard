@@ -126,6 +126,13 @@ Light overrides are defined for **every** dark token, in `index.css`, under `:ro
 
 Shadows (light) — soft and low-alpha, so they read as lift rather than dirt: `--shadow-xs … --shadow-xl` become `0 … rgba(15,23,42,0.06–0.20)` pairs, and `--shadow-primary` becomes `0 4px 14px -4px rgba(79,70,229,0.30)`.
 
+**Contrast corrections from the whole-branch review (2026-10-18).** The table above was a design target; computed contrast found four places where it failed its own AA / 3:1 claim. These are now part of the light set and are pinned by `src/utils/__tests__/themeTokens.test.ts`:
+
+- `--primary-soft: #4338CA` in light. Without it, the dark `#A5B4FC` was inherited and rendered at 1.99:1 on white across `.badge-primary`, `.btn-active`, `.pill--active`, the settlement title and `.text-primary-soft`.
+- `--on-accent: #FFFFFF` in **both** themes, used for text on a solid accent fill (`.btn-primary`, `.btn-danger:hover`, `.brand-mark`). `--text-bright` is near-black in light and was unreadable on indigo.
+- `--border-control: #7C8698` / `--border-control-strong: #5B6472` in light (dark aliases the existing `--border` / `--border-strong`). The table's `--border` is a card hairline at 1.24:1, below the ≥3:1 control-boundary claim; form controls use the control pair instead.
+- `--neutral-tone: #98A2B3` in light, so the two chart greys (`neutral` and `dim`) are distinguishable; the table gave both `#6B7280`.
+
 
 **Fragile spots that must be tokenized as part of this**, because they are hardcoded white/colour assumptions that break on light:
 

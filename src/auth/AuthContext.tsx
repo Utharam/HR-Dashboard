@@ -44,6 +44,32 @@ export const AuthProvider: React.FC<{ client?: AuthClient; children: React.React
     }
   }, [resolvedClient])
 
+  // A session is read once on mount, but a tab can outlive it. Revalidate when
+  // the user comes back to the tab, so an expiry in another tab (or the passage
+  // of the 8-hour lifetime) does not leave a signed-out visitor on the console.
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const revalidate = () => {
+      resolvedClient
+        .getSession()
+        .then((current) => {
+          if (current) return
+          setSession(null)
+          setStatus('anonymous')
+        })
+        .catch(() => {
+          setSession(null)
+          setStatus('anonymous')
+        })
+    }
+    window.addEventListener('focus', revalidate)
+    document.addEventListener('visibilitychange', revalidate)
+    return () => {
+      window.removeEventListener('focus', revalidate)
+      document.removeEventListener('visibilitychange', revalidate)
+    }
+  }, [status, resolvedClient])
+
   const signIn = useCallback(
     async (credentials: Credentials) => {
       const next = await resolvedClient.signIn(credentials)

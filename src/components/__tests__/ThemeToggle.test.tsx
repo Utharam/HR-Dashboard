@@ -28,4 +28,10 @@ describe('ThemeToggle', () => {
     expect(screen.getByRole('button', { name: /theme: system .*dark/i })).toBeInTheDocument()
     expect(document.querySelector('svg.lucide-monitor')).not.toBeNull()
   })
+  it('announces the current theme in a live region', () => {
+    const { container } = renderToggle()
+    const region = container.querySelector('[aria-live="polite"]')
+    expect(region).not.toBeNull()
+    expect(region).toHaveTextContent(/theme: dark/i)
+  })
 })

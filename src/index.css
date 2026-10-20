@@ -80,6 +80,14 @@
   --badge-resigned-bg: rgba(107, 114, 128, 0.2);
   --toggle-chip-hover: rgba(16, 185, 129, 0.24);
 
+  /* Text that sits ON a solid accent fill. It is not --text-bright: in light
+     that token is near-black, which is unreadable on indigo. */
+  --on-accent: #FFFFFF;
+  /* Form controls need their own border: the general --border is a card
+     hairline, not a 3:1 control boundary. */
+  --border-control: var(--border);
+  --border-control-strong: var(--border-strong);
+
   color-scheme: dark;
 
   /* ── 2. Status families ──────────────────────────────────────────────────
@@ -211,11 +219,15 @@
   --border-strong: #D0D5DD;
   --border-focus: rgba(79, 70, 229, 0.45);
   --hairline: #EDF0F3;
+  --border-control: #7C8698;
+  --border-control-strong: #5B6472;
 
   --primary: #4F46E5;
   --primary-hover: #4338CA;
+  --primary-soft: #4338CA;
   --primary-glow: rgba(79, 70, 229, 0.10);
   --primary-ring: rgba(79, 70, 229, 0.28);
+  --on-accent: #FFFFFF;
 
   --success: #059669;
   --success-glow: rgba(5, 150, 105, 0.12);
@@ -241,7 +253,7 @@
   --pink-glow: rgba(219, 39, 119, 0.10);
   --pink-edge: rgba(219, 39, 119, 0.25);
   --pink-soft: #BE185D;
-  --neutral-tone: #6B7280;
+  --neutral-tone: #98A2B3;
   --neutral-edge: rgba(107, 114, 128, 0.35);
 
   --text-bright: #0B0F19;
@@ -401,7 +413,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 
 .btn-primary {
   background: var(--primary);
-  color: var(--text-bright);
+  color: var(--on-accent);
   box-shadow: var(--shadow-primary);
 }
 .btn-primary:hover:not(:disabled) {
@@ -429,7 +441,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .btn-danger:hover:not(:disabled) {
   background: var(--danger);
-  color: var(--text-bright);
+  color: var(--on-accent);
   border-color: var(--danger);
 }
 
@@ -985,7 +997,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .omni-input,
 .omni-select {
   background: var(--bg-card-subtle);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   color: var(--text-main);
   padding: 9px var(--space-3);
   border-radius: var(--r-md);
@@ -1012,7 +1024,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .omni-input:hover:not(:disabled),
 .omni-select:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  border-color: var(--border-control-strong);
 }
 .omni-input:focus,
 .omni-select:focus {
@@ -1639,7 +1651,7 @@ textarea.omni-input {
   justify-content: center;
   font-weight: var(--fw-extrabold);
   font-size: var(--fs-lg);
-  color: var(--text-bright);
+  color: var(--on-accent);
   flex-shrink: 0;
 }
 .brand-name {

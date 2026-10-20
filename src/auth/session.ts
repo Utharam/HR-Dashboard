@@ -3,16 +3,22 @@ import type { Session } from '../types'
 /** Persisted through `utils/storage.ts`, never as raw localStorage. */
 export const SESSION_KEY = 'omnihr_session'
 
+const isParseableDate = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && !Number.isNaN(new Date(value).getTime())
+
 /**
- * All-or-nothing validation. A session without an identity or an issue time is
- * not a session the app can route on, and a half-restored session is how a
- * signed-out visitor ends up looking at the console.
+ * All-or-nothing validation. A session without an identity or a parseable issue
+ * time is not a session the app can route on, and a half-restored session is how
+ * a signed-out visitor ends up looking at the console.
+ *
+ * `expiresAt` must PARSE, not merely be a string: an unreadable expiry would make
+ * `NaN <= now` false and grant a session that never expires.
  */
 export function isSessionRow(row: unknown): row is Session {
   if (row === null || typeof row !== 'object') return false
   const candidate = row as { user?: unknown; issuedAt?: unknown; expiresAt?: unknown }
-  if (typeof candidate.issuedAt !== 'string') return false
-  if (candidate.expiresAt !== undefined && typeof candidate.expiresAt !== 'string') return false
+  if (!isParseableDate(candidate.issuedAt)) return false
+  if (candidate.expiresAt !== undefined && !isParseableDate(candidate.expiresAt)) return false
 
   const user = candidate.user
   if (user === null || typeof user !== 'object') return false
