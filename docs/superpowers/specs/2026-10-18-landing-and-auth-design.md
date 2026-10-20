@@ -1,6 +1,6 @@
 # OmniHR — Landing, Login, Theme & Auth Seams: Design
 
-**Status:** APPROVED (2026-10-18). Implementation plan: `docs/superpowers/plans/2026-10-18-omnihr-front-door-and-theme.md`.
+**Status:** APPROVED — implemented by `docs/superpowers/plans/2026-10-18-omnihr-front-door-and-theme.md` (2026-10-18).
 
 **Date:** 2026-10-18
 **Supersedes/expands:** `docs/superpowers/specs/2026-10-18-landing-and-auth-design-brief.md` (the six OPEN questions there are now answered; see §3).
