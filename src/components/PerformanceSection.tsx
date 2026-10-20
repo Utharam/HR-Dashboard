@@ -3,34 +3,19 @@ import { Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import { Award, Target, Zap, AlertCircle } from 'lucide-react';
 import type { Employee } from '../types';
+import { useChartTokens } from '../theme/chartTokens';
 
 interface PerformanceSectionProps {
   employees: Employee[];
   onSelectEmployee: (emp: Employee) => void;
 }
 
-// Canvas cannot resolve CSS custom properties, so the chart palette is read
-// from the token layer once. Change a token in index.css and the charts follow.
-const token = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-const CHART = {
-  danger: token('--danger'),
-  warning: token('--warning'),
-  info: token('--info'),
-  success: token('--success'),
-  purple: token('--purple'),
-  tick: token('--text-muted'),
-  grid: token('--grid-line'),
-  font: token('--font-sans')
-};
-
-const axisTickFont = { family: CHART.font, size: 11 };
-
 export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
   employees,
   onSelectEmployee
 }) => {
+  const chartTokens = useChartTokens();
+
   // Count ratings 1 to 5
   const ratingCounts = [1, 2, 3, 4, 5].map(r => 
     employees.filter(e => e.performanceRating === r).length
@@ -42,12 +27,14 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
       {
         label: 'Employees in Rating Tier',
         data: ratingCounts,
-        backgroundColor: [CHART.danger, CHART.warning, CHART.info, CHART.success, CHART.purple],
+        backgroundColor: [chartTokens.danger, chartTokens.warning, chartTokens.info, chartTokens.success, chartTokens.purple],
         borderRadius: 6,
         maxBarThickness: 72
       }
     ]
   };
+
+  const axisTickFont = { family: chartTokens.font, size: 11 };
 
   const chartOptions = {
     responsive: true,
@@ -56,12 +43,12 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
     scales: {
       y: {
         beginAtZero: true,
-        ticks: { color: CHART.tick, font: axisTickFont, padding: 6 },
-        grid: { color: CHART.grid, drawTicks: false },
+        ticks: { color: chartTokens.tick, font: axisTickFont, padding: 6 },
+        grid: { color: chartTokens.grid, drawTicks: false },
         border: { display: false }
       },
       x: {
-        ticks: { color: CHART.tick, font: axisTickFont, maxRotation: 0, autoSkip: false },
+        ticks: { color: chartTokens.tick, font: axisTickFont, maxRotation: 0, autoSkip: false },
         grid: { display: false },
         border: { display: false }
       }
@@ -69,15 +56,15 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: token('--bg-well'),
-        titleColor: token('--text-bright'),
-        bodyColor: token('--text-muted'),
-        borderColor: token('--border'),
+        backgroundColor: chartTokens.well,
+        titleColor: chartTokens.bright,
+        bodyColor: chartTokens.tick,
+        borderColor: chartTokens.border,
         borderWidth: 1,
         cornerRadius: 8,
         padding: 10,
-        titleFont: { family: CHART.font, weight: 600 as const },
-        bodyFont: { family: CHART.font }
+        titleFont: { family: chartTokens.font, weight: 600 as const },
+        bodyFont: { family: chartTokens.font }
       }
     }
   };

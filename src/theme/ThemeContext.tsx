@@ -52,9 +52,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [systemDark, setSystemDark] = useState<boolean>(systemPrefersDark)
   const resolved = resolveTheme(mode, systemDark)
 
-  useEffect(() => {
-    applyResolvedTheme(resolved)
-  }, [resolved])
+  // Applied during render, not in an effect. Children that read the CSS custom
+  // properties in their own render (the charts) must see the theme being
+  // rendered; an effect runs after them, so they would read the previous
+  // palette. The write is idempotent and targets an element React does not own.
+  applyResolvedTheme(resolved)
 
   // Track the OS only while the user has actually delegated the decision. The
   // subscription is torn down the moment they choose dark or light, so a stale
@@ -92,4 +94,13 @@ export function useTheme(): ThemeValue {
   const value = useContext(ThemeContext)
   if (!value) throw new Error('useTheme must be used within a ThemeProvider')
   return value
+}
+
+/**
+ * For leaf components that need to *subscribe* to the theme but must also render
+ * in isolation (the chart sections in their own tests). They get the real theme
+ * when a provider is present and the document's current tokens otherwise.
+ */
+export function useOptionalTheme(): ThemeValue | null {
+  return useContext(ThemeContext)
 }

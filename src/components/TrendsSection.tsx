@@ -4,6 +4,7 @@ import 'chart.js/auto';
 import type { MonthlyTracker } from '../types';
 import { formatCrores, formatINR } from '../utils/formatters';
 import { describeTable, scrollRegionLabel } from '../utils/pagination';
+import { useChartTokens } from '../theme/chartTokens';
 
 const TABLE_TITLE = 'Historical monthly HR ledger';
 
@@ -13,22 +14,9 @@ interface TrendsSectionProps {
   onClearFilters?: () => void;
 }
 
-// Canvas cannot resolve CSS custom properties, so the chart palette is read
-// from the token layer once. Change a token in index.css and the charts follow.
-const token = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-const CHART = {
-  primary: token('--primary'),
-  success: token('--success'),
-  tick: token('--text-muted'),
-  grid: token('--grid-line'),
-  font: token('--font-sans')
-};
-
-const axisTickFont = { family: CHART.font, size: 11 };
-
 export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFilters }) => {
+  const chartTokens = useChartTokens();
+
   // The ledger is the same window the caption describes. Derived once so the caption, the
   // row count a screen reader announces and the rendered rows cannot disagree.
   const ledgerRows = tracker.slice(-12).reverse();
@@ -96,6 +84,7 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
   }
 
   // Chart
+  const axisTickFont = { family: chartTokens.font, size: 11 };
   const labels = tracker.map(t => t.month);
   const headcountData = tracker.map(t => t.headcount);
   const payrollData = tracker.map(t => Number((t.grossPayroll / 10000000).toFixed(2))); // In Cr as numbers
@@ -106,10 +95,10 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
       {
         label: 'Gross Payroll Spend (₹ Crores)',
         data: payrollData,
-        borderColor: CHART.primary,
-        backgroundColor: token('--primary-glow'),
-        pointBackgroundColor: CHART.primary,
-        pointBorderColor: token('--bg-card'),
+        borderColor: chartTokens.primary,
+        backgroundColor: chartTokens.primaryGlow,
+        pointBackgroundColor: chartTokens.primary,
+        pointBorderColor: chartTokens.surface,
         pointBorderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 4,
@@ -122,9 +111,9 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
       {
         label: 'Workforce Headcount',
         data: headcountData,
-        borderColor: CHART.success,
-        backgroundColor: CHART.success,
-        pointBackgroundColor: CHART.success,
+        borderColor: chartTokens.success,
+        backgroundColor: chartTokens.success,
+        pointBackgroundColor: chartTokens.success,
         pointRadius: 0,
         pointHoverRadius: 4,
         pointHitRadius: 12,
@@ -145,19 +134,19 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
       y: {
         type: 'linear' as const,
         position: 'left' as const,
-        ticks: { color: CHART.success, font: axisTickFont, padding: 6 },
-        grid: { color: CHART.grid, drawTicks: false },
+        ticks: { color: chartTokens.success, font: axisTickFont, padding: 6 },
+        grid: { color: chartTokens.grid, drawTicks: false },
         border: { display: false }
       },
       y1: {
         type: 'linear' as const,
         position: 'right' as const,
-        ticks: { color: CHART.primary, font: axisTickFont, padding: 6 },
+        ticks: { color: chartTokens.primary, font: axisTickFont, padding: 6 },
         grid: { drawOnChartArea: false },
         border: { display: false }
       },
       x: {
-        ticks: { color: CHART.tick, font: axisTickFont, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+        ticks: { color: chartTokens.tick, font: axisTickFont, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
         grid: { display: false },
         border: { display: false }
       }
@@ -167,7 +156,7 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
         position: 'top' as const,
         align: 'end' as const,
         labels: {
-          color: CHART.tick,
+          color: chartTokens.tick,
           usePointStyle: true,
           pointStyle: 'line',
           boxWidth: 22,
@@ -176,15 +165,15 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
         }
       },
       tooltip: {
-        backgroundColor: token('--bg-well'),
-        titleColor: token('--text-bright'),
-        bodyColor: token('--text-muted'),
-        borderColor: token('--border'),
+        backgroundColor: chartTokens.well,
+        titleColor: chartTokens.bright,
+        bodyColor: chartTokens.tick,
+        borderColor: chartTokens.border,
         borderWidth: 1,
         cornerRadius: 8,
         padding: 10,
-        titleFont: { family: CHART.font, weight: 600 as const },
-        bodyFont: { family: CHART.font }
+        titleFont: { family: chartTokens.font, weight: 600 as const },
+        bodyFont: { family: chartTokens.font }
       }
     }
   };

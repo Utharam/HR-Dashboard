@@ -6,6 +6,7 @@ import type { Employee, Department } from '../types';
 import { formatINR, formatCrores, formatLakhs } from '../utils/formatters';
 import { computeAttendancePct } from '../utils/dates';
 import { isActive } from '../utils/payroll';
+import { useChartTokens } from '../theme/chartTokens';
 
 interface OverviewSectionProps {
   employees: Employee[];
@@ -27,48 +28,14 @@ interface OverviewSectionProps {
  */
 const TECH_ATTRITION_BENCHMARK = '3.5% tech industry benchmark';
 
-// Canvas cannot resolve CSS custom properties, so the chart palette is read
-// from the token layer once. Change a token in index.css and the charts follow.
-const token = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-const CHART = {
-  primary: token('--primary'),
-  success: token('--success'),
-  warning: token('--warning'),
-  danger: token('--danger'),
-  info: token('--info'),
-  purple: token('--purple'),
-  pink: token('--pink'),
-  neutral: token('--neutral-tone'),
-  surface: token('--bg-card'),
-  tick: token('--text-muted'),
-  dim: token('--text-dim'),
-  grid: token('--grid-line'),
-  font: token('--font-sans')
-};
-
-const tooltipTheme = {
-  backgroundColor: token('--bg-well'),
-  titleColor: token('--text-bright'),
-  bodyColor: token('--text-muted'),
-  borderColor: token('--border'),
-  borderWidth: 1,
-  cornerRadius: 8,
-  padding: 10,
-  displayColors: true,
-  titleFont: { family: CHART.font, weight: 600 as const },
-  bodyFont: { family: CHART.font }
-};
-
-const axisTickFont = { family: CHART.font, size: 11 };
-
 export const OverviewSection: React.FC<OverviewSectionProps> = ({
   employees,
   departments,
   onSelectEmployee,
   onClearFilters
 }) => {
+  const chartTokens = useChartTokens();
+
   // Aggregate Metrics
   const totalHeadcount = employees.length;
   const activeCount = employees.filter(e => e.status === 'Active').length;
@@ -150,6 +117,22 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     );
   }
 
+  // Canvas cannot resolve CSS custom properties, so the component reads them
+  // through the theme-subscribed hook and hands plain strings to Chart.js.
+  const axisTickFont = { family: chartTokens.font, size: 11 };
+  const tooltipTheme = {
+    backgroundColor: chartTokens.well,
+    titleColor: chartTokens.bright,
+    bodyColor: chartTokens.tick,
+    borderColor: chartTokens.border,
+    borderWidth: 1,
+    cornerRadius: 8,
+    padding: 10,
+    displayColors: true,
+    titleFont: { family: chartTokens.font, weight: 600 as const },
+    bodyFont: { family: chartTokens.font }
+  };
+
   // 1. Department Headcount Chart Data
   const deptLabels = departments.map(d => d.name.split(' ')[0]);
   const deptHeadcounts = departments.map(d => employees.filter(e => e.department === d.name).length);
@@ -163,7 +146,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       {
         label: 'Staff Headcount',
         data: deptHeadcounts,
-        backgroundColor: CHART.primary,
+        backgroundColor: chartTokens.primary,
         borderRadius: 6,
         maxBarThickness: 48
       }
@@ -176,7 +159,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       {
         label: 'Monthly Payroll (₹ Lakhs)',
         data: deptPayrolls,
-        backgroundColor: CHART.success,
+        backgroundColor: chartTokens.success,
         borderRadius: 6,
         maxBarThickness: 48
       }
@@ -195,8 +178,8 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           employees.filter(e => e.status === 'Resigned').length,
           unknownStatusCount
         ],
-        backgroundColor: [CHART.success, CHART.warning, CHART.danger, CHART.neutral, CHART.dim],
-        borderColor: CHART.surface,
+        backgroundColor: [chartTokens.success, chartTokens.warning, chartTokens.danger, chartTokens.neutral, chartTokens.dim],
+        borderColor: chartTokens.surface,
         borderWidth: 2,
         hoverOffset: 4
       }
@@ -211,8 +194,8 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     datasets: [
       {
         data: [femaleCount, maleCount, nbCount, declinedCount, unknownGenderCount],
-        backgroundColor: [CHART.pink, CHART.info, CHART.purple, CHART.dim, CHART.neutral],
-        borderColor: CHART.surface,
+        backgroundColor: [chartTokens.pink, chartTokens.info, chartTokens.purple, chartTokens.dim, chartTokens.neutral],
+        borderColor: chartTokens.surface,
         borderWidth: 2,
         hoverOffset: 4
       }
@@ -227,12 +210,12 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     scales: {
       y: {
         beginAtZero: true,
-        ticks: { color: CHART.tick, font: axisTickFont, padding: 6 },
-        grid: { color: CHART.grid, drawTicks: false },
+        ticks: { color: chartTokens.tick, font: axisTickFont, padding: 6 },
+        grid: { color: chartTokens.grid, drawTicks: false },
         border: { display: false }
       },
       x: {
-        ticks: { color: CHART.tick, font: axisTickFont },
+        ticks: { color: chartTokens.tick, font: axisTickFont },
         grid: { display: false },
         border: { display: false }
       }
@@ -252,7 +235,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       legend: {
         position: 'bottom' as const,
         labels: {
-          color: CHART.tick,
+          color: chartTokens.tick,
           usePointStyle: true,
           pointStyle: 'circle',
           boxWidth: 7,
