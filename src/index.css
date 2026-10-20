@@ -74,6 +74,14 @@
   --grid-line: rgba(255, 255, 255, 0.06);
   --neutral-tone: #6B7280;
 
+  /* Interaction tints that were hardcoded white/colour values before the light
+     theme existed. They live here because light needs different answers. */
+  --row-hover: rgba(255, 255, 255, 0.025);
+  --badge-resigned-bg: rgba(107, 114, 128, 0.2);
+  --toggle-chip-hover: rgba(16, 185, 129, 0.24);
+
+  color-scheme: dark;
+
   /* ── 2. Status families ──────────────────────────────────────────────────
      Each family is four coordinated values:
        base    solid hue, for icons and marks
@@ -185,15 +193,90 @@
   --z-modal: 999;
 }
 
+/* ── 5b. Light theme ────────────────────────────────────────────────────────
+   Dark stays the default identity, so `:root` above is untouched and this block
+   only overrides it. The hues are re-tuned for light, not inverted: the dark
+   -soft values are unreadable on white. `:root[data-theme="light"]` outranks
+   `:root`, so its position in the file is not load-bearing. */
+:root[data-theme="light"] {
+  --bg-main: #F6F7F9;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F1F3F7;
+  --bg-card-subtle: #F3F4F7;
+  --bg-table-head: #F3F4F7;
+  --bg-well: #FAFBFC;
+  --scrim: rgba(15, 23, 42, 0.45);
+
+  --border: #E4E7EC;
+  --border-strong: #D0D5DD;
+  --border-focus: rgba(79, 70, 229, 0.45);
+  --hairline: #EDF0F3;
+
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --primary-glow: rgba(79, 70, 229, 0.10);
+  --primary-ring: rgba(79, 70, 229, 0.28);
+
+  --success: #059669;
+  --success-glow: rgba(5, 150, 105, 0.12);
+  --success-edge: rgba(5, 150, 105, 0.30);
+  --success-soft: #047857;
+  --warning: #D97706;
+  --warning-glow: rgba(217, 119, 6, 0.12);
+  --warning-edge: rgba(217, 119, 6, 0.30);
+  --warning-soft: #B45309;
+  --danger: #DC2626;
+  --danger-glow: rgba(220, 38, 38, 0.10);
+  --danger-edge: rgba(220, 38, 38, 0.28);
+  --danger-soft: #B91C1C;
+  --info: #2563EB;
+  --info-glow: rgba(37, 99, 235, 0.10);
+  --info-edge: rgba(37, 99, 235, 0.28);
+  --info-soft: #1D4ED8;
+  --purple: #7C3AED;
+  --purple-glow: rgba(124, 58, 237, 0.10);
+  --purple-edge: rgba(124, 58, 237, 0.28);
+  --purple-soft: #6D28D9;
+  --pink: #DB2777;
+  --pink-glow: rgba(219, 39, 119, 0.10);
+  --pink-edge: rgba(219, 39, 119, 0.25);
+  --pink-soft: #BE185D;
+  --neutral-tone: #6B7280;
+  --neutral-edge: rgba(107, 114, 128, 0.35);
+
+  --text-bright: #0B0F19;
+  --text-main: #1F2937;
+  --text-muted: #5B6472;
+  --text-dim: #6B7280;
+
+  --grid-line: #E9EBEF;
+
+  --row-hover: rgba(15, 23, 42, 0.03);
+  --badge-resigned-bg: rgba(107, 114, 128, 0.12);
+  --toggle-chip-hover: rgba(5, 150, 105, 0.18);
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 14px -4px rgba(15, 23, 42, 0.12), 0 2px 5px -2px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 14px 30px -8px rgba(15, 23, 42, 0.16), 0 4px 10px -4px rgba(15, 23, 42, 0.10);
+  --shadow-xl: 0 28px 56px -12px rgba(15, 23, 42, 0.20), 0 8px 18px -10px rgba(15, 23, 42, 0.12);
+  --shadow-primary: 0 4px 14px -4px rgba(79, 70, 229, 0.30);
+
+  color-scheme: light;
+}
+
+/* The dark theme's picker indicator is inverted for a dark field. On a light
+   field that same filter makes it vanish, so light opts out. */
+:root[data-theme="light"] input[type='date']::-webkit-calendar-picker-indicator,
+:root[data-theme="light"] input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
 /* ── 6. Base ────────────────────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-}
-
-html {
-  color-scheme: dark;
 }
 
 body {
@@ -273,7 +356,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .badge-active { background: var(--success-glow); color: var(--success-soft); border: 1px solid var(--success-edge); }
 .badge-probation { background: var(--warning-glow); color: var(--warning-soft); border: 1px solid var(--warning-edge); }
 .badge-notice { background: var(--danger-glow); color: var(--danger-soft); border: 1px solid var(--danger-edge); }
-.badge-resigned { background: rgba(107, 114, 128, 0.2); color: var(--text-muted); border: 1px solid var(--neutral-edge); }
+.badge-resigned { background: var(--badge-resigned-bg); color: var(--text-muted); border: 1px solid var(--neutral-edge); }
 .badge-primary { background: var(--primary-glow); color: var(--primary-soft); border: 1px solid var(--border-focus); }
 .badge-info { background: var(--info-glow); color: var(--info-soft); border: 1px solid var(--info-edge); }
 .badge-purple { background: var(--purple-glow); color: var(--purple-soft); border: 1px solid var(--purple-edge); }
@@ -493,7 +576,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   transition: background-color var(--dur-fast) var(--ease-standard);
 }
 .omni-table tr:hover td {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--row-hover);
 }
 .omni-table .cell-id {
   font-family: var(--font-mono);
@@ -1036,7 +1119,7 @@ textarea.omni-input {
   color: var(--success-soft);
   border-color: var(--success-edge);
 }
-.toggle-chip--on:hover { background: rgba(16, 185, 129, 0.24); }
+.toggle-chip--on:hover { background: var(--toggle-chip-hover); }
 .toggle-chip--off:hover {
   color: var(--text-main);
   border-color: var(--border);
