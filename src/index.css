@@ -457,6 +457,33 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .btn-block { width: 100%; }
 
+/* Tri-state theme control. A real button, not a switch: clicking cycles
+   dark -> light -> system and the accessible name says what happens next. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition:
+    color var(--dur-base) var(--ease-standard),
+    border-color var(--dur-base) var(--ease-standard),
+    background-color var(--dur-base) var(--ease-standard);
+}
+.theme-toggle:hover {
+  color: var(--primary);
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+}
+
 /* Card ---------------------------------------------------------------- */
 .omni-card {
   background: var(--bg-card);
