@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
+import { ThemeProvider } from '../../theme/ThemeContext';
 import { OverviewSection } from '../OverviewSection';
 import { TrendsSection } from '../TrendsSection';
 import { RecruitmentSection } from '../RecruitmentSection';
@@ -201,7 +202,7 @@ describe('App clear-filters wiring', () => {
   });
 
   it('restores the register when the filters that emptied it are cleared', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     expect(screen.getByText(/active headcount/i)).toBeInTheDocument();
 
     await userEvent.type(
@@ -226,7 +227,7 @@ describe('App clear-filters wiring', () => {
   });
 
   it('resets the department filter too, not just the search box', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const deptSelect = screen.getByLabelText(/Filter by department/i);
 
     await userEvent.selectOptions(deptSelect, 'People & Human Resources');

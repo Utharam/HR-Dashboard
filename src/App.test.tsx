@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { App } from './App';
+import { ThemeProvider } from './theme/ThemeContext';
 import { DATA_SCHEMA_VERSION } from './utils/storage';
 import { isEmployeeRow } from './utils/rowValidators';
 import { INITIAL_EMPLOYEES } from './data/initialData';
@@ -47,7 +48,7 @@ describe('App persistence', () => {
       localStorage.setItem('omnihr_employees', payload);
 
       // The crash used to happen HERE, during render.
-      const { container } = render(<App />);
+      const { container } = render(<ThemeProvider><App /></ThemeProvider>);
       expect(container.firstChild).not.toBeNull();
 
       // The tree mounted, so the persistence effect ran, so the unusable payload was
@@ -67,7 +68,7 @@ describe('App persistence', () => {
 
   it('recovers from an unreadable policies payload the same way', () => {
     localStorage.setItem('omnihr_policies', '[null,null]');
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const written = readEnvelope('omnihr_policies');
     expect(written.v).toBe(DATA_SCHEMA_VERSION);
     expect(Array.isArray(written.rows)).toBe(true);
@@ -81,7 +82,7 @@ describe('App persistence', () => {
       JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [saved] }),
     );
 
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     // A good payload must not be reported as a recovery, and must survive the round trip.
     await waitFor(() => {
@@ -96,7 +97,7 @@ describe('App persistence', () => {
     // A first visit has no saved payload, which `loadPersisted` reports as `empty` - the
     // same state as a register the user deliberately emptied. Neither is a loss, so
     // neither may produce a warning.
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await waitFor(() => {
       expect(readEnvelope('omnihr_employees').rows.length).toBeGreaterThan(0);
     });
@@ -111,7 +112,7 @@ describe('App persistence', () => {
       JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [] }),
     );
 
-    const { container } = render(<App />);
+    const { container } = render(<ThemeProvider><App /></ThemeProvider>);
 
     expect(await screen.findByRole('button', { name: /employee directory/i })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -133,7 +134,7 @@ describe('App persistence', () => {
     // could not separate from a first visit.
     localStorage.setItem('omnihr_employees', payload);
 
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     const banner = await screen.findByRole('alert');
     expect(banner).toHaveTextContent(/could not be read/i);
@@ -144,7 +145,7 @@ describe('App persistence', () => {
 
   it('lets the discarded-data banner be dismissed', async () => {
     localStorage.setItem('omnihr_employees', '{"employees":[{}]}');
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     await screen.findByRole('alert');
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
@@ -154,7 +155,7 @@ describe('App persistence', () => {
 
   it('names HR policies when the policy payload was the one discarded', async () => {
     localStorage.setItem('omnihr_policies', '[null,null]');
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     const banner = await screen.findByRole('alert');
     expect(banner).toHaveTextContent(/HR policies saved in this browser could not be read/i);
@@ -167,7 +168,7 @@ describe('App persistence', () => {
     const alertSpy = vi.fn();
     vi.stubGlobal('alert', alertSpy);
 
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     const banner = await screen.findByText(/was NOT saved/i);
     expect(banner).toBeInTheDocument();
@@ -180,7 +181,7 @@ describe('App persistence', () => {
       throw new Error('denied');
     });
 
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     expect(await screen.findByText(/was NOT saved/i)).toBeInTheDocument();
   });
@@ -190,7 +191,7 @@ describe('App persistence', () => {
       throw new DOMException('quota', 'QuotaExceededError');
     });
 
-    const { rerender } = render(<App />);
+    const { rerender } = render(<ThemeProvider><App /></ThemeProvider>);
     const banner = await screen.findByRole('alert');
     expect(banner).toHaveTextContent(/was NOT saved/i);
 
@@ -200,8 +201,8 @@ describe('App persistence', () => {
     // A re-render with no change to the roster must not resurrect a dismissed banner:
     // the save effect is keyed to `employees`, not to the banner, so there is nothing
     // to retry. (A fresh MOUNT does re-run the save, and legitimately fails again.)
-    rerender(<App />);
-    rerender(<App />);
+    rerender(<ThemeProvider><App /></ThemeProvider>);
+    rerender(<ThemeProvider><App /></ThemeProvider>);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -210,7 +211,7 @@ describe('App persistence', () => {
       throw new DOMException('quota', 'QuotaExceededError');
     });
 
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const banner = await screen.findByRole('alert');
     expect(banner.className).toContain('alert');
     // No inline hex / rem / px: the tone has to come from the token layer in index.css.

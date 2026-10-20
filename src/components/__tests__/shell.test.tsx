@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
+import { ThemeProvider } from '../../theme/ThemeContext';
 
 /**
  * What the shell owes a keyboard and a screen-reader user, independent of viewport width.
@@ -39,7 +40,7 @@ const navToggle = () =>
 
 describe('App shell landmarks', () => {
   it('exposes exactly one main landmark', () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     // "At least one" would pass on a shell with two competing <main> elements, which is
     // the error a landmark is supposed to rule out: two mains means a screen reader user
     // has no way to tell which region they are in.
@@ -47,14 +48,14 @@ describe('App shell landmarks', () => {
   });
 
   it('exposes the navigation as a named nav landmark', () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const navs = screen.getAllByRole('navigation');
     expect(navs).toHaveLength(1);
     expect(navs[0]).toHaveAccessibleName();
   });
 
   it('marks the current page in the navigation rather than only styling it', () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const current = within(screen.getByRole('navigation')).getAllByRole('button', {
       current: 'page',
     });
@@ -65,7 +66,7 @@ describe('App shell landmarks', () => {
   });
 
   it('keeps every navigation item reachable as a real button', () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const nav = screen.getByRole('navigation');
     const items = within(nav).getAllByRole('button');
     expect(items.length).toBeGreaterThanOrEqual(11);
@@ -79,7 +80,7 @@ describe('App shell landmarks', () => {
 
 describe('App shell navigation toggle', () => {
   it('offers a keyboard-reachable control that opens and closes the navigation', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     const toggle = navToggle();
     // Focusable, and it says so: a control that only works by pointer is not a control a
@@ -96,7 +97,7 @@ describe('App shell navigation toggle', () => {
   });
 
   it('points the toggle at the element it controls, and that element is the sidebar', () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     const toggle = navToggle();
     const controlled = document.getElementById(toggle.getAttribute('aria-controls') as string);
     expect(controlled).not.toBeNull();
@@ -104,7 +105,7 @@ describe('App shell navigation toggle', () => {
   });
 
   it('closes the navigation once a destination has been chosen', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
 
     await userEvent.click(navToggle());
     expect(navToggle()).toHaveAttribute('aria-expanded', 'true');
@@ -118,7 +119,7 @@ describe('App shell navigation toggle', () => {
   });
 
   it('dismisses the navigation with Escape while it is open', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await userEvent.click(navToggle());
 
     await userEvent.keyboard('{Escape}');
@@ -127,7 +128,7 @@ describe('App shell navigation toggle', () => {
   });
 
   it('closes the navigation when its scrim is activated', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await userEvent.click(navToggle());
 
     await userEvent.click(screen.getByRole('button', { name: /dismiss navigation overlay/i }));
@@ -138,7 +139,7 @@ describe('App shell navigation toggle', () => {
 
 describe('App shell scroll ownership', () => {
   it('does not make <main> the scroll container, so a body scroll lock can work', () => {
-    const { container } = render(<App />);
+    const { container } = render(<ThemeProvider><App /></ThemeProvider>);
     const main = screen.getByRole('main');
 
     // The body scroll lock in `Dialog` sets `document.body.style.overflow`. That lock is
@@ -153,7 +154,7 @@ describe('App shell scroll ownership', () => {
   });
 
   it('resolves the content column with a track that can shrink', () => {
-    const { container } = render(<App />);
+    const { container } = render(<ThemeProvider><App /></ThemeProvider>);
     expect(container.querySelector('.app-shell')).toHaveClass('app-shell');
     // The class name is the whole of what a jsdom test can say about the grid: the
     // `minmax(0, 1fr)` track it stands for is a layout result, not a DOM one. A human

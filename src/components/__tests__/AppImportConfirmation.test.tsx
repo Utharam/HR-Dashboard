@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as XLSX from 'xlsx';
 import { App } from '../../App';
+import { ThemeProvider } from '../../theme/ThemeContext';
 import { DATA_SCHEMA_VERSION } from '../../utils/storage';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 
@@ -101,7 +102,7 @@ beforeEach(() => {
 
 describe('App destructive import', () => {
   it('leaves the register alone until the question is answered', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
 
@@ -114,7 +115,7 @@ describe('App destructive import', () => {
 
   it('writes the pre-import snapshot BEFORE the replacement, and never clears it in passing', async () => {
     const writes = recordWrites();
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await waitFor(() => expect(storedRoster()).toHaveLength(INITIAL_EMPLOYEES.length));
 
     await openExcelHub();
@@ -138,7 +139,7 @@ describe('App destructive import', () => {
   });
 
   it('stores the snapshot in the same versioned envelope as the live register', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
     await confirmReplacement();
@@ -150,7 +151,7 @@ describe('App destructive import', () => {
   });
 
   it('restores the register from the snapshot when the banner Undo is used', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
     await confirmReplacement();
@@ -163,7 +164,7 @@ describe('App destructive import', () => {
   });
 
   it('clears the snapshot once it has been used', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
     await confirmReplacement();
@@ -177,7 +178,7 @@ describe('App destructive import', () => {
   });
 
   it('adds rather than replaces when append is the answer given', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
 
@@ -194,7 +195,7 @@ describe('App destructive import', () => {
   });
 
   it('says what happened without claiming the write succeeded', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
     await uploadRoster(document.body);
     await confirmReplacement();
@@ -207,7 +208,7 @@ describe('App destructive import', () => {
   });
 
   it('does not offer an Undo for the reset confirmation, which has no snapshot', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
     await userEvent.click(screen.getByRole('button', { name: /Reset demo data/i }));
 

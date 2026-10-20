@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
+import { ThemeProvider } from '../../theme/ThemeContext';
 import { DATA_SCHEMA_VERSION } from '../../utils/storage';
 
 // Same reason as App.test.tsx: jsdom has no 2D canvas, so a real Chart.js instance cannot be
@@ -37,7 +38,7 @@ const dismissConfirmation = async () => {
 
 describe('App destructive and confirmational actions', () => {
   it('asks before resetting the register, and says what is lost', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await addAHire();
     await dismissConfirmation();
     expect(storedRoster()).toHaveLength(201);
@@ -52,7 +53,7 @@ describe('App destructive and confirmational actions', () => {
   });
 
   it('does not reset when the question is refused', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await addAHire();
     await dismissConfirmation();
 
@@ -65,7 +66,7 @@ describe('App destructive and confirmational actions', () => {
   });
 
   it('resets only once the answer is yes, and says so inline', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await addAHire();
     await dismissConfirmation();
 
@@ -79,7 +80,7 @@ describe('App destructive and confirmational actions', () => {
   });
 
   it('lets the confirmation be dismissed', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/ }));
     await userEvent.click(screen.getByRole('button', { name: /Reset demo data/ }));
     await screen.findByRole('status');
@@ -90,7 +91,7 @@ describe('App destructive and confirmational actions', () => {
   });
 
   it('confirms a new hire inline rather than in a blocking dialog', async () => {
-    render(<App />);
+    render(<ThemeProvider><App /></ThemeProvider>);
     await addAHire();
 
     const confirmation = screen.getByRole('status');
