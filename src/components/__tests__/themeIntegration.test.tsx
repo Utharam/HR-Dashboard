@@ -11,11 +11,15 @@ const noop = () => {}
 
 describe('console theme integration', () => {
   it('puts the theme control in the header action row', () => {
-    render(<ThemeProvider><Header activeTab="overview" searchQuery="" setSearchQuery={noop} selectedDept="ALL"
+    const { container } = render(<ThemeProvider><Header activeTab="overview" searchQuery="" setSearchQuery={noop} selectedDept="ALL"
       setSelectedDept={noop} selectedLocation="ALL" setSelectedLocation={noop}
       departments={INITIAL_DEPARTMENTS} locations={['Bengaluru HQ']} onOpenAddModal={noop}
       onNavigateToExcel={noop} onToggleNav={noop} navOpen={false} /></ThemeProvider>)
-    expect(screen.getByRole('button', { name: /theme:/i })).toBeInTheDocument()
+    // Last in the cluster, not merely present on the page: the toggle belongs
+    // to the action row wherever that row wraps to.
+    expect(container.querySelector('.page-actions')).toContainElement(
+      screen.getByRole('button', { name: /theme:/i }),
+    )
   })
 
   it('offers sign out only when the console is hosted by a session', async () => {

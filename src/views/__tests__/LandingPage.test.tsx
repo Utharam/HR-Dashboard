@@ -31,7 +31,9 @@ describe('LandingPage', () => {
   it('uses none of the banned marketing phrases', () => {
     const { container } = render(<ThemeProvider><LandingPage onSignIn={vi.fn()} /></ThemeProvider>)
     const text = container.textContent ?? ''
-    expect(text).not.toMatch(/pricing|testimonial|waitlist|free trial|book a demo|trusted by|supercharge|revolutioni[sz]e|\b10x\b/i)
+    expect(text).not.toMatch(
+      /pricing|testimonial|waitlist|free trial|book a demo|trusted by|supercharge|revolutioni[sz]e|\b10x\b|tiers?|upgrade|social proof|newsletter|countdown|scarcity|chat/i,
+    )
   })
   it('marks the product preview as decoration', () => {
     const { container } = render(<ThemeProvider><LandingPage onSignIn={vi.fn()} /></ThemeProvider>)

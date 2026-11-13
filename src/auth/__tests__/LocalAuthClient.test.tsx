@@ -45,6 +45,19 @@ describe('LocalAuthClient', () => {
     await client().signOut()
     expect(await client().getSession()).toBeNull()
   })
+  it('drops the session in another tab when that tab signs out', async () => {
+    // Two clients over the same storage are two tabs: A signs in, B reads the
+    // shared session, B signs out. A's next read must not resurrect the session
+    // from memory — sign-out is cross-tab even though the memory cache is not.
+    const tabA = client()
+    await tabA.signIn({ email: 'ceo@acme.com', password: 'demo' })
+    const tabB = client()
+    expect((await tabB.getSession())?.user.email).toBe('ceo@acme.com')
+    await tabB.signOut()
+    expect(await tabA.getSession()).toBeNull()
+    expect(await tabB.getSession()).toBeNull()
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+  })
   it('rejects SSO-by-domain without a domain and accepts with one', async () => {
     await expect(client().signInWithProvider('domain')).rejects.toMatchObject({ code: 'invalid_credentials' })
     const s = await client().signInWithProvider('domain', 'acme.com')

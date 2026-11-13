@@ -7,7 +7,9 @@ import { SESSION_KEY } from '../auth/session'
 const validSession = {
   user: { id: 'u1', name: 'Asha', email: 'asha@acme.com' },
   issuedAt: '2026-10-18T08:00:00.000Z',
-  expiresAt: '2026-10-18T16:00:00.000Z',
+  // A future expiry: this fixture must fail on the VERSION check alone, not
+  // because the clock has moved past its expiresAt.
+  expiresAt: '2030-01-01T00:00:00.000Z',
 }
 
 const storeRaw = (payload: string) => localStorage.setItem(SESSION_KEY, payload)

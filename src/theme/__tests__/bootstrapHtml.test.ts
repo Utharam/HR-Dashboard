@@ -140,6 +140,18 @@ describe('pre-paint theme resolution', () => {
     ).toBeUndefined()
   })
 
+  it('ignores a multi-row envelope even when its first row is valid', () => {
+    // The one-row rule matches `loadPersisted`'s all-or-nothing behaviour: the
+    // module read would reject a hand-edited `[valid, null]` payload outright,
+    // so the pre-paint script must not greet it with a light frame followed by
+    // the dark default once the module rejects it.
+    expect(
+      runBootstrap({
+        stored: JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ mode: 'light' }, null] }),
+      })['data-theme'],
+    ).toBeUndefined()
+  })
+
   it('does not throw when storage denies the read', () => {
     expect(runBootstrap({ storageThrows: true })['data-theme']).toBeUndefined()
   })

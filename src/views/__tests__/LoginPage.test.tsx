@@ -66,6 +66,12 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(onBack).toHaveBeenCalled()
   })
+  it('keeps the theme control inside the auth card', () => {
+    const { container } = renderPage()
+    expect(container.querySelector('.auth-card')).toContainElement(
+      screen.getByRole('button', { name: /theme:/i }),
+    )
+  })
 
   it('labels the submit "Signing in…" while pending and re-enables after resolution', async () => {
     const pending = deferred<typeof session>()

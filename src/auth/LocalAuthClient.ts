@@ -34,6 +34,17 @@ export class LocalAuthClient implements AuthClient {
    */
   private memorySession: Session | null = null
 
+  /**
+   * Whether the session in `memorySession` is backed by persisted storage: the
+   * last write succeeded, or the last read found the row we (or another tab)
+   * wrote. When this is true and the key later reads as absent, the only
+   * explanation is that another tab removed it — sign-out is cross-tab, so this
+   * tab must follow and drop its memory copy. A tab whose storage never
+   * accepted a write keeps `persisted === false`: an absent key then says
+   * nothing, and the memory fallback stays authoritative.
+   */
+  private persisted = false
+
   constructor(options: { now?: () => Date } = {}) {
     this.now = options.now ?? (() => new Date())
   }
@@ -63,6 +74,7 @@ export class LocalAuthClient implements AuthClient {
   private remember(session: Session): void {
     this.memorySession = session
     const saved = savePersisted(SESSION_KEY, [session])
+    this.persisted = saved.ok
     if (!saved.ok) clearPersisted(SESSION_KEY)
   }
 
@@ -71,16 +83,28 @@ export class LocalAuthClient implements AuthClient {
     const stored = rows[0]
     if (stored && !this.isExpired(stored)) {
       this.memorySession = stored
+      this.persisted = true
       return stored
     }
     if (stored) {
       // A persisted session past its expiry is definitive: drop it so it cannot
       // be offered again, then fall through to the memory fallback.
       clearPersisted(SESSION_KEY)
+      this.persisted = false
     }
 
-    // No usable persisted session. That is either "signed out" or "storage could
-    // not have told us" — the memory fallback is what separates the two.
+    // No usable persisted session. That is either "signed out (here or in
+    // another tab)" or "storage could not have told us" — the `persisted` flag
+    // separates the two.
+    if (this.persisted) {
+      // This tab wrote the key and it is now gone: another tab signed out.
+      // Sign-out is cross-tab, so the stale memory copy must not outlive it.
+      this.memorySession = null
+      this.persisted = false
+      return null
+    }
+    // Storage never accepted our write (denied or full), so the memory
+    // fallback is the only record of the session.
     const remembered = this.memorySession
     if (!remembered) return null
     if (this.isExpired(remembered)) {
@@ -139,6 +163,7 @@ export class LocalAuthClient implements AuthClient {
 
   async signOut(): Promise<void> {
     this.memorySession = null
+    this.persisted = false
     clearPersisted(SESSION_KEY)
   }
 }

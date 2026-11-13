@@ -8,7 +8,9 @@
          classic (non-module) script: a deferred module runs after the browser may
          already have painted a dark frame for a light-theme user. It is the ONE
          copy of the envelope read outside src/utils/storage.ts, so its version
-         below MUST stay in sync with DATA_SCHEMA_VERSION there. Failing open is
+         below MUST stay in sync with DATA_SCHEMA_VERSION there. Exactly one row
+         is accepted, matching the all-or-nothing read in storage.ts: a longer
+         rows array is a hand-edited payload and is refused. Failing open is
          deliberate - no attribute means the CSS :root dark default applies. -->
     <script>
       (function () {
@@ -16,7 +18,7 @@
           var raw = localStorage.getItem('omnihr_theme')
           if (!raw) return
           var envelope = JSON.parse(raw)
-          if (!envelope || envelope.v !== 2 || !Array.isArray(envelope.rows)) return
+          if (!envelope || envelope.v !== 2 || !Array.isArray(envelope.rows) || envelope.rows.length !== 1) return
           var row = envelope.rows[0]
           var mode = row && row.mode
           if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return

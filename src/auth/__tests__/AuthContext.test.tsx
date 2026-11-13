@@ -171,6 +171,30 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('email')).toHaveTextContent('none')
     expect(client.signIn).toHaveBeenCalledTimes(1)
   })
+  it('keeps a newer sign-in when a slow sign-out settles after it', async () => {
+    const pending = deferred<void>()
+    const client = makeClient({
+      signOut: vi.fn(() => pending.promise),
+      signIn: vi.fn(async () => newerSession),
+    })
+    render(<AuthProvider client={client}><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'))
+
+    // The sign-out is still in flight when the user signs back in.
+    await userEvent.click(screen.getByRole('button', { name: 'out' }))
+    await userEvent.click(screen.getByRole('button', { name: 'in' }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    expect(screen.getByTestId('email')).toHaveTextContent('ravi@acme.com')
+
+    // The stale sign-out must not wipe the newer sign-in when it settles.
+    await act(async () => {
+      pending.resolve()
+      await pending.promise
+    })
+
+    expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
+    expect(screen.getByTestId('email')).toHaveTextContent('ravi@acme.com')
+  })
   it('signs out locally even when the client rejects the sign-out call', async () => {
     const client = makeClient({
       signOut: vi.fn(async () => {

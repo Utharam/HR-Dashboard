@@ -79,7 +79,7 @@ From the brief, restated because they are review criteria:
 ### 4.2 The cycle and the icon
 
 - `cycle()` advances dark → light → system → dark.
-- The control is a single icon button (`<ThemeToggle/>`, `lucide-react` `Moon` / `Sun` / `Monitor`), **one instance per surface, always top-right**: the far right of the console `Header` action row; the right end of the landing's `landing-nav`; and floating (absolutely positioned) top-right on the login, which has no nav. Never two on one page.
+- The control is a single icon button (`<ThemeToggle/>`, `lucide-react` `Moon` / `Sun` / `Monitor`), **one instance per surface**: the last control in the console `Header` action row — it stays with the action cluster when the row wraps, rather than being pinned to the far edge; the right end of the landing's `landing-nav`; and floating (absolutely positioned) top-right on the login, which has no nav. Never two on one page.
 - Accessibility: `aria-label` names the *current* mode and the *next* action ("Theme: dark (switch to light)"), and a live region announces the change. It is a real `<button>`, keyboard reachable, and the icon is `aria-hidden`. This is a tri-state control, not a checkbox, so it does not fake `role="switch"`.
 
 ### 4.3 Persistence
@@ -118,8 +118,8 @@ Light overrides are defined for **every** dark token, in `index.css`, under `:ro
 | `--scrim` | `rgba(15,23,42,0.45)` | `--border-focus` | `rgba(79,70,229,0.45)` |
 | `--text-bright` | `#0B0F19` | `--hairline` | `#EDF0F3` |
 | `--text-main` | `#1F2937` | `--grid-line` | `#E9EBEF` |
-| `--text-muted` | `#5B6472` | `--neutral-tone` | `#6B7280` |
-| `--text-dim` | `#6B7280` | `--neutral-edge` | `rgba(107,114,128,0.35)` |
+| `--text-muted` | `#5B6472` | `--neutral-tone` | `#98A2B3` |
+| `--text-dim` | `#5F6875` | `--neutral-edge` | `rgba(107,114,128,0.35)` |
 | `--success` / `-soft` | `#059669` / `#047857` | `--danger` / `-soft` | `#DC2626` / `#B91C1C` |
 | `--warning` / `-soft` | `#D97706` / `#B45309` | `--info` / `-soft` | `#2563EB` / `#1D4ED8` |
 | `--success-glow` / `-edge` | `rgba(5,150,105,.12)` / `rgba(5,150,105,.30)` | `--danger-glow` / `-edge` | `rgba(220,38,38,.10)` / `rgba(220,38,38,.28)` |
@@ -135,6 +135,7 @@ Shadows (light) — soft and low-alpha, so they read as lift rather than dirt: `
 - `--on-accent: #FFFFFF` in **both** themes, used for text on a solid accent fill (`.btn-primary`, `.btn-danger:hover`, `.brand-mark`). `--text-bright` is near-black in light and was unreadable on indigo.
 - `--border-control: #7C8698` / `--border-control-strong: #5B6472` in light (dark aliases the existing `--border` / `--border-strong`). The table's `--border` is a card hairline at 1.24:1, below the ≥3:1 control-boundary claim; form controls use the control pair instead.
 - `--neutral-tone: #98A2B3` in light, so the two chart greys (`neutral` and `dim`) are distinguishable; the table gave both `#6B7280`.
+- F1/F5 text-token corrections: `--success-text: #047857`, `--warning-text: #A34A08` and `--text-dim: #5F6875` in light. The light base success/warning hues sit at only 3.77:1 / 3.19:1 on white while `.text-success` / `.text-warning` render 14px table text, and the table's `--text-dim` failed 4.5:1 on the inset surfaces (`--bg-card-subtle`, `--hairline`) it labels. Dark keeps `--success-text` / `--warning-text` aliased to their base hues.
 
 
 **Fragile spots that must be tokenized as part of this**, because they are hardcoded white/colour assumptions that break on light:
@@ -184,7 +185,7 @@ Any genuinely new token (e.g. a light-mode hover tint for tables) is defined in 
 
 Structure, top to bottom:
 
-1. **`landing-nav`** — brand lockup (`.brand-mark` + `.brand-name`) left; right side = the `.theme-toggle` icon and a secondary "Sign in" button. No nav links to nowhere.
+1. **`landing-nav`** — brand lockup (`.brand-mark` + `.brand-name`) left; right side = a secondary "Sign in" button, then the `.theme-toggle` icon at the far right. No nav links to nowhere.
 2. **`landing-hero`** — headline, one line of what it is, who it serves, and a single primary CTA **"Sign in to OmniHR"** that routes to login. Working copy (from the approved mockup):
    - Headline: *"The operating console for your workforce."*
    - Lede: *"Staff records, statutory payroll and compliance in one place — audit-ready."*

@@ -155,8 +155,9 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Last in the action row: the same control sits top-right on the
-            landing and login, so the theme affordance never moves. */}
+        {/* Last in the action row: the same control ends the action cluster on the
+            landing and login, so the theme affordance stays with the cluster
+            even when the row wraps. */}
         <ThemeToggle />
       </div>
     </header>

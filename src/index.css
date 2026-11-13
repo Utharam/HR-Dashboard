@@ -303,6 +303,13 @@
    shared base rules already read correctly. */
 :root[data-theme="light"] .product-preview__tile { border-color: var(--border-strong); }
 :root[data-theme="light"] .product-preview__dot { background: var(--border-strong); }
+/* The active dot must read as filled, not merely outlined: the light override
+   above repaints every rail dot grey, so the active one re-claims a solid
+   primary fill and edge after it. */
+:root[data-theme="light"] .product-preview__dot--on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
 :root[data-theme="light"] .auth-sso .btn-secondary { background: var(--bg-card); }
 :root[data-theme="light"] .auth-divider::before,
 :root[data-theme="light"] .auth-divider::after { background: var(--border-strong); }
@@ -870,6 +877,12 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   background: var(--bg-main);
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+/* The configuration-error card sits on this screen: kept off the viewport edge
+   and narrow enough to read as a message, not a page. */
+.boot-screen__card {
+  max-width: 32rem;
+  margin: var(--space-5);
 }
 
 /* Card ---------------------------------------------------------------- */
@@ -1969,4 +1982,16 @@ textarea.omni-input {
   .auth-shell .omni-select,
   .auth-shell .btn-secondary { background: white !important; border-color: #D0D5DD !important; }
   .landing-shell .product-preview__dot { background: #D0D5DD !important; }
+  /* The brand mark is a gradient tile in both themes: on paper it must read as
+     a flat light chip with a visible edge instead of an ink-heavy block. The
+     hero/auth cards drop their shadows, which print as grey dirt. */
+  .brand-mark {
+    background: white !important;
+    border: 1px solid #D0D5DD !important;
+    color: black !important;
+  }
+  .product-preview,
+  .auth-card {
+    box-shadow: none !important;
+  }
 }

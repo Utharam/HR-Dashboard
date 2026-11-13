@@ -83,8 +83,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   }, [resolvedClient])
 
   // A session is read once on mount, but a tab can outlive it. Revalidate when
-  // the user comes back to the tab, so an expiry in another tab (or the passage
-  // of the 8-hour lifetime) does not leave a signed-out visitor on the console.
+  // the user comes back to the tab, so an expiry in another tab — or the
+  // 8-hour lifetime passing while the tab was hidden — is caught on return.
+  // The lifetime is only re-checked on focus/visibility, never by a timer: a
+  // tab that never leaves the foreground is not force-signed-out at expiry.
   useEffect(() => {
     if (!resolvedClient || status !== 'authenticated') return
     let active = true
@@ -158,15 +160,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   )
 
   const signOut = useCallback(async () => {
-    requestRef.current += 1
+    // Same generation guard as `signIn`, mirrored: a slow sign-out must not
+    // wipe a sign-in that started after it. Clearing state happens only when
+    // this request is still the newest one.
+    const request = ++requestRef.current
     try {
       await resolvedClient?.signOut()
     } catch {
       // Local sign-out wins even when the backend cannot confirm it: the user
       // asked to leave, and a failed revocation call must not keep them in.
     } finally {
-      setSession(null)
-      setStatus('anonymous')
+      if (request === requestRef.current) {
+        setSession(null)
+        setStatus('anonymous')
+      }
     }
   }, [resolvedClient])
 
@@ -178,10 +185,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   if (!resolvedClient) {
     return (
       <div className="boot-screen" role="alert">
-        <div
-          className="omni-card"
-          style={{ maxWidth: '32rem', margin: 'var(--space-5)' }}
-        >
+        <div className="omni-card boot-screen__card">
           <h1 className="auth-title" style={{ marginBottom: 'var(--space-2)' }}>
             Authentication is not configured
           </h1>
