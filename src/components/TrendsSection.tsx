@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import 'chart.js/auto';
 import type { MonthlyTracker } from '../types';
@@ -60,36 +60,18 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
       ? 'Growth not derivable from this ledger'
       : `${growthPct >= 0 ? '+' : '−'}${Math.abs(growthPct).toFixed(1)}% over ${tracker.length} recorded months`;
 
-  // An empty ledger is an absence of history, not a workforce that shrank to nothing. The
-  // table used to render a bare `<thead>` over an empty `<tbody>`, which reads as a broken
-  // table rather than as an answer.
-  if (tracker.length === 0) {
-    return (
-      <div className="section-stack">
-        <div className="omni-card empty-state">
-          <p className="empty-state__title">No monthly history has been recorded</p>
-          <p className="empty-state__body">
-            Headcount, payroll and attrition on this page are read from the historical
-            ledger. It holds no months, so there is no trend to plot &mdash; this is not a
-            workforce that has fallen to zero.
-          </p>
-          {onClearFilters && (
-            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
-              Clear filters
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // Chart-facing objects, memoised. Every hook sits above the empty-ledger return
+  // below so hook order cannot change between renders; computing these for an
+  // empty tracker is safe (empty arrays, unused objects).
+  const axisTickFont = useMemo(
+    () => ({ family: chartTokens.font, size: 11 }),
+    [chartTokens],
+  );
+  const labels = useMemo(() => tracker.map(t => t.month), [tracker]);
+  const headcountData = useMemo(() => tracker.map(t => t.headcount), [tracker]);
+  const payrollData = useMemo(() => tracker.map(t => Number((t.grossPayroll / 10000000).toFixed(2))), [tracker]); // In Cr as numbers
 
-  // Chart
-  const axisTickFont = { family: chartTokens.font, size: 11 };
-  const labels = tracker.map(t => t.month);
-  const headcountData = tracker.map(t => t.headcount);
-  const payrollData = tracker.map(t => Number((t.grossPayroll / 10000000).toFixed(2))); // In Cr as numbers
-
-  const trendChartData = {
+  const trendChartData = useMemo(() => ({
     labels,
     datasets: [
       {
@@ -123,9 +105,9 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
         tension: 0.2
       }
     ]
-  };
+  }), [labels, payrollData, headcountData, chartTokens]);
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 420 },
@@ -176,7 +158,30 @@ export const TrendsSection: React.FC<TrendsSectionProps> = ({ tracker, onClearFi
         bodyFont: { family: chartTokens.font }
       }
     }
-  };
+  }), [chartTokens, axisTickFont]);
+
+  // An empty ledger is an absence of history, not a workforce that shrank to nothing. The
+  // table used to render a bare `<thead>` over an empty `<tbody>`, which reads as a broken
+  // table rather than as an answer.
+  if (tracker.length === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No monthly history has been recorded</p>
+          <p className="empty-state__body">
+            Headcount, payroll and attrition on this page are read from the historical
+            ledger. It holds no months, so there is no trend to plot &mdash; this is not a
+            workforce that has fallen to zero.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-stack">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 import { Award, Target, Zap, AlertCircle } from 'lucide-react';
@@ -17,11 +17,11 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
   const chartTokens = useChartTokens();
 
   // Count ratings 1 to 5
-  const ratingCounts = [1, 2, 3, 4, 5].map(r => 
+  const ratingCounts = useMemo(() => [1, 2, 3, 4, 5].map(r =>
     employees.filter(e => e.performanceRating === r).length
-  );
+  ), [employees]);
 
-  const ratingChartData = {
+  const ratingChartData = useMemo(() => ({
     labels: ['1 - Needs Improvement', '2 - Developing', '3 - Meets Expectations', '4 - Exceeds Expectations', '5 - Outstanding'],
     datasets: [
       {
@@ -32,11 +32,14 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
         maxBarThickness: 72
       }
     ]
-  };
+  }), [ratingCounts, chartTokens]);
 
-  const axisTickFont = { family: chartTokens.font, size: 11 };
+  const axisTickFont = useMemo(
+    () => ({ family: chartTokens.font, size: 11 }),
+    [chartTokens],
+  );
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 420 },
@@ -67,7 +70,7 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
         bodyFont: { family: chartTokens.font }
       }
     }
-  };
+  }), [chartTokens, axisTickFont]);
 
   // 9-Box Matrix Groupings
   const stars = employees.filter(e => e.performanceRating === 5);

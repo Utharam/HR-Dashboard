@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useOptionalTheme } from './ThemeContext'
 
 /**
@@ -59,8 +60,19 @@ export function useChartTokens(): ChartTokens {
   // Subscribing to the theme is what makes a switch re-render a mounted chart;
   // the values themselves come from the DOM the provider has already updated.
   // Optional, so a chart section can still render in isolation (its own tests).
-  useOptionalTheme()
-  return readChartTokens((name) =>
-    getComputedStyle(document.documentElement).getPropertyValue(name),
+  const theme = useOptionalTheme()
+  const resolved = theme?.resolved ?? null
+  // Memoised on the resolved theme: between theme changes the DOM read is
+  // idempotent, so an unrelated rerender must return the same token object.
+  // The chart sections key their own data/options memos on this identity.
+  return useMemo(
+    () =>
+      readChartTokens((name) =>
+        getComputedStyle(document.documentElement).getPropertyValue(name),
+      ),
+    // `resolved` is intentionally the only dependency even though the memo body
+    // does not read it: it is the invalidation key for the DOM re-read.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [resolved],
   )
 }

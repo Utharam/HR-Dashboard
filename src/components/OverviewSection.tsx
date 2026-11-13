@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import 'chart.js/auto';
 import { Users, CreditCard, Award, CalendarCheck, TrendingDown, Sparkles } from 'lucide-react';
@@ -94,33 +94,16 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const resignedCount = employees.filter(e => e.status === 'Resigned').length;
   const attritionPct = (totalHeadcount ? (resignedCount / totalHeadcount) * 100 : 0).toFixed(1);
 
-  // A roster emptied by a filter is not a workforce of zero. Six KPI tiles of `0`, `0.0%`
-  // and `₹0` render exactly like a working dashboard whose numbers have gone to zero, so
-  // nothing tells anyone to look at the filter box. This returns instead of the tiles.
-  if (totalHeadcount === 0) {
-    return (
-      <div className="section-stack">
-        <div className="omni-card empty-state">
-          <p className="empty-state__title">No staff match the current filters</p>
-          <p className="empty-state__body">
-            Every figure on this page is computed from the register as it is currently
-            filtered. Nothing matched, so there is nothing to measure &mdash; this is not a
-            workforce of zero.
-          </p>
-          {onClearFilters && (
-            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
-              Clear filters
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // Canvas cannot resolve CSS custom properties, so the component reads them
   // through the theme-subscribed hook and hands plain strings to Chart.js.
-  const axisTickFont = { family: chartTokens.font, size: 11 };
-  const tooltipTheme = {
+  // Every chart-facing object is memoised (and all hooks sit above the empty
+  // roster return below) so an unrelated rerender cannot hand Chart.js a new
+  // object identity and redraw a chart that has not changed.
+  const axisTickFont = useMemo(
+    () => ({ family: chartTokens.font, size: 11 }),
+    [chartTokens],
+  );
+  const tooltipTheme = useMemo(() => ({
     backgroundColor: chartTokens.well,
     titleColor: chartTokens.bright,
     bodyColor: chartTokens.tick,
@@ -131,16 +114,22 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     displayColors: true,
     titleFont: { family: chartTokens.font, weight: 600 as const },
     bodyFont: { family: chartTokens.font }
-  };
+  }), [chartTokens]);
 
   // 1. Department Headcount Chart Data
-  const deptLabels = departments.map(d => d.name.split(' ')[0]);
-  const deptHeadcounts = departments.map(d => employees.filter(e => e.department === d.name).length);
-  const deptPayrolls = departments.map(d => 
-    employees.filter(e => e.department === d.name).reduce((sum, e) => sum + e.monthlyCTC, 0) / 100000 // In Lakhs
+  const deptLabels = useMemo(
+    () => departments.map(d => d.name.split(' ')[0]),
+    [departments],
   );
+  const deptHeadcounts = useMemo(
+    () => departments.map(d => employees.filter(e => e.department === d.name).length),
+    [departments, employees],
+  );
+  const deptPayrolls = useMemo(() => departments.map(d =>
+    employees.filter(e => e.department === d.name).reduce((sum, e) => sum + e.monthlyCTC, 0) / 100000 // In Lakhs
+  ), [departments, employees]);
 
-  const headcountChartData = {
+  const headcountChartData = useMemo(() => ({
     labels: deptLabels,
     datasets: [
       {
@@ -151,9 +140,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         maxBarThickness: 48
       }
     ]
-  };
+  }), [deptLabels, deptHeadcounts, chartTokens]);
 
-  const payrollChartData = {
+  const payrollChartData = useMemo(() => ({
     labels: deptLabels,
     datasets: [
       {
@@ -164,10 +153,10 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         maxBarThickness: 48
       }
     ]
-  };
+  }), [deptLabels, deptPayrolls, chartTokens]);
 
   // 2. Diversity & Status Doughnut
-  const statusDoughnutData = {
+  const statusDoughnutData = useMemo(() => ({
     labels: ['Active', 'Probation', 'Notice Period', 'Resigned', 'Unknown'],
     datasets: [
       {
@@ -175,7 +164,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           activeCount,
           probationCount,
           noticeCount,
-          employees.filter(e => e.status === 'Resigned').length,
+          resignedCount,
           unknownStatusCount
         ],
         backgroundColor: [chartTokens.success, chartTokens.warning, chartTokens.danger, chartTokens.neutral, chartTokens.dim],
@@ -184,12 +173,12 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         hoverOffset: 4
       }
     ]
-  };
+  }), [activeCount, probationCount, noticeCount, resignedCount, unknownStatusCount, chartTokens]);
 
   // The doughnut shows the WHOLE roster, including the two non-answers, because a
   // slice of "Unknown" is exactly the import defect an executive needs to see. The
   // diversity KPI above is the one that excludes them from its denominator.
-  const diversityDoughnutData = {
+  const diversityDoughnutData = useMemo(() => ({
     labels: ['Female', 'Male', 'Non-Binary', 'Prefer Not to Say', 'Unknown'],
     datasets: [
       {
@@ -200,10 +189,10 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         hoverOffset: 4
       }
     ]
-  };
+  }), [femaleCount, maleCount, nbCount, declinedCount, unknownGenderCount, chartTokens]);
 
   // Every chart in the console shares one axis, grid and tooltip treatment.
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 420 },
@@ -224,9 +213,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       legend: { display: false },
       tooltip: tooltipTheme
     }
-  };
+  }), [chartTokens, axisTickFont, tooltipTheme]);
 
-  const doughnutOptions = {
+  const doughnutOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     cutout: '62%',
@@ -245,7 +234,32 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
       },
       tooltip: tooltipTheme
     }
-  };
+  }), [chartTokens, axisTickFont, tooltipTheme]);
+
+  // A roster emptied by a filter is not a workforce of zero. Six KPI tiles of `0`, `0.0%`
+  // and `₹0` render exactly like a working dashboard whose numbers have gone to zero, so
+  // nothing tells anyone to look at the filter box. This returns instead of the tiles.
+  // Safe to reach with memos above: every hook already ran, so hook order does not
+  // change between renders.
+  if (totalHeadcount === 0) {
+    return (
+      <div className="section-stack">
+        <div className="omni-card empty-state">
+          <p className="empty-state__title">No staff match the current filters</p>
+          <p className="empty-state__body">
+            Every figure on this page is computed from the register as it is currently
+            filtered. Nothing matched, so there is nothing to measure &mdash; this is not a
+            workforce of zero.
+          </p>
+          {onClearFilters && (
+            <button type="button" onClick={onClearFilters} className="btn btn-secondary">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-stack">
