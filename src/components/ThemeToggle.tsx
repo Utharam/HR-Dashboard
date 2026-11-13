@@ -23,7 +23,7 @@ export const ThemeToggle: React.FC<{ className?: string }> = ({ className }) => 
     <>
       <button
         type="button"
-        className={`theme-toggle${className ? ` ${className}` : ''}`}
+        className={`theme-toggle no-print${className ? ` ${className}` : ''}`}
         onClick={cycle}
         aria-label={label}
         title={label}

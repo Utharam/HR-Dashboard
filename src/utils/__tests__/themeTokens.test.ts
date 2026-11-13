@@ -10,8 +10,8 @@ const THEME_VARYING = [
   '--bg-main', '--bg-card', '--bg-card-hover', '--bg-card-subtle', '--bg-table-head',
   '--bg-well', '--scrim', '--border', '--border-strong', '--border-focus', '--hairline',
   '--primary', '--primary-hover', '--primary-glow', '--primary-ring',
-  '--success', '--success-glow', '--success-edge', '--success-soft',
-  '--warning', '--warning-glow', '--warning-edge', '--warning-soft',
+  '--success', '--success-glow', '--success-edge', '--success-soft', '--success-text',
+  '--warning', '--warning-glow', '--warning-edge', '--warning-soft', '--warning-text',
   '--danger', '--danger-glow', '--danger-edge', '--danger-soft',
   '--info', '--info-glow', '--info-edge', '--info-soft',
   '--purple', '--purple-glow', '--purple-edge', '--purple-soft',
@@ -90,6 +90,14 @@ describe('light contrast', () => {
   })
   it('keeps form-control borders at 3:1 against the card', () => {
     expect(contrast('--border-control', '--bg-card')).toBeGreaterThanOrEqual(3)
+  })
+  it('keeps the status text tiers at AA on the card', () => {
+    expect(contrast('--success-text', '--bg-card')).toBeGreaterThanOrEqual(4.5)
+    expect(contrast('--warning-text', '--bg-card')).toBeGreaterThanOrEqual(4.5)
+  })
+  it('keeps dim text legible on the inset surfaces it labels', () => {
+    expect(contrast('--text-dim', '--bg-card-subtle')).toBeGreaterThanOrEqual(4.5)
+    expect(contrast('--text-dim', '--hairline')).toBeGreaterThanOrEqual(4.5)
   })
   it('keeps the two chart greys distinct in light', () => {
     expect(lightVars['--neutral-tone']).not.toBe(lightVars['--text-dim'])

@@ -103,6 +103,12 @@
   --primary-soft: #A5B4FC;
   --purple-soft: #A78BFA;
   --pink-soft: #F472B6;
+
+  /* Text tiers for the base status hues. Dark aliases the base hue; light
+     re-tunes it darker because the light base hues only reach 3.77:1 / 3.19:1
+     on white, while `.text-success` / `.text-warning` render 14px table text. */
+  --success-text: var(--success);
+  --warning-text: var(--warning);
 }
 
 /* ── 3. Typography ──────────────────────────────────────────────────────── */
@@ -237,6 +243,8 @@
   --warning-glow: rgba(217, 119, 6, 0.12);
   --warning-edge: rgba(217, 119, 6, 0.30);
   --warning-soft: #B45309;
+  --success-text: #047857;
+  --warning-text: #B45309;
   --danger: #DC2626;
   --danger-glow: rgba(220, 38, 38, 0.10);
   --danger-edge: rgba(220, 38, 38, 0.28);
@@ -259,7 +267,10 @@
   --text-bright: #0B0F19;
   --text-main: #1F2937;
   --text-muted: #5B6472;
-  --text-dim: #6B7280;
+  /* Quietest text tier. It must clear 4.5:1 not only on --bg-card but on the
+     inset surfaces it labels (--bg-card-subtle, --hairline), where it renders
+     11-12px micro-copy in .toggle-chip, .stat-tile__label, placeholders. */
+  --text-dim: #5F6875;
 
   --grid-line: #E9EBEF;
 
@@ -427,11 +438,13 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .btn-secondary {
   background: var(--bg-card-subtle);
   color: var(--text-main);
-  border-color: var(--border);
+  /* An interactive control uses the control boundary, not the card hairline:
+     in light the hairline is 1.24:1, far under the 3:1 a control edge needs. */
+  border-color: var(--border-control);
 }
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-card-hover);
-  border-color: var(--border-strong);
+  border-color: var(--border-control-strong);
 }
 
 .btn-danger {
@@ -479,7 +492,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   height: var(--space-8);
   padding: 0;
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--r-md);
   color: var(--text-muted);
   cursor: pointer;
@@ -492,7 +505,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .theme-toggle:hover {
   color: var(--primary);
-  border-color: var(--border-strong);
+  border-color: var(--border-control-strong);
   background: var(--bg-card-hover);
 }
 
@@ -989,7 +1002,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   border-bottom: none;
   font-size: var(--fs-lg);
   font-weight: var(--fw-extrabold);
-  color: var(--success);
+  color: var(--success-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1449,7 +1462,7 @@ textarea.omni-input {
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   font-family: inherit;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   background: var(--bg-card-subtle);
   color: var(--text-muted);
   cursor: pointer;
@@ -1459,7 +1472,7 @@ textarea.omni-input {
     color var(--dur-base) var(--ease-standard);
 }
 .pill:hover {
-  border-color: var(--border-strong);
+  border-color: var(--border-control-strong);
   color: var(--text-main);
 }
 .pill[aria-pressed='true'],
@@ -1697,6 +1710,10 @@ textarea.omni-input {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+/* When the wrapped action row runs out of room, the theme toggle — last in the
+   row — pins to the far edge instead of trailing mid-wrap. An auto margin is
+   zero inside a fit-content row, so the full-width 1440px header is untouched. */
+.page-actions .theme-toggle { margin-left: auto; }
 
 /* Labeled numeric tile (leave balances, settlement line items) */
 .stat-tile {
@@ -1878,9 +1895,9 @@ textarea.omni-input {
 .text-dim { color: var(--text-dim); }
 .text-primary { color: var(--primary); }
 .text-primary-soft { color: var(--primary-soft); }
-.text-success { color: var(--success); }
+.text-success { color: var(--success-text); }
 .text-success-soft { color: var(--success-soft); }
-.text-warning { color: var(--warning); }
+.text-warning { color: var(--warning-text); }
 .text-warning-soft { color: var(--warning-soft); }
 .text-danger { color: var(--danger); }
 .text-danger-soft { color: var(--danger-soft); }
@@ -1911,4 +1928,11 @@ textarea.omni-input {
   .modal-window { box-shadow: none; border: none; max-width: 100%; width: 100%; }
   .omni-table th { background: #f1f5f9 !important; color: black !important; }
   .omni-table td { color: black !important; border-bottom: 1px solid #e2e8f0 !important; }
+  /* The front door prints light regardless of the live theme: a dark shell
+     would flood the page with ink, and its text hues are tuned for that field. */
+  .landing-shell, .auth-shell, .auth-card {
+    background: white !important;
+    color: black !important;
+  }
+  .landing-shell *, .auth-shell *, .auth-card * { color: black !important; }
 }

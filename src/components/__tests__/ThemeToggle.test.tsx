@@ -34,4 +34,8 @@ describe('ThemeToggle', () => {
     expect(region).not.toBeNull()
     expect(region).toHaveTextContent(/theme: dark/i)
   })
+  it('marks itself no-print so the control disappears from printouts', () => {
+    renderToggle()
+    expect(screen.getByRole('button', { name: /theme:/i })).toHaveClass('no-print')
+  })
 })

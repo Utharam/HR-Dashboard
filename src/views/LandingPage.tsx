@@ -17,10 +17,10 @@ export const LandingPage: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) =>
         </div>
       </div>
       <div className="landing-nav__actions">
-        <ThemeToggle />
         <button type="button" className="btn btn-secondary btn-sm" onClick={onSignIn}>
           Sign in
         </button>
+        <ThemeToggle />
       </div>
     </header>
 

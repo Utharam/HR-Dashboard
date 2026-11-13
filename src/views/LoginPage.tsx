@@ -54,7 +54,7 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="auth-shell">
-      <div className="auth-theme">
+      <div className="auth-theme no-print">
         <ThemeToggle />
       </div>
 
