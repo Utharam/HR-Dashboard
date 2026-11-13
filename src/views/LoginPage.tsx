@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Callout } from '../components/Callout'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../auth/AuthContext'
+import { isDomainLike } from '../auth/domain'
 import type { SsoProvider } from '../types'
 
 const GENERIC_ERROR = 'We could not sign you in with those details.'
@@ -37,9 +38,16 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }
 
   const handleProvider = async (provider: SsoProvider) => {
-    if (provider === 'domain' && !domain.trim()) {
-      setError('Enter your work domain to continue.')
-      return
+    if (provider === 'domain') {
+      const candidate = domain.trim()
+      if (!candidate) {
+        setError('Enter your work domain to continue.')
+        return
+      }
+      if (!isDomainLike(candidate)) {
+        setError('Enter a valid work domain (for example, acme.com).')
+        return
+      }
     }
     setError(null)
     setIsSubmitting(true)

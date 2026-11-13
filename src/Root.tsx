@@ -27,10 +27,14 @@ const RootView: React.FC = () => {
     return (
       <App
         onSignOut={async () => {
-          await signOut()
-          // A session may have started on the login screen. Signing out is a
-          // return to the front door, not to the form that opened the door.
-          setView('landing')
+          try {
+            await signOut()
+          } finally {
+            // A session may have started on the login screen. Signing out is a
+            // return to the front door, not to the form that opened the door,
+            // even if the client-side sign-out call itself failed.
+            setView('landing')
+          }
         }}
       />
     )

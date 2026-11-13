@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LoginPage } from '../LoginPage'
 import { AuthProvider } from '../../auth/AuthContext'
@@ -7,6 +7,16 @@ import { ThemeProvider } from '../../theme/ThemeContext'
 import type { AuthClient } from '../../auth/AuthClient'
 
 const session = { user: { id: 'u1', name: 'Asha', email: 'asha@acme.com' }, issuedAt: '2026-10-18T08:00:00.000Z' }
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 const makeClient = (over: Partial<AuthClient> = {}): AuthClient => ({
   getSession: vi.fn(async () => null),
   signIn: vi.fn(async () => session),
@@ -55,5 +65,55 @@ describe('LoginPage', () => {
     expect(screen.getByText(/provisioned by your organisation's administrator/i)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('disables submit while sign-in is pending and re-enables when it resolves', async () => {
+    const pending = deferred<typeof session>()
+    const client = makeClient({ signIn: vi.fn(() => pending.promise) })
+    renderPage(client)
+    await userEvent.type(screen.getByLabelText(/work email/i), 'a@b.com')
+    await userEvent.type(screen.getByLabelText(/password/i), 'demo')
+    const submit = screen.getByRole('button', { name: /^sign in$/i })
+
+    await userEvent.click(submit)
+    expect(submit).toBeDisabled()
+
+    await act(async () => {
+      pending.resolve(session)
+      await pending.promise
+    })
+    await waitFor(() => expect(submit).toBeEnabled())
+  })
+
+  it('sends Microsoft and Okta through the provider client without a payload', async () => {
+    const client = makeClient()
+    renderPage(client)
+    await userEvent.click(screen.getByRole('button', { name: /microsoft/i }))
+    await waitFor(() =>
+      expect(client.signInWithProvider).toHaveBeenCalledWith('microsoft', undefined),
+    )
+    await userEvent.click(screen.getByRole('button', { name: /okta/i }))
+    await waitFor(() => expect(client.signInWithProvider).toHaveBeenCalledWith('okta', undefined))
+  })
+
+  it('sends a domain sign-in through the provider client', async () => {
+    const client = makeClient()
+    renderPage(client)
+    await userEvent.click(screen.getByRole('button', { name: /sso by domain/i }))
+    await userEvent.type(screen.getByLabelText(/work domain/i), 'acme.com')
+    await userEvent.click(screen.getByRole('button', { name: /continue with domain/i }))
+    await waitFor(() =>
+      expect(client.signInWithProvider).toHaveBeenCalledWith('domain', 'acme.com'),
+    )
+  })
+
+  it('rejects a non-domain-like value without calling the client', async () => {
+    const client = makeClient()
+    renderPage(client)
+    await userEvent.click(screen.getByRole('button', { name: /sso by domain/i }))
+    await userEvent.type(screen.getByLabelText(/work domain/i), 'not a domain')
+    await userEvent.click(screen.getByRole('button', { name: /continue with domain/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/enter a valid work domain/i)
+    expect(client.signInWithProvider).not.toHaveBeenCalled()
   })
 })

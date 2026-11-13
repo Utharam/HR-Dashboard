@@ -2,6 +2,24 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Root } from '../Root'
+import { SESSION_KEY } from '../auth/session'
+
+const validSession = {
+  user: { id: 'u1', name: 'Asha', email: 'asha@acme.com' },
+  issuedAt: '2026-10-18T08:00:00.000Z',
+  expiresAt: '2026-10-18T16:00:00.000Z',
+}
+
+const storeRaw = (payload: string) => localStorage.setItem(SESSION_KEY, payload)
+
+const expectLanding = async () => {
+  await waitFor(() =>
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/operating console/i),
+  )
+  expect(
+    screen.queryByRole('navigation', { name: /main navigation/i }),
+  ).not.toBeInTheDocument()
+}
 
 // jsdom has no 2D canvas; the console's charts must be stubbed or their async
 // teardown throws out of cleanup and blames an unrelated test.
@@ -39,5 +57,36 @@ describe('Root flow', () => {
     await new LocalAuthClient().signIn({ email: 'ceo@acme.com', password: 'demo' })
     render(<Root />)
     await waitFor(() => expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument())
+  })
+
+  it('falls back to the landing for a corrupt stored payload', async () => {
+    storeRaw('{"v":2,"rows":[')
+    render(<Root />)
+    await expectLanding()
+  })
+
+  it('falls back to the landing for a legacy v1 envelope', async () => {
+    storeRaw(JSON.stringify({ v: 1, rows: [validSession] }))
+    render(<Root />)
+    await expectLanding()
+  })
+
+  it('falls back to the landing for an expired session', async () => {
+    storeRaw(
+      JSON.stringify({
+        v: 2,
+        rows: [
+          {
+            user: { id: 'u1', name: 'Asha', email: 'asha@acme.com' },
+            issuedAt: '2020-01-01T08:00:00.000Z',
+            expiresAt: '2020-01-01T16:00:00.000Z',
+          },
+        ],
+      }),
+    )
+    render(<Root />)
+    await expectLanding()
+    // The expiry is definitive, so the unusable session is cleared, not kept.
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
   })
 })

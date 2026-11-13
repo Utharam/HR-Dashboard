@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { LocalAuthClient } from '../LocalAuthClient'
 import { AuthError } from '../AuthClient'
 import { SESSION_KEY } from '../session'
@@ -50,8 +50,68 @@ describe('LocalAuthClient', () => {
     const s = await client().signInWithProvider('domain', 'acme.com')
     expect(s.user.email).toContain('@acme.com')
   })
+  it('rejects a payload that is not domain-like', async () => {
+    await expect(client().signInWithProvider('domain', 'not a domain')).rejects.toMatchObject({
+      code: 'invalid_credentials',
+    })
+    await expect(client().signInWithProvider('domain', 'https://acme.com/login')).rejects.toMatchObject({
+      code: 'invalid_credentials',
+    })
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+  })
   it('resolves the Microsoft and Okta stubs', async () => {
     expect((await client().signInWithProvider('microsoft')).user.name.length).toBeGreaterThan(0)
     expect((await client().signInWithProvider('okta')).user.name.length).toBeGreaterThan(0)
+  })
+
+  it('keeps the tab signed in when storage rejects the write as full', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError')
+    })
+    try {
+      const c = client()
+      const s = await c.signIn({ email: 'ceo@acme.com', password: 'demo' })
+      expect(s.user.email).toBe('ceo@acme.com')
+      // Nothing was persisted, so only the in-memory fallback can answer.
+      expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+      expect((await c.getSession())?.user.email).toBe('ceo@acme.com')
+    } finally {
+      setItem.mockRestore()
+    }
+  })
+
+  it('refreshes and clears the in-memory fallback too', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError')
+    })
+    try {
+      const c = client()
+      const first = await c.signIn({ email: 'ceo@acme.com', password: 'demo' })
+      now = new Date('2026-10-18T09:00:00.000Z')
+      const refreshed = await c.refreshSession()
+      expect(refreshed?.user.email).toBe(first.user.email)
+      expect(refreshed?.expiresAt).not.toBe(first.expiresAt)
+      expect((await c.getSession())?.expiresAt).toBe(refreshed?.expiresAt)
+
+      await c.signOut()
+      expect(await c.getSession()).toBeNull()
+      expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+    } finally {
+      setItem.mockRestore()
+    }
+  })
+
+  it('expires an in-memory session when storage cannot persist it', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError')
+    })
+    try {
+      const c = client()
+      await c.signIn({ email: 'ceo@acme.com', password: 'demo' })
+      now = new Date('2030-01-01T00:00:00.000Z')
+      expect(await c.getSession()).toBeNull()
+    } finally {
+      setItem.mockRestore()
+    }
   })
 })
