@@ -54,6 +54,15 @@ for (const line of lightBlock.split('\n')) {
   if (match) lightVars[match[1]] = match[2].trim()
 }
 
+// Same shape for the dark block: it must alias the status text tiers to their
+// base hues, so the F1 addition of `-text` tokens cannot silently fork the
+// dark palette.
+const darkVars: Record<string, string> = {}
+for (const line of darkBlock.split('\n')) {
+  const match = line.match(/^\s*(--[a-z0-9-]+):\s*(.+?);/)
+  if (match) darkVars[match[1]] = match[2].trim()
+}
+
 const parseHex = (value: string | undefined): [number, number, number] | null => {
   if (!value) return null
   const match = value.match(/^#([0-9a-f]{6})$/i)
@@ -95,11 +104,21 @@ describe('light contrast', () => {
     expect(contrast('--success-text', '--bg-card')).toBeGreaterThanOrEqual(4.5)
     expect(contrast('--warning-text', '--bg-card')).toBeGreaterThanOrEqual(4.5)
   })
+  it('keeps the warning text tier at AA on the hairline surfaces it labels', () => {
+    expect(contrast('--warning-text', '--hairline')).toBeGreaterThanOrEqual(4.5)
+  })
   it('keeps dim text legible on the inset surfaces it labels', () => {
     expect(contrast('--text-dim', '--bg-card-subtle')).toBeGreaterThanOrEqual(4.5)
     expect(contrast('--text-dim', '--hairline')).toBeGreaterThanOrEqual(4.5)
   })
   it('keeps the two chart greys distinct in light', () => {
     expect(lightVars['--neutral-tone']).not.toBe(lightVars['--text-dim'])
+  })
+})
+
+describe('dark token aliasing', () => {
+  it('aliases the status text tiers to their base hues', () => {
+    expect(darkVars['--success-text']).toBe('var(--success)')
+    expect(darkVars['--warning-text']).toBe('var(--warning)')
   })
 })

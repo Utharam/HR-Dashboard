@@ -29,7 +29,7 @@
 Five inputs/conditions most likely to bite a real user of this software, each pinned by a test in the task that owns the code.
 
 1. **A theme switch while a chart is mounted** — the chart must repaint with the new gridlines, ticks and tooltip, not keep the palette captured at import. → Task 5.
-2. **Reload with a stored theme preference** — the page must paint in the stored theme, not flash dark first. → Task 3 (`bootstrapTheme`) + Task 11 (wiring).
+2. **Reload with a stored theme preference** — the page must paint in the stored theme, not flash dark first. → Task 3 (`bootstrapTheme` **plus the synchronous inline pre-paint `<script>` in `index.html`** — the deferred module alone cannot guarantee it) + Task 11 (wiring).
 3. **A corrupt, legacy or expired session on load** — the app must show the landing, never the console. → Tasks 6, 7, 11.
 4. **`system` mode while the OS flips** — the resolved theme must follow live, and the charts with it. → Task 3.
 5. **Light-theme status badges and muted text** — a light theme that inverts into washed-out text, invisible borders or vivid-on-white status colours is a failure. The light token set and every white-based hover must be replaced by theme-scoped tokens. → Task 2 (+ the manual visual check in Task 13).
@@ -1301,7 +1301,7 @@ git -c user.name="opencode" -c user.email="opencode@local" commit -m "docs: mark
 |---|---|
 | §4.1 theme shape | 1, 3 |
 | §4.2 cycle + icon placement | 3, 4, 9, 10, 12 |
-| §4.3 persistence, bootstrap, live system | 3, 11 |
+| §4.3 persistence, bootstrap + the inline pre-paint script, live system | 3, 11 |
 | §4.4 light token set + fragile spots | 2 |
 | §4.5 reactive charts | 5 |
 | §5 design-language additions | 2, 4, 9, 10 |
@@ -1312,7 +1312,7 @@ git -c user.name="opencode" -c user.email="opencode@local" commit -m "docs: mark
 | §10 file structure | all |
 | §12 testing | every task |
 
-**Review Focus coverage.** (1) chart repaint → Task 5 hook test; (2) no flash → Task 3 `bootstrapTheme` test + Task 11 wiring; (3) expired/corrupt session → Tasks 6, 7, 11; (4) live system → Task 3; (5) light badges/contrast → Task 2 parity test + Task 13 visual pass.
+**Review Focus coverage.** (1) chart repaint → Task 5 hook test; (2) no flash → Task 3 `bootstrapTheme` test + the inline pre-paint script test (`bootstrapHtml.test.ts`) + Task 11 wiring; (3) expired/corrupt session → Tasks 6, 7, 11; (4) live system → Task 3; (5) light badges/contrast → Task 2 parity test + Task 13 visual pass.
 
 **Type consistency.** `ThemeMode`/`ResolvedTheme` are defined once in Task 1 and imported by Tasks 3–5, 9–10. `AuthClient` is defined in Task 6 and consumed by Tasks 7–8, 10–11 by those exact names. `ThemeToggle` is produced in Task 4 and consumed in Tasks 9, 10, 12. `useChartTokens`/`ChartTokens` are produced and consumed within Task 5 but named as in the spec.
 

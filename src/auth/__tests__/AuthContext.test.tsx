@@ -150,6 +150,27 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
     expect(screen.getByTestId('email')).toHaveTextContent('ravi@acme.com')
   })
+  it('stays anonymous when a sign-in resolves after a sign-out', async () => {
+    const pending = deferred<typeof session>()
+    const client = makeClient({ signIn: vi.fn(() => pending.promise) })
+    render(<AuthProvider client={client}><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'))
+
+    // The user backs out while the sign-in is still in flight.
+    await userEvent.click(screen.getByRole('button', { name: 'in' }))
+    await userEvent.click(screen.getByRole('button', { name: 'out' }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'))
+
+    // The stale response must not resurrect the session it was answering for.
+    await act(async () => {
+      pending.resolve(session)
+      await pending.promise
+    })
+
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous')
+    expect(screen.getByTestId('email')).toHaveTextContent('none')
+    expect(client.signIn).toHaveBeenCalledTimes(1)
+  })
   it('signs out locally even when the client rejects the sign-out call', async () => {
     const client = makeClient({
       signOut: vi.fn(async () => {

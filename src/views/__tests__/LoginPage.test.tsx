@@ -67,7 +67,7 @@ describe('LoginPage', () => {
     expect(onBack).toHaveBeenCalled()
   })
 
-  it('disables submit while sign-in is pending and re-enables when it resolves', async () => {
+  it('labels the submit "Signing in…" while pending and re-enables after resolution', async () => {
     const pending = deferred<typeof session>()
     const client = makeClient({ signIn: vi.fn(() => pending.promise) })
     renderPage(client)
@@ -77,12 +77,16 @@ describe('LoginPage', () => {
 
     await userEvent.click(submit)
     expect(submit).toBeDisabled()
+    expect(submit).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', { name: /signing in/i })).toBe(submit)
 
     await act(async () => {
       pending.resolve(session)
       await pending.promise
     })
     await waitFor(() => expect(submit).toBeEnabled())
+    expect(submit).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('button', { name: /^sign in$/i })).toBe(submit)
   })
 
   it('sends Microsoft and Okta through the provider client without a payload', async () => {

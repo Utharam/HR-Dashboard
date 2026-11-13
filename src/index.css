@@ -244,7 +244,9 @@
   --warning-edge: rgba(217, 119, 6, 0.30);
   --warning-soft: #B45309;
   --success-text: #047857;
-  --warning-text: #B45309;
+  /* #A34A08 clears 4.5:1 on --bg-card and on the inset --hairline surfaces the
+     warning tier can sit on. --warning (non-text uses) stays #D97706. */
+  --warning-text: #A34A08;
   --danger: #DC2626;
   --danger-glow: rgba(220, 38, 38, 0.10);
   --danger-edge: rgba(220, 38, 38, 0.28);
@@ -294,6 +296,16 @@
 :root[data-theme="light"] input[type='datetime-local']::-webkit-calendar-picker-indicator {
   filter: none;
 }
+
+/* Light component overrides that cannot live in the token block: surfaces that
+   dissolve into a white field without a stronger edge or a brighter fill. The
+   preview tiles/dots and the divider rules only matter in light — in dark the
+   shared base rules already read correctly. */
+:root[data-theme="light"] .product-preview__tile { border-color: var(--border-strong); }
+:root[data-theme="light"] .product-preview__dot { background: var(--border-strong); }
+:root[data-theme="light"] .auth-sso .btn-secondary { background: var(--bg-card); }
+:root[data-theme="light"] .auth-divider::before,
+:root[data-theme="light"] .auth-divider::after { background: var(--border-strong); }
 
 /* ── 6. Base ────────────────────────────────────────────────────────────── */
 * {
@@ -662,7 +674,6 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .product-preview__bars span {
   flex: 1;
   background: var(--primary);
-  opacity: 0.55;
   border-radius: var(--r-sm) var(--r-sm) 0 0;
 }
 .product-preview__bars span:nth-child(1) { height: 42%; }
@@ -722,6 +733,16 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
     max-width: none;
   }
 }
+/* Wide screens get the whole main band for the hero + credibility strip, so
+   that band centres vertically instead of pinning to the top above an empty
+   gap ahead of the footer. Below 901px the stack stays top-aligned. */
+@media (min-width: 901px) {
+  .landing-main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
 
 /* Authentication ------------------------------------------------------- */
 .auth-shell {
@@ -735,8 +756,8 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .auth-theme {
   position: absolute;
-  top: var(--space-5);
-  right: var(--space-5);
+  top: var(--space-4);
+  right: var(--space-4);
 }
 .auth-main {
   width: 100%;
@@ -751,6 +772,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   border-radius: var(--r-2xl);
   box-shadow: var(--shadow-xl);
   padding: var(--space-8);
+  position: relative;
 }
 .auth-card .alert {
   margin-bottom: var(--space-4);
@@ -780,6 +802,12 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+/* While a sign-in is in flight the primary submit reads "Signing in…": it is
+   working, not unavailable, so it keeps full opacity where `.btn:disabled`
+   would fade it. The SSO buttons keep the shared disabled fade. */
+.auth-form .btn-primary:disabled {
+  opacity: 1;
 }
 .auth-divider {
   display: flex;
@@ -1509,7 +1537,7 @@ textarea.omni-input {
 .toggle-chip--on:hover { background: var(--toggle-chip-hover); }
 .toggle-chip--off:hover {
   color: var(--text-main);
-  border-color: var(--border);
+  border-color: var(--border-control);
 }
 
 /* Callout banner (guidance strips) */
@@ -1710,10 +1738,6 @@ textarea.omni-input {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-/* When the wrapped action row runs out of room, the theme toggle — last in the
-   row — pins to the far edge instead of trailing mid-wrap. An auto margin is
-   zero inside a fit-content row, so the full-width 1440px header is untouched. */
-.page-actions .theme-toggle { margin-left: auto; }
 
 /* Labeled numeric tile (leave balances, settlement line items) */
 .stat-tile {
@@ -1772,7 +1796,7 @@ textarea.omni-input {
 .settlement__total {
   font-size: var(--fs-3xl);
   font-weight: var(--fw-extrabold);
-  color: var(--success);
+  color: var(--success-text);
   line-height: 1.15;
   letter-spacing: var(--tracking-display);
   font-variant-numeric: tabular-nums;
@@ -1935,4 +1959,14 @@ textarea.omni-input {
     color: black !important;
   }
   .landing-shell *, .auth-shell *, .auth-card * { color: black !important; }
+  /* The shells are light, but their inner surfaces carry their own background:
+     with background graphics on, a dark-theme print would otherwise keep dark
+     preview tiles/rails and inset form controls. */
+  .landing-shell .product-preview,
+  .landing-shell .product-preview__rail,
+  .landing-shell .product-preview__tile,
+  .auth-shell .omni-input,
+  .auth-shell .omni-select,
+  .auth-shell .btn-secondary { background: white !important; border-color: #D0D5DD !important; }
+  .landing-shell .product-preview__dot { background: #D0D5DD !important; }
 }

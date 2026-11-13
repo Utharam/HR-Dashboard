@@ -127,9 +127,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       if (!resolvedClient) {
         throw new AuthError('not_configured', 'Authentication is not configured.')
       }
-      // A sign-in is newer truth than any in-flight revalidation.
-      requestRef.current += 1
+      // A sign-in is newer truth than any in-flight revalidation. The generation
+      // is captured before the await: if a sign-out (or a newer request) wins
+      // while we wait, this response is stale and must not write state.
+      const request = ++requestRef.current
       const next = await resolvedClient.signIn(credentials)
+      if (request !== requestRef.current) return next
       setSession(next)
       setStatus('authenticated')
       return next
@@ -142,8 +145,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       if (!resolvedClient) {
         throw new AuthError('not_configured', 'Authentication is not configured.')
       }
-      requestRef.current += 1
+      // Same generation guard as `signIn`: a provider response that resolves
+      // after a sign-out is stale and must not resurrect a session.
+      const request = ++requestRef.current
       const next = await resolvedClient.signInWithProvider(provider, payload)
+      if (request !== requestRef.current) return next
       setSession(next)
       setStatus('authenticated')
       return next

@@ -62,12 +62,12 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="auth-shell">
-      <div className="auth-theme no-print">
-        <ThemeToggle />
-      </div>
-
       <main className="auth-main">
         <div className="auth-card">
+          <div className="auth-theme no-print">
+            <ThemeToggle />
+          </div>
+
           <div className="auth-brand">
             <div className="brand-mark" aria-hidden="true">Ω</div>
             <span className="brand-name">Omni<span className="text-primary">HR</span></span>
@@ -101,8 +101,13 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 onChange={(event) => setPassword(event.target.value)}
               />
             </div>
-            <button type="submit" className="btn btn-primary btn-block" disabled={isSubmitting}>
-              Sign in
+            <button
+              type="submit"
+              className="btn btn-primary btn-block"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 

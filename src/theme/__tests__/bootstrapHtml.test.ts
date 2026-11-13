@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
+import { THEME_KEY } from '../../theme/theme'
 
 /**
  * The pre-paint theme bootstrap lives in `index.html`, not in a module, so it
@@ -11,9 +12,18 @@ import { DATA_SCHEMA_VERSION } from '../../utils/storage'
  * is a stricter witness of that than jsdom is.
  */
 const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8')
-const extracted = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
-if (!extracted) throw new Error('index.html has no inline <script> block')
-const inlineScript: string = extracted
+
+/**
+ * Every bare `<script>` body (the module entry carries attributes and does not
+ * match). The bootstrap is selected by content — the script that reads
+ * `THEME_KEY` — rather than by position, so a key literal in `index.html` that
+ * drifts from `THEME_KEY` in `src/theme/theme.ts` fails here, in the storage
+ * fakes below, or in the selection assertion, instead of passing vacuously.
+ */
+const bareScripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+const themeScript = bareScripts.find((body) => body.includes(`'${THEME_KEY}'`))
+if (!themeScript) throw new Error(`index.html has no inline <script> reading '${THEME_KEY}'`)
+const inlineScript: string = themeScript
 
 const envelope = (mode: unknown, v: number = DATA_SCHEMA_VERSION): string =>
   JSON.stringify({ v, rows: [{ mode }] })
@@ -46,7 +56,7 @@ function runBootstrap(scenario: Scenario = {}): Record<string, string> {
   const fakeStorage = {
     getItem: (key: string) => {
       if (scenario.storageThrows === true) throw new Error('SecurityError')
-      return key === 'omnihr_theme' ? (scenario.stored ?? null) : null
+      return key === THEME_KEY ? (scenario.stored ?? null) : null
     },
   }
 
@@ -62,8 +72,12 @@ function runBootstrap(scenario: Scenario = {}): Record<string, string> {
 }
 
 describe('index.html pre-paint theme script', () => {
+  it('is the only bare script that reads the theme key', () => {
+    expect(bareScripts.filter((body) => body.includes(`'${THEME_KEY}'`))).toEqual([inlineScript])
+  })
+
   it('is a synchronous inline script that precedes the module entry', () => {
-    const inlineAt = html.indexOf('<script>')
+    const inlineAt = html.indexOf(inlineScript)
     const moduleAt = html.indexOf('/src/main.tsx')
     expect(inlineAt).toBeGreaterThan(-1)
     expect(moduleAt).toBeGreaterThan(-1)
@@ -71,8 +85,8 @@ describe('index.html pre-paint theme script', () => {
   })
 
   it('sits in the head, before the stylesheet and font links', () => {
-    expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('<link'))
-    expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('</head>'))
+    expect(html.indexOf(inlineScript)).toBeLessThan(html.indexOf('<link'))
+    expect(html.indexOf(inlineScript)).toBeLessThan(html.indexOf('</head>'))
   })
 })
 
@@ -112,6 +126,18 @@ describe('pre-paint theme resolution', () => {
 
   it('ignores an unknown mode', () => {
     expect(runBootstrap({ stored: envelope('blue') })['data-theme']).toBeUndefined()
+  })
+
+  it('ignores an envelope with no rows', () => {
+    expect(
+      runBootstrap({ stored: JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [] }) })['data-theme'],
+    ).toBeUndefined()
+  })
+
+  it('ignores an envelope whose only row is null', () => {
+    expect(
+      runBootstrap({ stored: JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [null] }) })['data-theme'],
+    ).toBeUndefined()
   })
 
   it('does not throw when storage denies the read', () => {
