@@ -425,6 +425,15 @@ git add src/theme/ThemeContext.tsx src/theme/__tests__/ThemeContext.test.tsx
 git -c user.name="opencode" -c user.email="opencode@local" commit -m "feat(theme): add provider, persistence and pre-render bootstrap"
 ```
 
+> **Post-implementation fix (2026-11-13).** `bootstrapTheme()` alone did not guarantee a
+> first-paint-correct theme: the module it lives in is deferred, so a stored light
+> preference could still flash dark. A tiny synchronous classic inline script was added
+> to the `<head>` of `index.html` (before the stylesheet and font links) that reads the
+> same versioned envelope and sets `data-theme`. `bootstrapTheme()` is kept unchanged as
+> a fallback for environments that block inline scripts; the duplicated envelope read is
+> pinned by `src/theme/__tests__/bootstrapHtml.test.ts` and must track
+> `DATA_SCHEMA_VERSION`.
+
 ---
 
 ### Task 4: The ThemeToggle icon

@@ -4,6 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OmniHR | Enterprise Workforce & HR Intelligence Suite</title>
+    <!-- Applies the stored theme before first paint. This must stay a synchronous
+         classic (non-module) script: a deferred module runs after the browser may
+         already have painted a dark frame for a light-theme user. It is the ONE
+         copy of the envelope read outside src/utils/storage.ts, so its version
+         below MUST stay in sync with DATA_SCHEMA_VERSION there. Failing open is
+         deliberate - no attribute means the CSS :root dark default applies. -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('omnihr_theme')
+          if (!raw) return
+          var envelope = JSON.parse(raw)
+          if (!envelope || envelope.v !== 2 || !Array.isArray(envelope.rows)) return
+          var row = envelope.rows[0]
+          var mode = row && row.mode
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return
+          if (mode === 'system') {
+            if (typeof window.matchMedia !== 'function') return
+            mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          document.documentElement.setAttribute('data-theme', mode)
+        } catch {
+          /* a denied localStorage is not worth a broken page */
+        }
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">

@@ -86,7 +86,10 @@ From the brief, restated because they are review criteria:
 
 - The mode persists **per device** through the existing `utils/storage.ts` envelope — `savePersisted(THEME_KEY, [{ mode }])` / `loadPersisted(THEME_KEY, isThemeModeRow, [])`. No raw `localStorage`. No new storage API.
 - Validator: a row is a non-null object whose `mode` is one of the three literals. Anything else is discarded and the default (dark) applies.
-- **No flash of wrong theme (FOUC?).** The attribute is applied in `main.tsx` *before* `createRoot` runs: a `bootstrapTheme()` (in the theme module) reads storage through `storage.ts`, resolves `'system'`, and sets `data-theme`. Because `index.css` is imported above it in the same module, the attribute is set before first paint for the overwhelmingly common cases (no `localStorage` round-trip flush is needed to set an attribute). This keeps all storage access inside `storage.ts`; no duplicated envelope format in `index.html`.
+- **No flash of wrong theme (FOUC?).** The attribute is applied by a **synchronous classic inline `<script>` in the `<head>` of `index.html`**, placed before the stylesheet and font links. It reads `localStorage.getItem('omnihr_theme')` inside a `try`, accepts only the `{ v: 2, rows }` envelope (the version must stay in sync with `DATA_SCHEMA_VERSION`), resolves `'system'` through `window.matchMedia` (guarded), and sets `data-theme`. Anything unusable means *no attribute*, so the CSS `:root` dark default applies and the script never throws — a denied `localStorage` is silently ignored.
+  - **Why not the module?** A deferred module script cannot guarantee this. `bootstrapTheme()` runs at module scope, but module execution is deferred and can land after the browser has already painted, so a light-theme user could still see one dark frame. Only a synchronous head script runs before first paint.
+  - **Cost, accepted deliberately:** the envelope read is now duplicated — once here and once in `utils/storage.ts`. The inline copy stays tiny and dependency-free, carries a comment pointing at `DATA_SCHEMA_VERSION`, and is pinned by `src/theme/__tests__/bootstrapHtml.test.ts`, which executes the real script from `index.html` against fakes.
+  - `bootstrapTheme()` and its call in `main.tsx` are **kept as a fallback** for environments where inline scripts are blocked (a strict CSP) — it is no longer the only mechanism, and its behaviour is unchanged.
 - **`system` tracks the OS live.** While `mode === 'system'`, `ThemeProvider` subscribes to `window.matchMedia('(prefers-color-scheme: dark)')`'s `change` event and re-resolves the attribute — and therefore the charts — without a reload. The subscription is torn down when the mode leaves `system` or the provider unmounts, so the resolved theme is one source of truth and cannot go stale.
 
 ### 4.4 The light token set — designed, not inverted
@@ -332,7 +335,7 @@ Follows the repo's rules exactly: Vitest, split by extension (`*.test.ts` → no
 1. **Default theme = dark** (not `system`), to preserve the locked dark-first identity for a first-time executive.
 2. **Cycle order dark → light → system**, icon `Moon` → `Sun` → `Monitor`.
 3. **Session & theme stored as one-row arrays** in the existing envelope (no new storage API).
-4. **`bootstrapTheme()` in `main.tsx`** to avoid a flash — no inline script in `index.html`.
+4. **Theme is applied by a synchronous inline `<script>` in `index.html`'s head**, with `bootstrapTheme()` in `main.tsx` retained as a fallback for blocked inline scripts. The original call was `bootstrapTheme()` alone — but a module script is deferred, so it can execute after first paint and still flash dark at a light-theme user. The trade is one duplicated envelope read, kept in sync with `DATA_SCHEMA_VERSION` and covered by a test that runs the real script.
 5. **Landing product preview is a static, `aria-hidden` illustration** — no console data or chart library on the front door.
 6. **Data seam (`ApiClient`) deferred**, since the requested scope names the auth seams.
 7. **Sign-out lives in the sidebar footer.**
