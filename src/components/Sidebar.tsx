@@ -23,9 +23,9 @@ interface SidebarProps {
   onExportExcel: () => void;
   onResetData: () => void;
   /**
-   * Whether the drawer is open. Below the collapse breakpoint the sidebar leaves the grid
-   * and becomes a fixed panel, so App owns the open state and the header's toggle owns the
-   * only transition into it.
+   * Whether the navigation is open. Above the drawer breakpoint this collapses or restores
+   * the in-grid sidebar; below it, it opens the off-canvas drawer. App owns the state
+   * because the header toggle and the drawer scrim are both outside this component.
    */
   isOpen?: boolean;
   /**

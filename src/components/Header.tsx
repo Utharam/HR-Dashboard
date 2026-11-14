@@ -64,10 +64,10 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="page-header no-print">
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         {/*
-          The navigation toggle. It is always rendered rather than hidden above the collapse
-          breakpoint: a control that appears and disappears with the viewport is a control
-          whose keyboard tab order changes under the user, and this one is the only route
-          to the sidebar once it becomes a drawer.
+          The navigation toggle is a real control at every width: above the 760px drawer
+          breakpoint it collapses and restores the in-grid sidebar; below it, it opens the
+          drawer. It is always rendered rather than swapped in and out with the viewport,
+          so its place in the tab order does not change under a keyboard user.
         */}
         <button
           type="button"

@@ -1355,6 +1355,20 @@ textarea.omni-input {
   }
 }
 
+/* Above the drawer breakpoint the same toggle collapses the in-grid sidebar:
+   the grid drops the sidebar column and the content takes the full width.
+   Below 760px the drawer rules above own the same state. The attribute lives
+   on the shell because a grid template is a property of the grid, not of the
+   child that is being removed. */
+@media (min-width: 761px) {
+  .app-shell[data-nav-open='false'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell[data-nav-open='false'] .app-sidebar {
+    display: none;
+  }
+}
+
 /* KPI card: label / value / supporting note, with the icon on the label row. */
 .kpi-card { display: flex; flex-direction: column; }
 /* Two lines of label height are reserved so every value in the row shares a

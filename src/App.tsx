@@ -35,6 +35,18 @@ import { isEmployeeRow, isPolicyRow } from './utils/rowValidators';
 
 const EMPLOYEES_KEY = 'omnihr_employees';
 const POLICIES_KEY = 'omnihr_policies';
+
+/**
+ * True when the sidebar is the off-canvas drawer (the 760px breakpoint in
+ * index.css). Above that breakpoint the same header toggle collapses and
+ * restores the in-grid sidebar, so choosing a page or pressing Escape must
+ * not close it there. The fallback is the drawer behaviour: jsdom and any
+ * environment without matchMedia exercise the mobile contract.
+ */
+function isDrawerViewport(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+  return window.matchMedia('(max-width: 760px)').matches;
+}
 /**
  * A one-shot snapshot of the register as it stood immediately before an import.
  *
@@ -101,25 +113,39 @@ export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
 
-  // Below 760px the sidebar leaves the layout grid and becomes a fixed panel (see the shell
-  // breakpoints in index.css). The state lives here, not in the Sidebar, because the
-  // control that owns it is in the Header and the scrim that dismisses it is a sibling of
-  // both. Escape closes it for the same reason a dialog closes on Escape: leaving is never
-  // the same gesture as choosing.
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // The header toggle owns the navigation's open state at every width: above
+  // 760px it collapses and restores the in-grid sidebar, and below 760px it
+  // opens the off-canvas drawer (see the shell breakpoints in index.css). The
+  // state lives here because the control is in the Header and the scrim is a
+  // sibling of both. Escape closes the drawer, not the desktop sidebar.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => !isDrawerViewport());
 
   useEffect(() => {
     if (!isSidebarOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsSidebarOpen(false);
+      if (e.key === 'Escape' && isDrawerViewport()) setIsSidebarOpen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isSidebarOpen]);
 
+  // Crossing the drawer breakpoint resets the navigation to the state that
+  // breakpoint expects: the in-grid sidebar appears on desktop, the drawer
+  // starts closed on a phone. Resizing within a breakpoint leaves the user's
+  // explicit open/closed choice alone.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(max-width: 760px)');
+    const onChange = (event: MediaQueryListEvent) => setIsSidebarOpen(!event.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
   const handleNavigate = (tab: ActiveTab) => {
     setActiveTab(tab);
-    setIsSidebarOpen(false);
+    // A drawer covers the page it just navigated to; the desktop sidebar is
+    // persistent and must stay open.
+    if (isDrawerViewport()) setIsSidebarOpen(false);
   };
 
   // The one thing a "nothing matches" page can usefully offer: the way back. Each section
@@ -365,7 +391,7 @@ export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
   const noticeTitle = notice?.kind === 'discarded' ? 'Saved data could not be read' : 'Change not saved';
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-nav-open={isSidebarOpen}>
       {/* Sidebar Navigation */}
       <Sidebar 
         activeTab={activeTab} 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
@@ -7,14 +7,14 @@ import { ThemeProvider } from '../../theme/ThemeContext';
 /**
  * What the shell owes a keyboard and a screen-reader user, independent of viewport width.
  *
- * There is deliberately NO responsive test here. jsdom has no layout engine: it computes no
+ * There is deliberately no LAYOUT test here. jsdom has no layout engine: it computes no
  * grid tracks, applies no media queries and honours no `transform`, so `getComputedStyle`
  * returns author values with media-query overrides still attached. A test asserting
  * "the sidebar is off-canvas at 390px" could only ever assert the class name it was
- * written against, which is a tautology rather than evidence. The breakpoint behaviour is
- * verified by a human at 1440 / 1024 / 390 with `npm run dev`; what is asserted here is
- * the part a test CAN prove - the landmark and control structure, which is the part that
- * survives when the CSS is edited.
+ * written against, which is a tautology rather than evidence. The visual collapse/drawer
+ * is verified by a human at 1440 / 1024 / 390 with `npm run dev`; the state contract at
+ * both breakpoints is pinned below with a `matchMedia` stub, which is the part a test can
+ * prove.
  */
 
 // Same reason as App.test.tsx: jsdom has no 2D canvas, so a real Chart.js instance cannot
@@ -27,6 +27,28 @@ vi.mock('react-chartjs-2', () => {
 beforeEach(() => {
   localStorage.clear();
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/**
+ * A desktop viewport for the navigation state tests. The layout itself still needs a
+ * human: jsdom applies no media queries. This stub only makes the
+ * `matchMedia('(max-width: 760px)')` check in App report "not a drawer".
+ */
+const stubDesktopViewport = () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-color-scheme: dark'),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+};
 
 /**
  * The header toggle, found by whichever of its two names is current. The scrim carries a
@@ -134,6 +156,50 @@ describe('App shell navigation toggle', () => {
     await userEvent.click(screen.getByRole('button', { name: /dismiss navigation overlay/i }));
 
     expect(navToggle()).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('App shell desktop navigation', () => {
+  it('starts with the in-grid sidebar open', () => {
+    stubDesktopViewport();
+    render(<ThemeProvider><App /></ThemeProvider>);
+
+    expect(navToggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(document.getElementById('app-sidebar')).toHaveAttribute('data-open', 'true');
+  });
+
+  it('collapses and restores the sidebar from the header toggle', async () => {
+    stubDesktopViewport();
+    render(<ThemeProvider><App /></ThemeProvider>);
+    const sidebar = document.getElementById('app-sidebar');
+
+    await userEvent.click(navToggle());
+    expect(navToggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(sidebar).toHaveAttribute('data-open', 'false');
+
+    await userEvent.click(navToggle());
+    expect(navToggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(sidebar).toHaveAttribute('data-open', 'true');
+  });
+
+  it('keeps the sidebar open when a destination is chosen', async () => {
+    stubDesktopViewport();
+    render(<ThemeProvider><App /></ThemeProvider>);
+
+    await userEvent.click(screen.getByRole('button', { name: /Employee Directory/i }));
+
+    // The desktop sidebar is persistent. Closing it here would turn every
+    // navigation click into a layout jump the user did not ask for.
+    expect(navToggle()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('does not treat Escape as a drawer dismissal on desktop', async () => {
+    stubDesktopViewport();
+    render(<ThemeProvider><App /></ThemeProvider>);
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(navToggle()).toHaveAttribute('aria-expanded', 'true');
   });
 });
 
