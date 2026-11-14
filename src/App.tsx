@@ -657,6 +657,10 @@ export const App: React.FC<{
     if (accepted.length === 0) {
       // Every row was a duplicate: nothing changed, so there is no backup to take
       // and nothing to undo. Writing one here would arm an Undo button for a no-op.
+      // A backup left over from an earlier import is cleared too: it describes a
+      // register this no-op did not change, and offering to "undo" back to it would
+      // silently discard changes made since that import.
+      clearPersisted(EMPLOYEES_BACKUP_KEY);
       setActiveTab('directory');
       setConfirmation({
         text:

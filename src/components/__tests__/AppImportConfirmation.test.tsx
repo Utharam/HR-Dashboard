@@ -79,8 +79,8 @@ const openExcelHub = async () => {
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
 };
 
-const uploadRoster = async () => {
-  const ws = XLSX.utils.json_to_sheet(IMPORTED_ROWS);
+const uploadRoster = async (rows: Record<string, unknown>[] = IMPORTED_ROWS) => {
+  const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
   const file = new File(
@@ -220,5 +220,28 @@ describe('App destructive import', () => {
     const confirmation = await screen.findByRole('status');
     expect(confirmation).toHaveTextContent(/Demo data reset/i);
     expect(screen.queryByRole('button', { name: /^undo$/i })).toBeNull();
+  });
+
+  it('clears a stale pre-import snapshot when every row is skipped', async () => {
+    // A previous import left an undo snapshot behind. This import adds nothing, so
+    // that snapshot describes a register this no-op never touched; an Undo built on
+    // it would roll back changes made since, while claiming to undo this import.
+    localStorage.setItem(
+      BACKUP_KEY,
+      JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: INITIAL_EMPLOYEES.slice(0, 2) }),
+    );
+    render(<ThemeProvider><App /></ThemeProvider>);
+    await openExcelHub();
+    await uploadRoster([
+      { ...IMPORTED_ROWS[0], 'Employee ID': INITIAL_EMPLOYEES[0].id },
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: /sync into live dashboard/i }));
+    await userEvent.click(screen.getByRole('button', { name: /append to the existing/i }));
+
+    const confirmation = await screen.findByRole('status');
+    expect(confirmation).toHaveTextContent(/Nothing was added/i);
+    expect(screen.queryByRole('button', { name: /^undo$/i })).toBeNull();
+    expect(localStorage.getItem(BACKUP_KEY)).toBeNull();
   });
 });

@@ -156,11 +156,79 @@ describe('IndexedDB migration from localStorage', () => {
 
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
-    // The leave key existed but was unreadable, so the demo seed is NOT substituted
-    // for data the user once had. The load reports that loss instead.
-    expect(loaded.snapshot.leavePlans).toEqual([])
+    // The employees payload was unreadable, so the fallback roster is the demo set.
+    // The leave payload was also unreadable, and the recovery seed follows the same
+    // rule as first-run seeding: the demo roster gets the demo planner, and the loss
+    // is still reported.
+    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('keeps the first row for a duplicated legacy employee id and reports the repair', async () => {
+    const duplicate = { ...LEGACY_EMPLOYEES[0], name: 'Later duplicate that must not win' }
+    installLocalStorage({
+      omnihr_employees: envelope([
+        LEGACY_EMPLOYEES[0],
+        duplicate,
+        LEGACY_EMPLOYEES[1],
+      ]),
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
+    // The first occurrence survives; the duplicate is not allowed to replace it.
+    expect(loaded.snapshot.employees[0].name).toBe(LEGACY_EMPLOYEES[0].name)
+    expect(loaded.recovered).toBe(true)
+
+    // The repaired dataset is what was written: a later load cannot resurrect the
+    // duplicate from a keyed store that only kept the last write.
+    const reloaded = await createStore().load()
+    expect(reloaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
+  })
+
+  it('repairs duplicated policy and leave ids instead of collapsing them', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(LEGACY_EMPLOYEES),
+      omnihr_policies: envelope([LEGACY_POLICIES[0], LEGACY_POLICIES[0], LEGACY_POLICIES[1]]),
+      omnihr_leave_plans: envelope([
+        LEGACY_LEAVE_PLANS[0],
+        LEGACY_LEAVE_PLANS[0],
+        LEGACY_LEAVE_PLANS[1],
+      ]),
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
+    expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS.slice(0, 2))
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('does not seed demo leave plans onto a custom roster when the leave payload is corrupt', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(LEGACY_EMPLOYEES),
+      omnihr_leave_plans: '[null,null]',
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
+    expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('seeds demo leave plans onto the demo roster when the leave payload is corrupt', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(INITIAL_EMPLOYEES),
+      omnihr_leave_plans: '[null,null]',
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
     expect(loaded.recovered).toBe(true)
   })
 

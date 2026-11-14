@@ -151,10 +151,73 @@ describe('LocalStorageStore', () => {
     const loaded = await new LocalStorageStore().load()
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
-    // The leave key EXISTED but was unusable; absent-key seeding does not apply, and
-    // the loss is reported rather than passed off as a clean demo seed.
-    expect(loaded.snapshot.leavePlans).toEqual([])
+    // The employees payload was unreadable, so the fallback roster is the demo set.
+    // The leave payload was also unreadable; the recovery seed follows the same rule
+    // as first-run seeding, so the demo roster gets the demo planner. The loss is
+    // still reported rather than passed off as a clean demo seed.
+    expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
+      leavePlanContent(createInitialLeavePlans()),
+    )
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('keeps the first row for a duplicated employee id and reports the repair', async () => {
+    localStorage.setItem(
+      STORAGE_KEYS.employees,
+      envelope([EMPLOYEES[0], { ...EMPLOYEES[0], name: 'Later duplicate' }, EMPLOYEES[1]]),
+    )
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.employees).toEqual([EMPLOYEES[0], EMPLOYEES[1]])
+    expect(loaded.snapshot.employees[0].name).toBe(EMPLOYEES[0].name)
+    // The repair is not silent: without `recovered` the next save would report an
+    // invalid dataset while the screen still showed the duplicates.
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('repairs duplicated policy and leave ids instead of loading an unsavable set', async () => {
+    localStorage.setItem(
+      STORAGE_KEYS.employees,
+      envelope(INITIAL_EMPLOYEES.slice(0, 4)),
+    )
+    localStorage.setItem(
+      STORAGE_KEYS.policies,
+      envelope([POLICIES[0], POLICIES[0], POLICIES[1]]),
+    )
+    localStorage.setItem(
+      STORAGE_KEYS.leavePlans,
+      envelope([LEAVE_PLANS[0], LEAVE_PLANS[0], LEAVE_PLANS[1]]),
+    )
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.policies).toEqual([POLICIES[0], POLICIES[1]])
+    expect(loaded.snapshot.leavePlans).toEqual([LEAVE_PLANS[0], LEAVE_PLANS[1]])
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('does not seed demo leave plans onto a custom roster when the leave payload is corrupt', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES.slice(0, 3)))
+    localStorage.setItem(STORAGE_KEYS.leavePlans, '[null,null]')
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.employees).toHaveLength(3)
+    expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('seeds demo leave plans onto the demo roster when the leave payload is corrupt', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES))
+    localStorage.setItem(STORAGE_KEYS.leavePlans, '[null,null]')
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
+      leavePlanContent(createInitialLeavePlans()),
+    )
     expect(loaded.recovered).toBe(true)
   })
 

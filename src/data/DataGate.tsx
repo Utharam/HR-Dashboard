@@ -90,7 +90,7 @@ const FALLBACK_WARNING =
   'IndexedDB is unavailable, so OmniHR is using the older localStorage copy. It may not include changes made since IndexedDB was last available. Changes here are saved to localStorage and may not merge back.'
 
 const RECOVERED_WARNING =
-  'Some saved data could not be read and was replaced by demo data.'
+  'Some saved data could not be read and was replaced by demo data. Duplicate records were repaired.'
 
 const BROKEN_MESSAGE =
   'OmniHR could not read or prepare its data storage in this browser. Close this tab and reopen OmniHR. If the problem remains, clear this site\u2019s storage from your browser settings.'

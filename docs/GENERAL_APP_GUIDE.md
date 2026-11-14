@@ -388,4 +388,4 @@ OmniHR implements the following Indian statutory regulations:
 OmniHR includes a flexible column alias matching engine that automatically detects common column titles from Workday, SAP, BambooHR, Darwinbox, and custom sheets. For detailed schema information, consult the [Excel Sheet Handling Guide](EXCEL_SHEET_HANDLING_GUIDE.md).
 
 #### Q3: How do I export employee records for bank disbursement?
-Navigate to the **Admin** page (sidebar **Admin** or the **Admin** header button), find the **Excel Data Hub** card, and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.
+Navigate to the **Admin** page (sidebar **Admin** or the **Admin** header button), find the **Excel Hub** card, and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.

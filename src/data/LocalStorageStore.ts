@@ -18,6 +18,7 @@ import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
+  dedupeById,
   hasStoredValue,
   hasUniqueIds,
   type DataSnapshot,
@@ -112,36 +113,50 @@ export class LocalStorageStore implements DataStore {
     )
     // The leave key gets an empty fallback, not the demo seed, so a custom roster is
     // never shown leave for demo employees it does not contain. The seed is applied
-    // below only for an absent key on an exactly-demo roster.
+    // below only when the roster is exactly the demo set and the stored leave payload
+    // is unusable (absent or corrupt).
     const leavePlansResult = loadPersisted(STORAGE_KEYS.leavePlans, isLeavePlanRow, [])
     const settingsResult = loadSettings()
 
-    const employees = employeesResult.rows
-    const leavePlans =
-      !hasStoredValue(STORAGE_KEYS.leavePlans) && isDemoEmployeeSet(employees)
+    // Shape validation accepts a repeated id; this backend would then load the whole
+    // dataset but reject every later save as invalid, which looks like a storage
+    // failure with no explanation. Repair the duplicates here (first row wins) and
+    // report it through `recovered`, matching the IndexedDB migration.
+    const employees = dedupeById(employeesResult.rows)
+    const policies = dedupeById(policiesResult.rows)
+    const leavePlansDeduped = dedupeById(leavePlansResult.rows)
+    const leavePlansUnusable =
+      !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
+    const leavePlans = leavePlansUnusable
+      ? isDemoEmployeeSet(employees.rows)
         ? createInitialLeavePlans()
-        : leavePlansResult.rows
+        : []
+      : leavePlansDeduped.rows
 
     return {
       snapshot: {
         v: 1,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
-        employees,
-        policies: policiesResult.rows,
+        employees: employees.rows,
+        policies: policies.rows,
         leavePlans,
         settings: settingsResult.settings,
       },
       // In this backend the legacy keys ARE the live store, so there is no separate
       // read-only backup to advertise.
       legacyBackup: false,
-      // A corrupt envelope was replaced above. The fallback backend still has to admit
-      // that the saved copy it found was unusable.
+      // A corrupt envelope was replaced, or a repeated id was repaired, above. The
+      // fallback backend still has to admit that the saved copy it found was unusable
+      // or malformed.
       recovered:
         employeesResult.status === 'recovered' ||
         policiesResult.status === 'recovered' ||
         leavePlansResult.status === 'recovered' ||
-        settingsResult.recovered,
+        settingsResult.recovered ||
+        employees.repaired ||
+        policies.repaired ||
+        leavePlansDeduped.repaired,
     }
   }
 

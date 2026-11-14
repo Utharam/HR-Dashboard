@@ -185,26 +185,29 @@ describe('Admin snapshot card — display', () => {
     expect(within(card).getByText(/OneDrive/)).toBeInTheDocument();
   });
 
-  it('reports the localStorage fallback and no legacy backup when there is none', () => {
+  it('says the legacy copy is the active store on the real localStorage fallback pair', () => {
+    // The fallback store always reports `legacyBackup: false` (it has no separate
+    // copy), so this is the pair production actually mounts.
     render(<AdminSection {...baseProps({ backend: 'localstorage', legacyBackup: false })} />);
-
-    expect(screen.getByText('localStorage fallback')).toBeInTheDocument();
-    expect(screen.getByText('None')).toBeInTheDocument();
-    expect(screen.queryByText(/old localStorage copy/i)).toBeNull();
-  });
-
-  it('says the legacy copy is the active store when running on the fallback', () => {
-    render(<AdminSection {...baseProps({ backend: 'localstorage', legacyBackup: true })} />);
 
     expect(screen.getByText('localStorage fallback')).toBeInTheDocument();
 
     // The legacy copy is what this browser reads and writes on the fallback -
     // the row must not dress it up as a frozen backup made in an earlier era.
     const legacyRow = factRow('Legacy copy');
-    expect(legacyRow.textContent).toContain('running on the fallback');
+    expect(legacyRow.textContent).toContain('running on the localStorage fallback');
     expect(legacyRow.textContent).toContain('active store');
+    expect(legacyRow.textContent).toContain('not a separate frozen backup');
     expect(legacyRow.textContent).not.toMatch(/read-only/i);
     expect(legacyRow.textContent).not.toMatch(/old localStorage copy/i);
+    expect(screen.queryByText('None')).toBeNull();
+  });
+
+  it('reports no legacy backup on IndexedDB when the migration found none', () => {
+    render(<AdminSection {...baseProps({ backend: 'indexeddb', legacyBackup: false })} />);
+
+    expect(factRow('Legacy backup').textContent).toContain('None');
+    expect(screen.queryByText(/old localStorage copy/i)).toBeNull();
   });
 });
 

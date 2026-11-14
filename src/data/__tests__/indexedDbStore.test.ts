@@ -136,6 +136,34 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
   })
 
+  it('does not seed demo leave plans onto a custom roster with invalid leave rows', async () => {
+    const store = createStore()
+    await store.load()
+
+    // The roster is a valid custom set (not the demo roster), while the leave store
+    // holds a row today's predicate rejects. Recovery must not invent leave for
+    // employees the demo seed does not describe.
+    await store.saveEmployees(EMPLOYEES)
+    await store.saveLeavePlans([{ id: 'broken' } as never])
+
+    const loaded = await store.load()
+    expect(loaded.recovered).toBe(true)
+    expect(loaded.snapshot.employees).toEqual(EMPLOYEES)
+    expect(loaded.snapshot.leavePlans).toEqual([])
+  })
+
+  it('seeds demo leave plans when the demo roster has invalid leave rows', async () => {
+    const store = createStore()
+    await store.load()
+
+    await store.saveEmployees(INITIAL_EMPLOYEES)
+    await store.saveLeavePlans([{ id: 'broken' } as never])
+
+    const loaded = await store.load()
+    expect(loaded.recovered).toBe(true)
+    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+  })
+
   it('treats a saved empty array as an empty dataset instead of reseeding it', async () => {
     const store = createStore()
     await store.load()

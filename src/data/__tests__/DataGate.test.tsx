@@ -11,8 +11,10 @@ import {
   type StoreResult,
 } from '../DataStore'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
+import type { LeavePlan } from '../../types'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
+import { createInitialLeavePlans } from '../initialLeavePlans'
 import { renderApp } from '../../test/renderApp'
 
 // jsdom has no 2D canvas; the console's charts must be stubbed or their async
@@ -28,6 +30,22 @@ vi.mock('react-chartjs-2', () => {
 const ONE_EMPLOYEE = { ...INITIAL_EMPLOYEES[0], id: 'EMP-GATE-1', name: 'Zora Gate' }
 const ONE_POLICY = { ...INITIAL_POLICIES[0], id: 'POL-GATE-1', title: 'Gate seed policy' }
 
+// A state the reset must actually change in all four datasets. The demo defaults are
+// also the app seed, so a reset test that starts from them proves nothing.
+const CUSTOM_EMPLOYEE = { ...INITIAL_EMPLOYEES[0], id: 'EMP-RESET-1', name: 'Reset Candidate' }
+const CUSTOM_POLICY = { ...INITIAL_POLICIES[0], id: 'POL-RESET-1', title: 'Reset policy' }
+const CUSTOM_PLAN: LeavePlan = {
+  id: 'plan-reset-1',
+  employeeId: CUSTOM_EMPLOYEE.id,
+  startDate: '2026-12-01',
+  endDate: '2026-12-02',
+  type: 'CL',
+  status: 'Planned',
+  halfDay: null,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+}
+
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
     v: 1,
@@ -39,6 +57,22 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   }
+}
+
+/** The demo leave seed carries its own clock timestamps; compare its content only. */
+function leavePlanSignature(plans: LeavePlan[]): string[] {
+  return plans.map((plan) =>
+    [
+      plan.id,
+      plan.employeeId,
+      plan.startDate,
+      plan.endDate,
+      plan.type,
+      plan.status,
+      plan.halfDay ?? '',
+      plan.note ?? '',
+    ].join('|'),
+  )
 }
 
 /** A store that honours the interface but refuses the one call the gate cares about. */
@@ -139,7 +173,7 @@ describe('DataGate', () => {
     // The children still render: recovery is a warning about replaced rows, not a
     // reason to withhold the console.
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Some saved data could not be read and was replaced by demo data.',
+      'Some saved data could not be read and was replaced by demo data. Duplicate records were repaired.',
     )
   })
 
@@ -246,6 +280,30 @@ describe('App through the data seam', () => {
 
     expect(store.saveEmployees).toHaveBeenCalledTimes(2)
     expect(store.savePolicies).toHaveBeenCalledTimes(2)
+  })
+
+  it('Reset Demo State restores all four datasets in the store, not just the register', async () => {
+    const store = new MemoryStore({
+      employees: [CUSTOM_EMPLOYEE],
+      policies: [CUSTOM_POLICY],
+      leavePlans: [CUSTOM_PLAN],
+      settings: { maxConcurrentLeave: 8 },
+    })
+
+    await renderApp({ dataStore: store })
+
+    await userEvent.click(screen.getByRole('button', { name: /reset demo state/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /reset demo data/i }))
+
+    await waitFor(async () => {
+      const { snapshot } = await store.load()
+      expect(snapshot.employees).toEqual(INITIAL_EMPLOYEES)
+      expect(snapshot.policies).toEqual(INITIAL_POLICIES)
+      expect(leavePlanSignature(snapshot.leavePlans)).toEqual(
+        leavePlanSignature(createInitialLeavePlans()),
+      )
+      expect(snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
+    })
   })
 
   it('reports a failed store write through the not-saved banner', async () => {

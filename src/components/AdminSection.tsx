@@ -274,15 +274,14 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
           <div className="admin-fact">
             {/* On the fallback the legacy copy IS the store this browser writes
                 to, not a frozen backup of one - the label and the copy must not
-                pretend otherwise. */}
+                pretend otherwise. `legacyBackup` is always false there (the store
+                has no separate copy), so the sentence is keyed off the backend. */}
             <dt>{backend === 'localstorage' ? 'Legacy copy' : 'Legacy backup'}</dt>
             <dd>
               {backend === 'localstorage'
-                ? legacyBackup
-                  ? 'Active - this browser is running on the fallback, so the legacy copy is the active store, not a separate frozen backup'
-                  : 'None'
-                : legacyBackup
-                  ? 'Kept - the old localStorage copy from before IndexedDB is preserved read-only'
+                ? 'Active store - this browser is running on the localStorage fallback. The legacy copy is the active store, not a separate frozen backup.'
+                : backend === 'indexeddb' && legacyBackup
+                  ? 'Kept - the old localStorage copy from before IndexedDB is preserved read-only.'
                   : 'None'}
             </dd>
           </div>

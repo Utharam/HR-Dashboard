@@ -121,6 +121,29 @@ export function hasUniqueIds(rows: { id: string }[]): boolean {
 }
 
 /**
+ * Keeps the first row for each `id`, reporting whether anything was dropped.
+ *
+ * `loadPersisted` validates the SHAPE of a stored envelope, not the uniqueness of its
+ * ids, and both load paths must cope with what that leaves. IndexedDB's keyed stores
+ * would silently keep only the last write for a repeated key, and localStorage would
+ * load the duplicates only to reject every later save as invalid. Repairing the
+ * dataset here keeps the first occurrence, like an import does, and `repaired` lets
+ * the caller report the repair instead of losing rows in silence.
+ */
+export function dedupeById<T extends { id: string }>(
+  rows: readonly T[],
+): { rows: T[]; repaired: boolean } {
+  const seen = new Set<string>()
+  const unique: T[] = []
+  for (const row of rows) {
+    if (seen.has(row.id)) continue
+    seen.add(row.id)
+    unique.push(row)
+  }
+  return { rows: unique, repaired: unique.length !== rows.length }
+}
+
+/**
  * True when a legacy localStorage key currently holds any value, including a value
  * that later fails validation.
  *
