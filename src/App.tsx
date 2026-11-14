@@ -9,6 +9,7 @@ import { DirectorySection } from './components/DirectorySection';
 import { AttendanceSection } from './components/AttendanceSection';
 import { PayrollSection } from './components/PayrollSection';
 import { PayslipDesignerSection } from './components/PayslipDesignerSection';
+import { FinanceReportSection } from './components/FinanceReportSection';
 import { PerformanceSection } from './components/PerformanceSection';
 import { RecruitmentSection } from './components/RecruitmentSection';
 import { RetentionSection } from './components/RetentionSection';
@@ -103,8 +104,9 @@ const PAYROLL_BONUSES_KEY = 'omnihr_payroll_bonuses';
 /**
  * The tabs whose sections work on the filtered roster (design decision D2): the
  * page-owned `PageToolbar` (search, department, location, Add Staff) renders on
- * exactly these. Attendance and the planner carry their own filters; Admin,
- * Policies and Guides filter nothing, so they render no toolbar at all.
+ * exactly these. Attendance and the planner carry their own filters; the
+ * Payslip Designer and Finance Report own their page controls; Admin, Policies
+ * and Guides filter nothing, so they render no toolbar at all.
  */
 const TOOLBAR_TABS: ActiveTab[] = [
   'overview',
@@ -1494,6 +1496,26 @@ export const App: React.FC<{
             onSaveStructure={handleSavePayStructure}
             onSaveOverride={handleSavePayOverride}
             onRemoveOverride={handleRemovePayOverride}
+          />
+        )}
+
+        {/*
+          The Finance Report is a month-close statement, not a filtered roster
+          view: it receives the FULL register, the ledger and the holiday
+          calendar, then applies the payroll-run filter itself. It owns its
+          month, so App does not carry a second month state; the current month
+          only seeds the page's default selector.
+        */}
+        {activeTab === 'finance' && (
+          <FinanceReportSection
+            employees={employees}
+            attendance={attendance}
+            holidays={holidays}
+            payStructure={payStructure}
+            payOverrides={payOverrides}
+            payrollBonuses={payrollBonuses}
+            currentMonthKey={currentMonthKey}
+            onSelectEmployee={setSelectedEmployee}
           />
         )}
 

@@ -3367,3 +3367,187 @@ button.attendance-cell:focus-visible {
   display: flex;
   gap: var(--gap-micro);
 }
+
+/* ── Finance Report ───────────────────────────────────────────────────────
+   The month-close statement (design §6.4): its own month control, the KPI row,
+   two flush statement tables and a print-only masthead. The shell's header,
+   sidebar and every `.btn` are already hidden by the global print rules; the
+   `.no-print` toolbar goes with them. ─────────────────────────────────────── */
+
+/* Visible only on paper: the report needs its own company/month/generated head
+   once the console's header and sidebar are gone. */
+.finance-report__print-head {
+  display: none;
+}
+
+.finance-report__toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-grid);
+}
+.finance-report__month {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-micro);
+  min-width: 0;
+}
+.finance-report__month-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.finance-report__month-row .omni-input {
+  width: 170px;
+}
+.finance-report__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.finance-report__month-label {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-bright);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-tight);
+}
+.finance-report__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.finance-report__floor-note {
+  align-items: flex-start;
+}
+.finance-report__employee-id {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-dim);
+}
+.finance-report__floor-badge {
+  margin-left: var(--gap-micro);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.finance-report__total-cell {
+  background: var(--bg-table-head);
+  color: var(--text-bright);
+  font-weight: var(--fw-bold);
+  border-top: 1px solid var(--border-strong);
+}
+.finance-report__table tfoot th {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  color: var(--text-bright);
+}
+.finance-report__table tfoot td {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .finance-report__toolbar {
+    align-items: stretch;
+  }
+  .finance-report__month-row {
+    width: 100%;
+  }
+  .finance-report__month-row .omni-input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  .finance-report__actions .btn {
+    flex: 1;
+  }
+}
+
+@media print {
+  .finance-report {
+    gap: var(--space-4);
+  }
+  .finance-report__print-head {
+    display: block;
+    margin-bottom: var(--space-3);
+  }
+  .finance-report__print-brand {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: #475569;
+  }
+  .finance-report__print-head h3 {
+    margin: 2px 0;
+    font-size: 16pt;
+    line-height: var(--lh-tight);
+    color: #0f172a;
+  }
+  .finance-report__print-head p {
+    font-size: 9pt;
+    color: #334155;
+  }
+  /* The whole statement is white paper: the dark/light console surface must not
+     bleed ink, and a card shadow prints as grey dirt. */
+  .finance-report .omni-card {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  /* The flush cards host the long statement tables: they must be allowed to
+     flow across pages (with repeated headers) rather than jump whole. */
+  .finance-report .omni-card--flush {
+    break-inside: auto;
+  }
+  .finance-report .omni-card-header {
+    border-color: #cbd5e1 !important;
+  }
+  .finance-report .omni-card-title,
+  .finance-report .kpi-label,
+  .finance-report .kpi-value,
+  .finance-report .kpi-sub,
+  .finance-report .omni-card-sub,
+  .finance-report .pagination__count,
+  .finance-report .designer-hint {
+    color: #0f172a !important;
+  }
+  .finance-report .kpi-value {
+    font-size: 13pt;
+  }
+  .finance-report .omni-table-wrap {
+    overflow: visible !important;
+  }
+  .finance-report .omni-table {
+    font-size: 8.5pt;
+  }
+  /* A long employee table repeats its header on every printed page, and a row
+     never splits across two pages. */
+  .finance-report .omni-table thead {
+    display: table-header-group;
+  }
+  .finance-report .omni-table tr {
+    break-inside: avoid;
+  }
+  .finance-report .finance-report__total-cell {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+  }
+  .finance-report .alert {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+  .finance-report .badge {
+    background: #ffffff !important;
+    border: 1px solid #94a3b8 !important;
+    color: #0f172a !important;
+  }
+}

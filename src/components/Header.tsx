@@ -34,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'leave': return { title: 'Planner — Leave, Events & Coverage', sub: 'Month calendar of who is away and what is on: leave plans, company events, coverage peaks and the next 30 days' };
       case 'payroll': return { title: 'Payroll & Compensation Engine', sub: 'Statutory CTC components, EPF, ESI, Professional Tax & Disbursable Net' };
       case 'payslip': return { title: 'Payslip Designer', sub: 'Company pay structure, per-employee overrides and bonus rules — with a live payslip preview' };
+      case 'finance': return { title: 'Finance Report', sub: 'Month-close salary, statutory deductions, bonuses and total cost to company' };
       case 'performance': return { title: 'Performance & 9-Box Talent Matrix', sub: 'Bell curve distribution, potential vs performance rating grid' };
       case 'recruitment': return { title: 'Talent Acquisition & Hiring Pipeline', sub: 'Active requisitions, candidate funnel stages & time-to-hire' };
       case 'retention': return { title: 'Statutory EOSB & Gratuity Calculator', sub: 'Payment of Gratuity Act 1972 compliance with tenure rounding & ₹20L cap' };

@@ -85,6 +85,7 @@ export type ActiveTab =
   | 'leave'
   | 'payroll' 
   | 'payslip'
+  | 'finance'
   | 'performance' 
   | 'recruitment' 
   | 'retention' 
