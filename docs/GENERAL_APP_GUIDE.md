@@ -22,8 +22,8 @@ This manual provides an exhaustive operational reference for HR administrators, 
    - [3.8 33-Month Financial & Headcount Analytics](#38-33-month-financial--headcount-analytics)
    - [3.9 Excel Hub & Synchronization](#39-excel-hub--synchronization)
    - [3.10 Corporate HR Policy & Benefits Hub](#310-corporate-hr-policy--benefits-hub)
-   - [3.11 Leave Planner & Coverage Calendar](#311-leave-planner--coverage-calendar)
-   - [3.12 Admin & Data Exchange (Excel Hub)](#312-admin--data-exchange-excel-hub)
+   - [3.11 Planner — Leave, Events & Coverage](#311-planner--leave-events--coverage)
+   - [3.12 Admin & Settings (Excel Hub)](#312-admin--settings-excel-hub)
 4. [Statutory & Legal Indian HR Compliances](#4-statutory--legal-indian-hr-compliances)
 5. [Operational Workflows](#5-operational-workflows)
 6. [Offline Architecture & Data Privacy](#6-offline-architecture--data-privacy)
@@ -48,27 +48,26 @@ OmniHR is built on four core architectural pillars:
 The OmniHR interface is divided into two primary zones:
 
 ### 2.1 Left Navigation Sidebar
-- **OmniHR Brand Badge:** Displays the suite version (`v1.1.0`).
-- **Navigation Tabs (12 Sections):**
+- **OmniHR Brand Badge:** Displays the suite version.
+- **Navigation Tabs (12 top-level sections, with Workforce Planning as a group):**
   1. `Executive Overview` — C-suite KPI metrics & visual charts.
   2. `Employee Directory` — Master roster with multi-column filtering.
   3. `Time & Attendance` — daily ledger, monthly matrix, holiday calendar & rollup.
-  4. `Leave Planner` — Month coverage calendar of who is away.
+  4. `Planner` — month calendar for employee leave and general company events.
   5. `Payroll & Compensation` — Disbursable net pay & payslip viewer.
   6. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
-  7. `Recruitment Pipeline` — Active requisitions & candidate stages.
-  8. `EOSB & Gratuity Calc` — End-of-service settlement engine.
-  9. `3-Year Headcount Trends` — 33-month historical financial ledger.
-  10. `Admin` — Business-data snapshots, storage status and the Excel ingestion hub.
-  11. `HR Policy Hub` — Statutory leave policies, benefits and custom rules.
-  12. `User Guides & Manual` — In-app documentation and Excel handling guide.
-- **Quick Action Buttons:**
-  - `Export Roster (Excel)`: Instant download of the current filtered employee roster.
-  - `Reset Demo State`: Resets all six business datasets - the 200-employee register, HR policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar - back to the pristine demo data.
+  7. `Workforce Planning` — expandable group with three submodules:
+     - `Recruitment Pipeline` — active requisitions & candidate stages.
+     - `EOSB & Gratuity Calc` — end-of-service settlement engine.
+     - `3-Year Headcount Trends` — 33-month historical financial ledger.
+  8. `Admin & Settings` — business-data snapshots, workspace actions and the Excel ingestion hub.
+  9. `HR Policy Hub` — statutory leave policies, benefits and custom rules.
+  10. `User Guides & Manual` — in-app documentation and Excel handling guide.
+- **Workspace actions are not in the sidebar.** Export Roster, Reset Demo State and Sign out live in the **Admin & Settings → Workspace actions** card.
 
-### 2.2 Global Top Header
-- **Dynamic Context Header:** Displays the title and subtitle of the currently active view.
-- **Global Search Bar:** Real-time text search across employee names, IDs (e.g. `EMP-1001`), designations, work emails, and departments.
+### 2.2 Top Header and Page Toolbars
+- **Slim header:** every page shows only the menu toggle, the page title and subtitle, and the light/dark theme control. The theme choice is the one global control and persists across pages.
+- **Page-owned toolbars:** search, department and location filters, and `Add Staff` appear in the toolbar of the pages that use the filtered roster — Overview, Directory, Payroll, Performance, Recruitment, Retention and Trends. Attendance and Planner keep their own module filters; Admin & Settings, HR Policy Hub and User Guides have no roster toolbar.
 - **Department Filter:** Narrows the active dataset across 7 corporate departments:
   - Engineering & Technology
   - Product Design & UX
@@ -83,10 +82,6 @@ The OmniHR interface is divided into two primary zones:
   - Delhi-NCR Regional Office
   - Hyderabad Tech Center
   - Remote / Hybrid
-- **Header Action Buttons:**
-  - `Add Staff`: Opens the interactive new hire registration modal.
-  - `Admin`: Fast jump to the Admin & Data Exchange page (business-data snapshots, storage status and the Excel Hub).
-  - `Guides`: Fast jump to the operational manuals.
 
 ---
 
@@ -133,7 +128,7 @@ Manages daily attendance, leave balances, and wage deductions. Attendance is a *
 - **Holiday calendar:** company-wide holidays, unique by date, seeded with the fixed 2026 national list (New Year Jan 1, Republic Day Jan 26, Independence Day Aug 15, Gandhi Jayanti Oct 2, Christmas Dec 25). Add, edit and delete from the holiday card; the calendar drives the matrix, the working-day counts and every rollup.
 - **Monthly rollup:** present = P + W + 0.5×HD (a half-day with a leave type counts 0.5 present + 0.5 leave; without one, 0.5 present + 0.5 unmarked); leave days by type; **LOP = absences + LOP leave**; working days = days in month − Sundays − holidays; Attendance % = present ÷ working days.
 - **Payroll & overview fallback:** the Payroll tab, payslips and overview tiles price `presentDays`/`lopDays` from the current month's daily rollup for every employee who has at least one working-day record that month. Employees or months **without** daily records keep the legacy monthly fields on the employee record, so nothing is lost when a month has not been marked.
-- **Leave quotas & LOP deduction (unchanged):** Casual Leave (CL): 12 days annual quota; Sick Leave (SL): 12 days; Privilege/Earned Leave (EL): 15 days (encashable at separation). Loss of Pay deduction: $\text{LOP Deduction} = \left(\frac{\text{Monthly Basic Salary}}{26}\right) \times \text{LOP Days}$. The Leave Planner remains the source of approved leave; the matrix shows it as ghost cells.
+- **Leave quotas & LOP deduction (unchanged):** Casual Leave (CL): 12 days annual quota; Sick Leave (SL): 12 days; Privilege/Earned Leave (EL): 15 days (encashable at separation). Loss of Pay deduction: $\text{LOP Deduction} = \left(\frac{\text{Monthly Basic Salary}}{26}\right) \times \text{LOP Days}$. The Planner remains the source of approved leave; the matrix shows it as ghost cells.
 
 ---
 
@@ -279,39 +274,48 @@ The centralized policy engine enabling enterprise governance, family welfare pro
 
 ---
 
-### 3.11 Leave Planner & Coverage Calendar
-A single view of who is away, for HR input and for leadership coverage reviews:
+### 3.11 Planner — Leave, Events & Coverage
+A single calendar for who is away and what the company has planned, for HR input and leadership coverage reviews:
 
 1. **Leave Entries:**
    - One record per employee per spell: type (`CL`, `SL`, `EL`, `LOP`, `Maternity`, `Paternity`, `Comp Off`, `Other`), status (`Planned`, `Approved`, `Cancelled`), optional AM/PM half-day (single-day entries only), and an optional note.
    - Validation blocks an end date before the start date, a half-day on a multi-day range, and duplicate identical entries. Overlapping bookings are allowed but flagged live — HR decides.
    - Add entries via **Add leave**, or click a calendar day to open, edit or delete its entries.
 
-2. **Calendar:**
+2. **General Events:**
+   - HR can plan company events alongside leave: title, start and end date (inclusive), type (`Event`, `Training`, `Meeting`, `Holiday`, `Other`), optional department and location, and notes.
+   - Events are stored as their own dataset and appear as distinct chips in the calendar; clicking a day lists both its leave entries and its events.
+   - Validation requires a title, valid dates and a start date on or before the end date.
+
+3. **Calendar:**
    - Monday-first month grid with **prev / today / next** navigation.
    - Each day shows a count of people away, up to three employee initials, and a `+N` overflow. Sundays are muted.
    - Days at or above the coverage threshold are highlighted and listed under **Peak days**.
 
-3. **Filters & Summary Tiles:**
-   - Filters: department, office location, employee search, leave type and status.
+4. **Filters & Summary Tiles:**
+   - Filters: department, office location, employee search, leave type, leave status and event type.
    - Tiles: people on leave today, peak day this month, upcoming leave in the next 30 days, and working days booked this month.
 
-4. **Coverage Threshold:**
+5. **Coverage Threshold:**
    - `maxConcurrentLeave` (default 3) is editable in the planner panel.
    - Durations count working days (days in the month minus Sundays), so the count follows the real calendar rather than a fixed monthly figure.
 
-### 3.12 Admin & Data Exchange (Excel Hub)
-The former **Excel Data Hub** tab is now the **Admin** page (sidebar and header shortcuts point to **Admin**); the Excel Hub and its guide link are unchanged inside it:
+### 3.12 Admin & Settings (Excel Hub)
+The **Admin & Settings** page owns the workspace actions, the business-data snapshot and the Excel Hub:
 
 1. **Data Snapshot Card:**
-   - Record counts for every business dataset - employees, policies, leave plans, attendance records and holidays - plus the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
+   - Record counts for every business dataset - employees, policies, leave plans, planner events, attendance records and holidays - plus the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
 
-2. **Export Snapshot:**
-   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, daily attendance and holidays) in one versioned JSON file, snapshot format v2.
+2. **Workspace Actions:**
+   - `Export Roster (Excel)`, `Reset Demo State` and `Sign out` live here, not in the sidebar footer.
+   - `Reset Demo State` restores all six business datasets and the planner settings to the pristine demo data.
+
+3. **Export Snapshot:**
+   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, planner events, daily attendance and holidays) in one versioned JSON file, snapshot format v3.
    - Snapshots are the backup: save each exported file to Google Drive, OneDrive or any shared drive.
 
-3. **Import Snapshot:**
-   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing. A v1 snapshot (made before daily attendance) imports with an empty attendance ledger and holiday calendar.
+4. **Import Snapshot:**
+   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing. A v1 snapshot (made before daily attendance) imports with an empty attendance ledger and holiday calendar; a v2 snapshot (made before planner events) imports with no events.
    - After a confirmed import, the console shows the data from the file.
    - **Imported copies are local:** a snapshot loaded into one browser does not propagate changes back to HR or to any other browser.
 
@@ -336,7 +340,7 @@ OmniHR implements the following Indian statutory regulations:
 ## 5. Operational Workflows
 
 ### Workflow 1: Onboarding a New Employee
-1. Click the **+ Add Staff** button in the top header.
+1. Click the **+ Add Staff** button in the page toolbar on Overview, Directory, Payroll or any other roster page.
 2. Enter the employee's Full Name, Phone, and choose their Department.
 3. Select their Designation/Title, Office Location Hub, and Date of Joining (DOJ).
 4. Enter their agreed Monthly Gross CTC in INR (e.g., `180000`).
@@ -364,17 +368,17 @@ OmniHR implements the following Indian statutory regulations:
 ## 6. Offline Architecture & Data Privacy
 
 - **100% Client-Side Processing:** All data parsing, calculations, and Chart.js graphics execute strictly within your local browser runtime.
-- **IndexedDB Primary Store:** Business data — employees, policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `attendance`, `holidays`, `meta`).
-- **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and the Admin page reports that they exist.
+- **IndexedDB Primary Store:** Business data — employees, policies, leave plans, planner settings, planner events, the daily attendance ledger and the holiday calendar — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `plannerEvents`, `attendance`, `holidays`, `meta`).
+- **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and Admin & Settings reports that they exist.
 - **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
-- **Snapshot Backups:** Export the full business-data JSON snapshot (format v2, attendance and holidays included) from **Admin** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar.
-- **Restoring Default State:** If you wish to restore the factory demo state at any time, click **Reset Demo State** in the sidebar. It resets all six business datasets: the register returns to the 200-employee corporate dataset, HR policies, leave plans and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed.
+- **Snapshot Backups:** Export the full business-data JSON snapshot (format v3, planner events, attendance and holidays included) from **Admin & Settings** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar; v2 snapshots import with no planner events.
+- **Restoring Default State:** If you wish to restore the factory demo state at any time, open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. It resets all six business datasets and the planner settings: the register returns to the 200-employee corporate dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed.
 
 ---
 
 ## 7. Keyboard Shortcuts & Print Utilities
 
-- **Global Search:** Click the search box in the header or press `Tab` to navigate to it.
+- **Page Search:** Click the search box in the active page's toolbar or press `Tab` to navigate to it. Search and filters are page-scoped; the theme control in the header is the one global control.
 - **Quick Print:** Press `Ctrl + P` (or `Cmd + P` on macOS) while viewing any employee modal to print the official payslip.
 - **Modal Dismissal:** Click outside the modal card or click the `X` button in the upper-right corner.
 
@@ -389,4 +393,4 @@ OmniHR implements the following Indian statutory regulations:
 OmniHR includes a flexible column alias matching engine that automatically detects common column titles from Workday, SAP, BambooHR, Darwinbox, and custom sheets. For detailed schema information, consult the [Excel Sheet Handling Guide](EXCEL_SHEET_HANDLING_GUIDE.md).
 
 #### Q3: How do I export employee records for bank disbursement?
-Navigate to the **Admin** page (sidebar **Admin** or the **Admin** header button), find the **Excel Hub** card, and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.
+Navigate to **Admin & Settings** in the sidebar, find the **Excel Hub** card, and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.

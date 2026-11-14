@@ -146,7 +146,7 @@ Once a month has daily attendance records (see the matrix in §7), the monthly f
 
 ```mermaid
 flowchart TD
-    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to the Admin page (Excel Hub card)"]
+    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to Admin & Settings (Excel Hub card)"]
     B --> C["Drag & Drop or Click to Select File"]
     C --> D["SheetJS Parses First Sheet into Memory"]
     D --> E["Column Alias Mapping & Type Coercion"]
@@ -161,7 +161,7 @@ flowchart TD
 - Tip: Download the **Standard Template** from OmniHR to review an ideal pre-formatted structure.
 
 ### Step 2: Upload Workbook
-- Navigate to the **Admin** page in the sidebar (or click the **Admin** header button) and locate the **Excel Hub** card.
+- Navigate to **Admin & Settings** in the sidebar and locate the **Excel Hub** card.
 - Drag your spreadsheet file into the upload dropzone, or click the dropzone to browse your local filesystem.
 
 ### Step 3: Review Pre-Sync Preview

@@ -44,7 +44,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 
 1. **[General Application Guide](docs/GENERAL_APP_GUIDE.md)**:
    - Complete architectural overview and local-first data privacy model.
-   - Deep dive into all 13 functional HR modules (Directory, Attendance, Leave Planner, Payroll, Performance, Hiring, Gratuity, Trends, Excel Hub, Admin & Data Exchange).
+   - Deep dive into all 13 functional HR modules (Directory, Attendance, Planner, Payroll, Performance, Hiring, Gratuity, Trends, Excel Hub, Admin & Settings).
    - Strict Indian statutory compliance formulations: EPF (Employees' Provident Fund Act 1952) ₹15,000 wage ceiling calculation, Payment of Gratuity Act 1972 (15/26 formula, 6-month rounding rule, ₹20 Lakhs statutory cap), Industrial Disputes Act Section 25F retrenchment compensation, and 26-day working month Loss of Pay (LOP) calculations.
    - Step-by-step administrative workflows (Adding staff, viewing & printing payslips, calculating final separation settlements).
 
@@ -66,7 +66,8 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 - **Icons:** Lucide React
 - **Spreadsheet Engine:** SheetJS (`xlsx`) for drag-and-drop parsing, flexible column alias mapping, and formatted exports
 - **Persistence:** Local-first architecture — business data (employees, policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar) is stored in **IndexedDB**, with a `localStorage` fallback and a visible warning where IndexedDB is unavailable. Theme and session stay in `localStorage`. Full offline capability.
-- **Backup & handoff:** a versioned JSON snapshot (format v2) of every business dataset can be exported from the Admin page and re-imported on another machine.
+- **Backup & handoff:** a versioned JSON snapshot (format v3) of every business dataset can be exported from Admin & Settings and re-imported on another machine.
+- **Focused console shell:** the header carries only the page title and the light/dark theme control, which persists across every page. Search, filters and Add Staff live in each page's own toolbar, and workspace actions (Export Roster, Reset Demo State, Sign out) live in Admin & Settings.
 
 ---
 
@@ -92,10 +93,11 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - Leave quotas tracking: Casual Leave (CL), Sick Leave (SL), Privilege/Earned Leave (EL), and Loss of Pay (LOP) days.
    - Automatic Loss of Pay (LOP) wage deductions: `(Basic / 26) * LOP Days`. The fixed 26-day LOP denominator (and the wage-cap rules around it) stay company/statutory policy, deliberately independent of a month's actual working-day count.
 
-4. **Leave Planner & Coverage Calendar:**
+4. **Planner — Leave, Events & Coverage:**
    - HR records future leave per employee: type (CL, SL, EL, LOP, Maternity, Paternity, Comp Off, Other), status (Planned, Approved, Cancelled) and an AM/PM half-day on single-day entries.
-   - Monday-first month calendar with prev/today/next navigation: each day shows a count badge, up to three employee initials and a `+N` overflow; Sundays are muted; clicking a day opens its entries for editing or deletion.
-   - Filters for department, location, employee search, leave type and status.
+   - HR also plans general company events — title, start/end date, type (Event, Training, Meeting, Holiday, Other), optional department/location and notes. Events are a separate dataset and appear as their own chips in the same calendar.
+   - Monday-first month calendar with prev/today/next navigation: each day shows a count badge, up to three employee initials and a `+N` overflow; Sundays are muted; clicking a day opens its leave entries and events for editing or deletion.
+   - Filters for department, location, employee search, leave type, leave status and event type.
    - Summary tiles: people on leave today, peak day this month, upcoming leave in the next 30 days, and working days booked this month.
    - Configurable coverage threshold (`maxConcurrentLeave`, default 3): days at or above it are highlighted in the calendar and listed under Peak days. Durations count working days (Sundays excluded).
 
@@ -127,7 +129,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - 3-year historical trend line chart comparing Consolidated Payroll Spend (₹ Crores) with Headcount Growth.
    - Historical monthly turnover, hiring, and exit ledger.
 
-10. **Excel Hub (inside Admin):**
+10. **Excel Hub (inside Admin & Settings):**
    - **Spreadsheet Ingestion:** Drag-and-drop any Excel spreadsheet (`.xlsx`, `.xls`, `.csv`). Auto-detects columns whether from Workday, SAP, BambooHR, Darwinbox, or custom spreadsheets.
    - **Download Standard Template:** Generates a pre-formatted Excel template with recognized column headers.
    - **Export Master Roster:** Downloads the complete 200 employee directory as an Excel file with all 24 columns, including the canonical department ID, the reporting line, PF UANs and leave balances. The file round-trips: importing it reproduces the register it came from.
@@ -135,9 +137,10 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - **Attendance matrix template:** generates `omnihr-attendance-YYYY-MM.xlsx` for the selected month from the live roster, the holiday calendar and approved leave plans — Sundays pre-filled `WO`, holidays `H`, the month's existing records carried over as their own codes, approved leave pre-filled with its code (approved half-day leave as `HD-<code>`), other working days pre-filled `P` (optional), plus a legend sheet.
    - **Attendance matrix import:** upload the filled matrix from the Attendance tab; it is validated, previewed (matched employees, records to create/replace, per-cell issues, and roster gaps — employee IDs missing from the sheet and day columns missing from the header) and only written after confirmation. Importing replaces that month's records only.
 
-11. **Admin & Data Exchange:**
-    - **Data snapshot card:** record counts (employees, policies, leave plans, attendance records, holidays), the active storage backend (IndexedDB or the localStorage fallback), whether the pre-migration legacy `localStorage` backup exists, and the last exported/imported timestamps for this browser.
-    - **Export snapshot:** one versioned JSON file (`omnihr-snapshot-YYYY-MM-DD.json`, format v2) containing every business dataset — employees, policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar. Save it to Google Drive, OneDrive or any shared drive; the snapshot is the backup.
+11. **Admin & Settings:**
+    - **Data snapshot card:** record counts (employees, policies, leave plans, planner events, attendance records, holidays), the active storage backend (IndexedDB or the localStorage fallback), whether the pre-migration legacy `localStorage` backup exists, and the last exported/imported timestamps for this browser.
+    - **Workspace actions:** Export Roster, Reset Demo State and Sign out now live here instead of the sidebar footer.
+    - **Export snapshot:** one versioned JSON file (`omnihr-snapshot-YYYY-MM-DD.json`, format v3) containing every business dataset — employees, policies, leave plans, planner settings, planner events, the daily attendance ledger and the holiday calendar. Save it to Google Drive, OneDrive or any shared drive; the snapshot is the backup.
     - **Import snapshot:** the file is validated (format version and row schema) and confirmed with record counts before it replaces all business data; a malformed or wrong-version file changes nothing. An imported snapshot is a local copy of this browser — changes made from it do not propagate back to HR.
     - The Excel Hub and its guide link are unchanged inside this page.
 
@@ -156,10 +159,10 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 
 ## Data storage & backups
 
-- **IndexedDB is the primary store** for business data: employees, policies, leave plans, planner settings, the daily attendance ledger (`attendance`) and the company holiday calendar (`holidays`). Theme and session stay in `localStorage` (the pre-paint theme switch must be synchronous).
-- **One-time migration:** on the first load, existing data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and the Admin page reports that they exist. A first visit also seeds the fixed 2026 holiday calendar and — for the demo roster only — a current-month demo attendance ledger.
+- **IndexedDB is the primary store** for business data: employees, policies, leave plans, planner settings, planner events (`plannerEvents`), the daily attendance ledger (`attendance`) and the company holiday calendar (`holidays`). Theme and session stay in `localStorage` (the pre-paint theme switch must be synchronous).
+- **One-time migration:** on the first load, existing data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and Admin & Settings reports that they exist. A first visit also seeds the fixed 2026 holiday calendar and — for the demo roster only — a current-month demo attendance ledger and a small set of planner events.
 - **Fallback:** if IndexedDB is unavailable (private mode or a blocked database), the app saves to `localStorage` instead and shows a warning banner above the console, so the session keeps working with a smaller storage limit.
-- **Snapshots are the backup:** export the full JSON snapshot (format v2, attendance and holidays included) from **Admin** and save it to Google Drive, OneDrive or any shared drive. Importing a snapshot replaces all business data in that browser after a validated confirmation; v1 snapshots (without attendance/holidays) import with an empty ledger and calendar.
+- **Snapshots are the backup:** export the full JSON snapshot (format v3, planner events, attendance and holidays included) from **Admin & Settings** and save it to Google Drive, OneDrive or any shared drive. Importing a snapshot replaces all business data in that browser after a validated confirmation; v1 snapshots (without attendance/holidays/events) and v2 snapshots (without events) import with the missing collections empty.
 
 ---
 

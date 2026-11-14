@@ -407,7 +407,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-primary-soft">• Adding a New Staff Member:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Click <strong>+ Add Staff</strong> in the header. Enter full name, department, role, location, DOJ, and monthly gross CTC. The system derives basic, HRA, and leaves automatically.
+                    Click <strong>+ Add Staff</strong> in the page toolbar (Overview, Directory, Payroll and the other roster pages). Enter full name, department, role, location, DOJ, and monthly gross CTC. The system derives basic, HRA, and leaves automatically.
                   </p>
                 </div>
 
@@ -421,7 +421,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-warning-soft">• Restoring Factory Demo Data:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Click <strong>Reset Demo State</strong> at the bottom of the sidebar. This resets all six business datasets: the roster returns to the original 200 corporate staff records, HR policies, leave plans and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list.
+                    Open <strong>Admin &amp; Settings</strong> and click <strong>Reset Demo State</strong> in the Workspace actions card. This resets all six business datasets and the planner settings: the roster returns to the original 200 corporate staff records, HR policies, leave plans, planner events and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list.
                   </p>
                 </div>
               </div>
@@ -445,7 +445,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
               onClick={() => onNavigateTab('admin')} 
               className="btn btn-primary"
             >
-              <Upload size={15} /> Open Excel Hub in Admin
+              <Upload size={15} /> Open Excel Hub in Admin &amp; Settings
             </button>
           </div>
 
@@ -528,7 +528,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                   <strong className="text-bright">Upload to Excel Hub</strong>
                 </div>
                 <p className="prose">
-                  Navigate to the <strong>Admin</strong> page and open the <strong>Excel Hub</strong> card. Drag and drop your file into the dashed ingestion zone, or click to browse files.
+                  Navigate to <strong>Admin &amp; Settings</strong> and open the <strong>Excel Hub</strong> card. Drag and drop your file into the dashed ingestion zone, or click to browse files.
                 </p>
               </div>
 
