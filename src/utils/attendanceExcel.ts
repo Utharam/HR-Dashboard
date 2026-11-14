@@ -77,7 +77,14 @@ function buildLegendSheet(): XLSX.WorkSheet {
   return XLSX.utils.aoa_to_sheet(LEGEND_ROWS)
 }
 
-function approvedLeaveByEmployeeDate(leavePlans: LeavePlan[]): Map<string, LeaveType> {
+/**
+ * `${employeeId}|${date}` → the approved `LeaveType` covering that date.
+ *
+ * Shared with the Attendance matrix UI, which renders the same approved leave as
+ * ghost cells, so the template and the screen can never disagree about what the
+ * planner has approved.
+ */
+export function approvedLeaveByEmployeeDate(leavePlans: LeavePlan[]): Map<string, LeaveType> {
   const leave = new Map<string, LeaveType>()
   for (const plan of leavePlans) {
     if (plan.status !== 'Approved') continue

@@ -99,9 +99,14 @@ describe('DirectorySection table semantics', () => {
 });
 
 describe('AttendanceSection table semantics', () => {
-  it('names the attendance register and scopes its headers', () => {
+  /**
+   * The old monthly register was replaced by the employees×days matrix. It is
+   * still a real table: named by its caption, scoping its day columns and
+   * sitting in the same keyboard-reachable scroll region as the other tables.
+   */
+  it('names the attendance matrix and scopes its day columns', () => {
     render(<AttendanceSection employees={INITIAL_EMPLOYEES} />);
-    expectAccessibleTable(/Monthly attendance and absence register/i);
+    expectAccessibleTable(/Attendance matrix for/i);
   });
 });
 

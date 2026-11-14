@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { Employee } from '../../types';
 import { DirectorySection } from '../DirectorySection';
-import { AttendanceSection } from '../AttendanceSection';
 import { PayrollSection } from '../PayrollSection';
 
 const emp = (n: number): Employee => ({
@@ -49,8 +48,10 @@ const clickNext = (times: number) => {
   }
 };
 
-// The three sections share one `currentPage` shape, so they share one failure mode and
-// must be proven to share one fix. Each is driven through the same stale-page sequence.
+// The two sections share one `currentPage` shape, so they share one failure
+// mode and must be proven to share one fix. Each is driven through the same
+// stale-page sequence. (AttendanceSection left this suite when the monthly
+// register became the day-by-day matrix, which has no pagination.)
 const SECTIONS = [
   {
     name: 'DirectorySection',
@@ -58,11 +59,6 @@ const SECTIONS = [
       <DirectorySection employees={employees} onSelectEmployee={() => {}} />
     ),
     emptyText: /No staff records found/i,
-  },
-  {
-    name: 'AttendanceSection',
-    render: (employees: Employee[]) => <AttendanceSection employees={employees} />,
-    emptyText: /No attendance records match/i,
   },
   {
     name: 'PayrollSection',

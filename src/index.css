@@ -2421,3 +2421,457 @@ textarea.omni-input {
   margin-top: 2px;
   color: var(--text-dim);
 }
+
+/* ── Attendance matrix ────────────────────────────────────────────────────
+   Month toolbar + summary tiles + employees×days matrix + day editor +
+   holiday card + import preview. Same token discipline as the planner and
+   admin sections above; the only literals are the two sticky column widths
+   and the 390px breakpoint, which are layout measurements. ------------- */
+
+/* Toolbar ---------------------------------------------------------------- */
+.attendance-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.attendance-toolbar__nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.attendance-toolbar__month {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-bright);
+  letter-spacing: var(--tracking-tight);
+  margin-left: var(--space-2);
+}
+.attendance-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition:
+    color var(--dur-base) var(--ease-standard),
+    border-color var(--dur-base) var(--ease-standard),
+    background-color var(--dur-base) var(--ease-standard);
+}
+.attendance-nav-btn:hover {
+  color: var(--primary);
+  border-color: var(--border-control-strong);
+  background: var(--bg-card-hover);
+}
+.attendance-toolbar__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--gap-tight);
+  align-items: end;
+}
+.attendance-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-inline);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--hairline);
+}
+.attendance-prefill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-micro);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-right: var(--space-2);
+}
+
+/* Layout: matrix card + day editor panel. The panel stacks at 390px, where
+   the phone-sized viewport leaves no room for a side rail of controls. */
+.attendance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: var(--gap-grid-lg);
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .attendance-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 390px) {
+  .attendance-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Matrix -----------------------------------------------------------------
+   Native table semantics: the month is the caption and every day column
+   announces itself. The two employee columns stay pinned while the day
+   columns scroll horizontally under them. */
+.attendance-matrix {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-sm);
+}
+.attendance-matrix th,
+.attendance-matrix td {
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--hairline);
+  text-align: center;
+  white-space: nowrap;
+}
+.attendance-matrix thead th {
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-dim);
+  background: var(--bg-card);
+}
+/* The width literals are sticky-offset arithmetic, not rhythm: column 2 must
+   start exactly where column 1 ends or the pinned pair shows a seam. */
+.attendance-matrix .attendance-sticky--id {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 6.5rem;
+  min-width: 6.5rem;
+  max-width: 6.5rem;
+  background: var(--bg-card);
+  text-align: left;
+}
+.attendance-matrix .attendance-sticky--name {
+  position: sticky;
+  left: 6.5rem;
+  z-index: 1;
+  width: 10rem;
+  min-width: 10rem;
+  max-width: 10rem;
+  background: var(--bg-card);
+  text-align: left;
+}
+.attendance-matrix .attendance-rowhead {
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attendance-matrix .attendance-rowhead.attendance-sticky--id {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.attendance-day-head__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.attendance-day-head__btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+  color: var(--text-bright);
+}
+.attendance-day-head__btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.attendance-day-head__num {
+  font-variant-numeric: tabular-nums;
+}
+.attendance-day-head__wd {
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+}
+.attendance-day-head--sunday,
+.attendance-day-head--holiday {
+  background: var(--bg-card-subtle);
+}
+.attendance-day-head--sunday .attendance-day-head__num,
+.attendance-day-head--holiday .attendance-day-head__num {
+  color: var(--text-dim);
+}
+.attendance-day-head--today .attendance-day-head__btn {
+  border-color: var(--primary-soft);
+  color: var(--primary);
+}
+.attendance-day-head--selected .attendance-day-head__btn {
+  background: var(--primary-glow);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Cells ------------------------------------------------------------------ */
+.attendance-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 1.75rem;
+  padding: 0 var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+button.attendance-cell:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+}
+button.attendance-cell:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.attendance-cell--present {
+  background: var(--success-glow);
+  color: var(--success-soft);
+}
+.attendance-cell--absent {
+  background: var(--danger-glow);
+  color: var(--danger-soft);
+}
+.attendance-cell--leave {
+  background: var(--info-glow);
+  color: var(--info-soft);
+}
+.attendance-cell--wfh {
+  background: var(--purple-glow);
+  color: var(--purple-soft);
+}
+.attendance-cell--half {
+  background: var(--warning-glow);
+  color: var(--warning-soft);
+}
+.attendance-cell--ghost {
+  border: 1px dashed var(--info-edge);
+  color: var(--text-dim);
+  background: transparent;
+}
+.attendance-cell--off,
+.attendance-cell--holiday {
+  color: var(--text-dim);
+  background: var(--bg-card-subtle);
+}
+.attendance-cell--holiday {
+  border-bottom: 2px solid var(--pink-edge);
+}
+.attendance-cell--offday {
+  box-shadow: inset 0 0 0 1px var(--warning-edge);
+}
+
+/* Legend ----------------------------------------------------------------- */
+.attendance-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--gap-grid);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.attendance-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-micro);
+}
+.attendance-legend__code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: 0 var(--space-1);
+  min-height: 1.25rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--bg-card-subtle);
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+}
+
+/* Day editor panel -------------------------------------------------------- */
+.attendance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.attendance-panel__date {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-bright);
+}
+.attendance-panel__heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.attendance-daylist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.attendance-daylist__row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.attendance-daylist__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+}
+.attendance-daylist__code {
+  min-width: 2rem;
+  text-align: center;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.attendance-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+
+/* Holiday card ------------------------------------------------------------ */
+.attendance-holidays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.attendance-holiday-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+.attendance-holiday {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-inline);
+  padding: var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.attendance-holiday__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.attendance-holiday__name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-bright);
+}
+.attendance-holiday__date {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.attendance-holiday__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--gap-micro);
+}
+
+/* Import preview ----------------------------------------------------------- */
+.attendance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.attendance-preview__counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.attendance-preview__count {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--space-3);
+}
+.attendance-preview__count dt {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.attendance-preview__count dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+.attendance-preview__unknown {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--warning-text);
+}
+.attendance-preview__issues {
+  border: 1px solid var(--warning-edge);
+  border-radius: var(--r-md);
+  padding: var(--space-3);
+}
+.attendance-preview__issues ul {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.attendance-preview__issues li + li {
+  margin-top: var(--space-1);
+}
+.attendance-preview__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
