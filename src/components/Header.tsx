@@ -47,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'overview': return { title: 'Executive Workforce Overview', sub: 'High-level headcount, payroll allocation, diversity & attrition health' };
       case 'directory': return { title: 'Employee Master Directory', sub: '200 active corporate profiles with role hierarchy and salary structures' };
       case 'attendance': return { title: 'Time, Attendance & Leave Quotas', sub: 'Standard 26-day working cycle, leave balances and LOP impact' };
+      case 'leave': return { title: 'Leave Planner & Coverage Calendar', sub: 'Month calendar of who is away, coverage peak days and the next 30 days of planned leave' };
       case 'payroll': return { title: 'Payroll & Compensation Engine', sub: 'Statutory CTC components, EPF, ESI, Professional Tax & Disbursable Net' };
       case 'performance': return { title: 'Performance & 9-Box Talent Matrix', sub: 'Bell curve distribution, potential vs performance rating grid' };
       case 'recruitment': return { title: 'Talent Acquisition & Hiring Pipeline', sub: 'Active requisitions, candidate funnel stages & time-to-hire' };

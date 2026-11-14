@@ -60,6 +60,7 @@ export type ActiveTab =
   | 'overview' 
   | 'directory' 
   | 'attendance' 
+  | 'leave'
   | 'payroll' 
   | 'performance' 
   | 'recruitment' 

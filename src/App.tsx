@@ -14,13 +14,14 @@ import { TrendsSection } from './components/TrendsSection';
 import { ExcelHubSection } from './components/ExcelHubSection';
 import { PolicySection } from './components/PolicySection';
 import { GuidesSection } from './components/GuidesSection';
+import { LeavePlannerSection } from './components/LeavePlannerSection';
 import { EmployeeModal } from './components/EmployeeModal';
 import { AddEmployeeModal } from './components/AddEmployeeModal';
 import { Callout } from './components/Callout';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
-import type { Employee, ActiveTab, HRPolicy } from './types';
-import type { DataSnapshot, DataStore } from './data/DataStore';
+import type { Employee, ActiveTab, HRPolicy, LeavePlan, PlannerSettings } from './types';
+import { DEFAULT_PLANNER_SETTINGS, type DataSnapshot, type DataStore } from './data/DataStore';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_DEPARTMENTS, 
@@ -32,10 +33,22 @@ import { INITIAL_POLICIES } from './data/initialPolicies';
 import { computePayroll, isActive } from './utils/payroll';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
 import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
-import { isEmployeeRow, isPolicyRow } from './utils/rowValidators';
+import {
+  isEmployeeRow,
+  isLeavePlanRow,
+  isPlannerSettingsRow,
+  isPolicyRow,
+} from './utils/rowValidators';
 
 const EMPLOYEES_KEY = 'omnihr_employees';
 const POLICIES_KEY = 'omnihr_policies';
+// The leave planner's two keys. These are the same envelopes the IndexedDB
+// migration and the localStorage fallback store read, so a browser that falls
+// back between backends finds the same data either way. Duplicated as literals
+// here to match the local pattern above (App reads storage itself on the legacy
+// path and should not need the store module's key map to do so).
+const LEAVE_PLANS_KEY = 'omnihr_leave_plans';
+const PLANNER_SETTINGS_KEY = 'omnihr_planner_settings';
 
 /**
  * True when the sidebar is the off-canvas drawer (the 760px breakpoint in
@@ -67,25 +80,42 @@ const EMPLOYEES_BACKUP_KEY = 'omnihr_employees_backup';
  *   built on it greeted every new user with a warning about data that never existed.
  * - `not-saved` (write side): the change is on screen but was NOT written down.
  *
+ * `scope` names the dataset the banner is about. `leave` covers both the leave plans
+ * and the planner settings: one calendar and one number belong to the same planner,
+ * and a failed write of either is the same "on screen but not written down" event.
+ *
  * A user must never have to guess whether the register they are looking at is the one
  * that will survive a refresh.
  */
-type AppNotice =
-  | { kind: 'discarded'; scope: 'employees' | 'policies' }
-  | { kind: 'not-saved'; scope: 'employees' | 'policies'; reason: 'quota' | 'unavailable' };
+type NoticeScope = 'employees' | 'policies' | 'leave';
 
-const SAVE_NOTICE_COPY: Record<'quota' | 'unavailable', string> = {
-  quota:
-    'Your change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.',
-  unavailable:
-    'Your change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+type AppNotice =
+  | { kind: 'discarded'; scope: NoticeScope }
+  | { kind: 'not-saved'; scope: NoticeScope; reason: 'quota' | 'unavailable' };
+
+const GENERIC_SAVE_QUOTA =
+  'Your change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.';
+const GENERIC_SAVE_UNAVAILABLE =
+  'Your change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.';
+
+const SAVE_NOTICE_COPY: Record<NoticeScope, Record<'quota' | 'unavailable', string>> = {
+  employees: { quota: GENERIC_SAVE_QUOTA, unavailable: GENERIC_SAVE_UNAVAILABLE },
+  policies: { quota: GENERIC_SAVE_QUOTA, unavailable: GENERIC_SAVE_UNAVAILABLE },
+  leave: {
+    quota:
+      'Your leave planner change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove a leave entry, or close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your leave planner change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
 };
 
-const DISCARDED_NOTICE_COPY: Record<'employees' | 'policies', string> = {
+const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
   employees:
     'The staff register saved in this browser could not be read and has been set aside. The demo dataset is showing in its place - anything you imported earlier is gone. Re-import your roster to continue.',
   policies:
     'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
+  leave:
+    'The leave plans saved in this browser could not be read and have been set aside. The planner is empty in their place - any leave you recorded earlier is gone. Re-enter the leave to continue.',
 };
 
 export const App: React.FC<{
@@ -123,6 +153,23 @@ export const App: React.FC<{
       policies: initialData
         ? { rows: initialData.policies, status: 'loaded' as const }
         : loadPersisted(POLICIES_KEY, isPolicyRow, INITIAL_POLICIES),
+      // The leave planner's localStorage fallback is an EMPTY planner, not a demo
+      // seed: the seed belongs to the stores (the IndexedDB migration and the
+      // fallback store seed it themselves), and a planner the user never filled
+      // must not be explained to them by invented entries. An unreadable stored
+      // payload is still `recovered`, which is what raises the banner below.
+      leavePlans: initialData
+        ? { rows: initialData.leavePlans, status: 'loaded' as const }
+        : loadPersisted(LEAVE_PLANS_KEY, isLeavePlanRow, []),
+      // Settings is a single object rather than a row list, so it travels in the
+      // envelope as one row; an absent or unusable one falls back to the default
+      // threshold. A lost threshold is a preference, not a record, so it never
+      // raises the discarded banner on its own.
+      settings: initialData
+        ? initialData.settings
+        : loadPersisted(PLANNER_SETTINGS_KEY, isPlannerSettingsRow, [
+            DEFAULT_PLANNER_SETTINGS,
+          ]).rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS },
     }),
     [initialData],
   );
@@ -132,6 +179,12 @@ export const App: React.FC<{
   const [locations] = useState(INITIAL_LOCATIONS);
   const [tracker] = useState(INITIAL_TRACKER);
   const [requisitions] = useState(INITIAL_REQUISITIONS);
+
+  // The leave planner owns the same lifecycle as the register: read once at mount
+  // (from the DataGate snapshot or localStorage), edited through the section's
+  // callbacks, and written back by the save effects below.
+  const [leavePlans, setLeavePlans] = useState<LeavePlan[]>(initialLoad.leavePlans.rows);
+  const [plannerSettings, setPlannerSettings] = useState<PlannerSettings>(initialLoad.settings);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -207,6 +260,9 @@ export const App: React.FC<{
     if (initialLoad.policies.status === 'recovered') {
       return { kind: 'discarded', scope: 'policies' };
     }
+    if (initialLoad.leavePlans.status === 'recovered') {
+      return { kind: 'discarded', scope: 'leave' };
+    }
     return null;
   });
 
@@ -232,6 +288,25 @@ export const App: React.FC<{
   // was dead code - it removed the key and the effect immediately put it back.
   const handleResetPolicies = () => {
     setPolicies(INITIAL_POLICIES);
+  };
+
+  // Leave planner intents, reported by LeavePlannerSection. A save is an upsert by
+  // id: the modal reuses the id of the entry it was opened to edit, so a replace and
+  // an add are the same callback.
+  const handleSaveLeavePlan = (plan: LeavePlan) => {
+    setLeavePlans(prev =>
+      prev.some(p => p.id === plan.id)
+        ? prev.map(p => (p.id === plan.id ? plan : p))
+        : [...prev, plan],
+    );
+  };
+
+  const handleDeleteLeavePlan = (id: string) => {
+    setLeavePlans(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleUpdatePlannerSettings = (next: PlannerSettings) => {
+    setPlannerSettings(next);
   };
 
   // Sync to storage. Two targets, one contract: the change on screen is either
@@ -301,6 +376,59 @@ export const App: React.FC<{
       setNotice({ kind: 'not-saved', scope: 'policies', reason: result.reason });
     }
   }, [dataStore, policies]);
+
+  // The leave planner's two writes follow the identical contract. Settings is a
+  // single object, so the legacy envelope carries it as a one-row list - the exact
+  // shape the fallback store and the IndexedDB migration read back.
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.saveLeavePlans(leavePlans).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'leave',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(LEAVE_PLANS_KEY, leavePlans);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'leave', reason: result.reason });
+    }
+  }, [dataStore, leavePlans]);
+
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.saveSettings(plannerSettings).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'leave',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(PLANNER_SETTINGS_KEY, [plannerSettings]);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'leave', reason: result.reason });
+    }
+  }, [dataStore, plannerSettings]);
 
   // Global Filtered Employees
   const filteredEmployees = useMemo(() => {
@@ -449,7 +577,7 @@ export const App: React.FC<{
 
   const noticeCopy = notice
     ? notice.kind === 'not-saved'
-      ? SAVE_NOTICE_COPY[notice.reason]
+      ? SAVE_NOTICE_COPY[notice.scope][notice.reason]
       : DISCARDED_NOTICE_COPY[notice.scope]
     : '';
   const noticeTitle = notice?.kind === 'discarded' ? 'Saved data could not be read' : 'Change not saved';
@@ -554,6 +682,25 @@ export const App: React.FC<{
         {activeTab === 'attendance' && (
           <AttendanceSection 
             employees={filteredEmployees}
+          />
+        )}
+
+        {/*
+          The planner deliberately receives the FULL register, not `filteredEmployees`:
+          it owns its own department/location/search filters, and its coverage view is
+          org-wide. Feeding it the header's filtered subset would both shrink the filter
+          lists it offers and silently hide a person's leave whenever a global search
+          was left behind from another tab - the calendar would lie by omission about
+          who is away.
+        */}
+        {activeTab === 'leave' && (
+          <LeavePlannerSection
+            employees={employees}
+            leavePlans={leavePlans}
+            settings={plannerSettings}
+            onSave={handleSaveLeavePlan}
+            onDelete={handleDeleteLeavePlan}
+            onSettingsChange={handleUpdatePlannerSettings}
           />
         )}
 

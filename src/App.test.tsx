@@ -219,4 +219,33 @@ describe('App persistence', () => {
     expect(banner.innerHTML).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(banner.innerHTML).not.toMatch(/\d(px|rem)\b/);
   });
+
+  it('persists the leave planner through the legacy localStorage path', async () => {
+    // The bare-App contract (design decision D9): with no `dataStore`, the leave
+    // planner's empty dataset and default settings are written to the same kind of
+    // versioned envelope the register and the policies use.
+    render(<ThemeProvider><App /></ThemeProvider>);
+
+    await waitFor(() => {
+      expect(readEnvelope('omnihr_leave_plans')).toEqual({
+        v: DATA_SCHEMA_VERSION,
+        rows: [],
+      });
+    });
+    expect(readEnvelope('omnihr_planner_settings')).toEqual({
+      v: DATA_SCHEMA_VERSION,
+      rows: [{ maxConcurrentLeave: 3 }],
+    });
+  });
+
+  it('names leave plans when their saved payload was the one discarded', async () => {
+    localStorage.setItem('omnihr_leave_plans', '[null,null]');
+    render(<ThemeProvider><App /></ThemeProvider>);
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/leave plans saved in this browser could not be read/i);
+    // The planner the user is looking at is EMPTY, and the banner must say so
+    // rather than leave them guessing whether their entries survived.
+    expect(banner).toHaveTextContent(/planner is empty in their place/i);
+  });
 });
