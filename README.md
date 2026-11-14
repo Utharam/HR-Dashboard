@@ -4,6 +4,36 @@ OmniHR is a modern, general-purpose enterprise HR management and dashboard visua
 
 Adapted and generalized from multi-location workforce data, OmniHR supports complete corporate human resources operations: from executive C-suite workforce analytics to employee master directories, biometric time & attendance, statutory payroll structures, 9-box performance matrices, recruitment funnels, bi-directional Excel synchronization, and comprehensive operational documentation.
 
+[![Public repository](https://img.shields.io/badge/GitHub-public-181717?logo=github)](https://github.com/Utharam/HR-Dashboard)
+
+## Quick start
+
+```bash
+git clone https://github.com/Utharam/HR-Dashboard.git
+cd HR-Dashboard
+npm install
+npm run dev
+```
+
+Open the Vite URL printed in the terminal (usually `http://localhost:5173`).
+
+## Demo access
+
+This is a front-end demo. Authentication is a local stub: there is no backend, no real user store, and no data leaves the browser.
+
+| Field | Value |
+|---|---|
+| Work email | `ceo@acme.com` |
+| Password | `demo` |
+
+Any non-empty email/password is accepted by the stub. The **Microsoft**, **Okta** and **SSO by domain** buttons are demonstrable stubs as well.
+
+## Screenshots
+
+| Landing | Sign in | Console |
+|---|---|---|
+| ![Landing page](docs/screenshots/landing-dark.png) | ![Sign in](docs/screenshots/login-light.png) | ![Executive overview](docs/screenshots/console-light.png) |
+
 ---
 
 ## 📚 Included Operational & Technical Guides
@@ -105,27 +135,40 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 ## Getting Started
 
 ### Prerequisites
-Node.js 18+ or 20+ installed.
+Node.js **20.19+** or **22.12+** installed (the Vite 8 requirement).
 
 ### Development Mode
-```powershell
-cd "d:\Projects\HR dashboard"
+```bash
+git clone https://github.com/Utharam/HR-Dashboard.git
+cd HR-Dashboard
 npm install
 npm run dev
 ```
-Open your browser at the local Vite URL (e.g. `http://localhost:5173`).
+Open your browser at the local Vite URL printed in the terminal (usually `http://localhost:5173`).
 
 ### Production Build
-```powershell
+```bash
 npm run build
 ```
 This produces a compiled, optimized static distribution in the `dist/` directory.
 
 ### Code Quality & Static Analysis
-```powershell
+```bash
 npm run lint
 ```
 
-### Deploying to Netlify / Vercel
-- **Netlify Drop:** Drag the compiled `dist/` folder directly to [app.netlify.com/drop](https://app.netlify.com/drop).
-- **Vercel / GitHub Pages:** Point the root to `dist/` with zero configuration required.
+### Tests
+```bash
+npm run test
+```
+Runs the Vitest 5 suite: unit tests in Node and DOM tests in jsdom.
+
+### Deploying
+- **Netlify / Vercel:** build command `npm run build`, publish directory `dist`.
+- **GitHub Pages:** for a project site (`https://<user>.github.io/HR-Dashboard/`), set `base: '/HR-Dashboard/'` in `vite.config.ts`, then publish `dist`.
+
+---
+
+## Feedback & issues
+
+This is a public repository. Please open an issue at https://github.com/Utharam/HR-Dashboard/issues for bugs, questions or suggestions.
