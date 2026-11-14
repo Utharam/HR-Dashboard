@@ -27,6 +27,8 @@ import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
+  hasStoredValue,
+  hasUniqueIds,
   type DataSnapshot,
   type DataStore,
   type LoadedData,
@@ -36,7 +38,7 @@ import {
 } from './DataStore'
 import { INITIAL_EMPLOYEES } from './initialData'
 import { INITIAL_POLICIES } from './initialPolicies'
-import { createInitialLeavePlans } from './initialLeavePlans'
+import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
 import { loadPersisted, DATA_SCHEMA_VERSION } from '../utils/storage'
 import {
   isEmployeeRow,
@@ -145,14 +147,17 @@ export class IndexedDbStore implements DataStore {
   }
 
   async saveEmployees(rows: Employee[]): Promise<StoreResult> {
+    if (!hasUniqueIds(rows)) return { ok: false, reason: 'invalid' }
     return this.replaceRows(EMPLOYEES_STORE, rows)
   }
 
   async savePolicies(rows: HRPolicy[]): Promise<StoreResult> {
+    if (!hasUniqueIds(rows)) return { ok: false, reason: 'invalid' }
     return this.replaceRows(POLICIES_STORE, rows)
   }
 
   async saveLeavePlans(rows: LeavePlan[]): Promise<StoreResult> {
+    if (!hasUniqueIds(rows)) return { ok: false, reason: 'invalid' }
     return this.replaceRows(LEAVE_PLANS_STORE, rows)
   }
 
@@ -237,30 +242,46 @@ export class IndexedDbStore implements DataStore {
    * One-time copy of the legacy localStorage envelopes, seeded where a dataset is
    * absent. `loadPersisted` returns the fallback seed for a missing or corrupt key
    * and the stored rows (including a valid empty array) otherwise.
+   *
+   * The leave planner is the one dataset that is not simply "seed on absence": the
+   * demo plans refer to the demo employees, so they are only invented when the
+   * roster is exactly the demo roster AND the leave key was never written. A custom
+   * register with no planner history gets an empty planner, not leave for people it
+   * does not contain.
    */
   private async migrateAndSeed(db: IDBDatabase): Promise<LoadedData> {
-    const employees = loadPersisted(
+    const employeesResult = loadPersisted(
       STORAGE_KEYS.employees,
       isEmployeeRow,
       INITIAL_EMPLOYEES,
-    ).rows
-    const policies = loadPersisted(
+    )
+    const policiesResult = loadPersisted(
       STORAGE_KEYS.policies,
       isPolicyRow,
       INITIAL_POLICIES,
-    ).rows
-    const leavePlans = loadPersisted(
-      STORAGE_KEYS.leavePlans,
-      isLeavePlanRow,
-      createInitialLeavePlans(this.now()),
-    ).rows
-    const settingsRows = loadPersisted(
+    )
+    const leavePlansResult = loadPersisted(STORAGE_KEYS.leavePlans, isLeavePlanRow, [])
+    const settingsResult = loadPersisted(
       STORAGE_KEYS.settings,
       isPlannerSettingsRow,
       [DEFAULT_PLANNER_SETTINGS],
-    ).rows
-    const settings = settingsRows[0] ?? { ...DEFAULT_PLANNER_SETTINGS }
+    )
+
+    const employees = employeesResult.rows
+    const policies = policiesResult.rows
+    const leavePlans =
+      !hasStoredValue(STORAGE_KEYS.leavePlans) && isDemoEmployeeSet(employees)
+        ? createInitialLeavePlans(this.now())
+        : leavePlansResult.rows
+    const settings = settingsResult.rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS }
     const legacyBackup = hasLegacyLocalStorage()
+    // Any corrupt legacy envelope was discarded by `loadPersisted` above, even
+    // though the fallback keeps the app running. The DataGate must say so.
+    const recovered =
+      employeesResult.status === 'recovered' ||
+      policiesResult.status === 'recovered' ||
+      leavePlansResult.status === 'recovered' ||
+      settingsResult.status === 'recovered'
 
     // The read transaction that discovered the missing marker has completed, so this
     // connection can start the one atomic write transaction. `withDb` closes it after
@@ -286,15 +307,31 @@ export class IndexedDbStore implements DataStore {
         settings,
       },
       legacyBackup,
+      recovered,
     }
   }
 
+  /**
+   * Reads an initialized database and shape-checks every dataset before handing it
+   * to the console.
+   *
+   * A keyed store guarantees unique keys, not valid rows. A row written by an older
+   * build (or by a browser extension) can still be missing a field a consumer
+   * dereferences, which would crash the console after the gate has declared the load
+   * healthy. Each invalid dataset is replaced by its demo seed as a whole - filtering
+   * bad rows out would silently shrink a roster, which looks like a mass deletion -
+   * and the load reports `recovered` so DataGate can tell the user the truth.
+   */
   private async buildLoadedData(db: IDBDatabase, meta: MetaRecord[]): Promise<LoadedData> {
-    const [employees, policies, leavePlans] = await Promise.all([
+    const [storedEmployees, storedPolicies, storedLeavePlans] = await Promise.all([
       readAll<Employee>(db, EMPLOYEES_STORE),
       readAll<HRPolicy>(db, POLICIES_STORE),
       readAll<LeavePlan>(db, LEAVE_PLANS_STORE),
     ])
+
+    const employeesAreValid = storedEmployees.every(isEmployeeRow)
+    const policiesAreValid = storedPolicies.every(isPolicyRow)
+    const leavePlansAreValid = storedLeavePlans.every(isLeavePlanRow)
 
     const storedSettings = metaValue(meta, 'settings')
     const settings = isPlannerSettingsRow(storedSettings)
@@ -306,12 +343,13 @@ export class IndexedDbStore implements DataStore {
         v: 1,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: this.now().toISOString(),
-        employees,
-        policies,
-        leavePlans,
+        employees: employeesAreValid ? storedEmployees : INITIAL_EMPLOYEES,
+        policies: policiesAreValid ? storedPolicies : INITIAL_POLICIES,
+        leavePlans: leavePlansAreValid ? storedLeavePlans : createInitialLeavePlans(this.now()),
         settings,
       },
       legacyBackup: metaValue(meta, 'legacyBackup') === true,
+      recovered: !employeesAreValid || !policiesAreValid || !leavePlansAreValid,
     }
   }
 

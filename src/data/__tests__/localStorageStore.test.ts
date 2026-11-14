@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { IDBFactory as FakeIDBFactory } from 'fake-indexeddb'
 import type { LeavePlan, PlannerSettings } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
-import { DEFAULT_PLANNER_SETTINGS, type DataSnapshot } from '../DataStore'
+import { DEFAULT_PLANNER_SETTINGS, STORAGE_KEYS, type DataSnapshot } from '../DataStore'
 import { LocalStorageStore } from '../LocalStorageStore'
 import { createDataStore } from '../createDataStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
@@ -42,6 +42,10 @@ function installLocalStorage(entries: Record<string, string> = {}): Storage {
     value: storage,
   })
   return storage
+}
+
+function envelope(rows: unknown[]): string {
+  return JSON.stringify({ v: DATA_SCHEMA_VERSION, rows })
 }
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
@@ -89,6 +93,7 @@ describe('LocalStorageStore', () => {
     )
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
+    expect(loaded.recovered).toBe(false)
   })
 
   it('saves and reloads all four datasets through the versioned envelopes', async () => {
@@ -107,6 +112,34 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
   })
 
+  it('seeds demo leave plans when the roster is exactly the demo set and no leave key exists', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES))
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
+      leavePlanContent(createInitialLeavePlans()),
+    )
+  })
+
+  it('does not seed demo leave plans onto a custom roster', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES.slice(0, 3)))
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.employees).toHaveLength(3)
+    expect(loaded.snapshot.leavePlans).toEqual([])
+  })
+
+  it('preserves a valid leave key even when the roster is custom', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES.slice(0, 3)))
+    localStorage.setItem(STORAGE_KEYS.leavePlans, envelope(LEAVE_PLANS))
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
+  })
+
   it('falls back to seed data for corrupt payloads without throwing', async () => {
     installLocalStorage({
       omnihr_employees: '{not json',
@@ -118,10 +151,53 @@ describe('LocalStorageStore', () => {
     const loaded = await new LocalStorageStore().load()
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
-    expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
-      leavePlanContent(createInitialLeavePlans()),
-    )
+    // The leave key EXISTED but was unusable; absent-key seeding does not apply, and
+    // the loss is reported rather than passed off as a clean demo seed.
+    expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('rejects a duplicate employee id without writing the dataset', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.saveEmployees(EMPLOYEES)
+
+    const duplicate = [EMPLOYEES[0], { ...EMPLOYEES[0], name: 'Duplicate' }]
+    await expect(store.saveEmployees(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.employees).toEqual(EMPLOYEES)
+  })
+
+  it('rejects a duplicate policy id without writing the dataset', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.savePolicies(POLICIES)
+
+    const duplicate = [POLICIES[0], { ...POLICIES[0], title: 'Duplicate' }]
+    await expect(store.savePolicies(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.policies).toEqual(POLICIES)
+  })
+
+  it('rejects a duplicate leave-plan id without writing the dataset', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.saveLeavePlans(LEAVE_PLANS)
+
+    const duplicate = [LEAVE_PLANS[0], { ...LEAVE_PLANS[0] }]
+    await expect(store.saveLeavePlans(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.leavePlans).toEqual(LEAVE_PLANS)
   })
 
   it('exports and imports a snapshot', async () => {

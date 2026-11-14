@@ -64,6 +64,17 @@ export interface LoadedData {
    * the old copy exists without the app ever reading it again.
    */
   legacyBackup: boolean
+  /**
+   * True when stored data could not be read and the load substituted seed data.
+   *
+   * This is deliberately separate from "this browser is on the localStorage
+   * fallback": the fallback is healthy storage, while `recovered` means saved rows
+   * were actually discarded. The DataGate shows a different warning for each.
+   *
+   * Optional so a store with nothing to recover (the in-memory test store) can omit
+   * it; consumers must treat an absent value as false.
+   */
+  recovered?: boolean
 }
 
 export interface DataStore {
@@ -91,6 +102,42 @@ export const STORAGE_KEYS = {
 } as const
 
 export const DEFAULT_PLANNER_SETTINGS: PlannerSettings = { maxConcurrentLeave: 3 }
+
+/**
+ * True when every row carries a distinct `id`.
+ *
+ * A keyed store silently keeps only the last row for a duplicated key. That turns an
+ * import of a roster with a repeated Employee ID into a shorter roster that looks
+ * exactly like a successful import. The stores therefore reject the whole dataset
+ * instead of writing a quietly collapsed one.
+ */
+export function hasUniqueIds(rows: { id: string }[]): boolean {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (seen.has(row.id)) return false
+    seen.add(row.id)
+  }
+  return true
+}
+
+/**
+ * True when a legacy localStorage key currently holds any value, including a value
+ * that later fails validation.
+ *
+ * `loadPersisted` reports both "the key was never written" and "a valid empty
+ * envelope was stored" as `'empty'`, and those need different treatment for the demo
+ * leave seed: only the first is a first-run signal. A denied read counts as absent,
+ * matching `loadPersisted`'s own rule for unreachable storage.
+ */
+export function hasStoredValue(key: string): boolean {
+  try {
+    // `?? null` makes an absent Web Storage API read as "no value": without it,
+    // optional chaining yields `undefined`, which is not `null` and would look stored.
+    return (globalThis.localStorage?.getItem(key) ?? null) !== null
+  } catch {
+    return false
+  }
+}
 
 /**
  * Validates a value at the store boundary.
@@ -132,6 +179,17 @@ export function validateDataSnapshot(
     !Array.isArray(candidate.leavePlans) ||
     !candidate.leavePlans.every(isLeavePlanRow) ||
     !isPlannerSettingsRow(candidate.settings)
+  ) {
+    return { ok: false, reason: 'invalid' }
+  }
+
+  // Shape-valid rows are not enough: duplicate ids would silently collapse when the
+  // snapshot is written to a keyed store, shortening the register the user thought
+  // they imported. Reject the whole file rather than write a lossy one.
+  if (
+    !hasUniqueIds(candidate.employees) ||
+    !hasUniqueIds(candidate.policies) ||
+    !hasUniqueIds(candidate.leavePlans)
   ) {
     return { ok: false, reason: 'invalid' }
   }

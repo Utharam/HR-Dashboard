@@ -75,6 +75,28 @@ describe('IndexedDB migration from localStorage', () => {
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('seeds demo leave plans when the migrated roster is the exact demo set', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(INITIAL_EMPLOYEES),
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+  })
+
+  it('does not seed demo leave plans onto a custom migrated roster', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(LEGACY_EMPLOYEES),
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
+    expect(loaded.snapshot.leavePlans).toEqual([])
   })
 
   it('migrates legacy v2 envelopes exactly and leaves the keys untouched', async () => {
@@ -92,6 +114,7 @@ describe('IndexedDB migration from localStorage', () => {
     expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
     expect(loaded.snapshot.settings).toEqual(LEGACY_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
+    expect(loaded.recovered).toBe(false)
 
     // The legacy keys are a read-only backup, not a staging area to delete from.
     expect(storage.getItem('omnihr_employees')).toBe(envelope(LEGACY_EMPLOYEES))
@@ -133,9 +156,12 @@ describe('IndexedDB migration from localStorage', () => {
 
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
-    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    // The leave key existed but was unreadable, so the demo seed is NOT substituted
+    // for data the user once had. The load reports that loss instead.
+    expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
+    expect(loaded.recovered).toBe(true)
   })
 
   it('preserves a valid empty dataset instead of replacing it with seed data', async () => {
@@ -146,12 +172,14 @@ describe('IndexedDB migration from localStorage', () => {
     const loaded = await createStore().load()
 
     expect(loaded.snapshot.employees).toEqual([])
-    // Absent datasets are still seeded: an empty register is a deliberate state, not
-    // a reason to leave the rest of the app blank.
+    // Absent policies are still seeded: an empty register is a deliberate state, not
+    // a reason to leave the rest of the app blank. Leave is different: an empty
+    // register is not the demo roster, so no demo planner is invented for it.
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
-    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
+    expect(loaded.recovered).toBe(false)
   })
 
   it('does not mark the database initialized when the migration write fails', async () => {

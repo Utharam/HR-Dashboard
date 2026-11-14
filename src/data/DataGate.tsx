@@ -21,8 +21,9 @@
  *    The degradation is never silent: for as long as the active backend is
  *    localstorage, a warning banner sits above the view, because that is a property
  *    of the whole session, not of the one failure that caused it.
- * 4. Publish `{ store, snapshot, legacyBackup }` through context. Consumers read it
- *    with `useDataGate()`; there is no second load path anywhere in the app.
+ * 4. Publish `{ store, snapshot, legacyBackup, recovered }` through context.
+ *    Consumers read it with `useDataGate()`; there is no second load path anywhere
+ *    in the app.
  *
  * The `broken` screen is the only unrecoverable case: even the fallback refused to
  * load. It is reachable only if a store violates its never-throw contract, and it
@@ -44,6 +45,11 @@ export interface DataGateValue {
    * migration. The Admin page surfaces it; nothing else acts on it.
    */
   legacyBackup: boolean
+  /**
+   * True when saved rows could not be read and the store substituted demo data.
+   * Always a boolean here, even though stores may omit it when nothing was lost.
+   */
+  recovered: boolean
 }
 
 const DataGateContext = createContext<DataGateValue | null>(null)
@@ -62,7 +68,13 @@ export function useDataGate(): DataGateValue {
 
 type GatePhase =
   | { phase: 'loading' }
-  | { phase: 'ready'; store: DataStore; snapshot: DataSnapshot; legacyBackup: boolean }
+  | {
+      phase: 'ready'
+      store: DataStore
+      snapshot: DataSnapshot
+      legacyBackup: boolean
+      recovered: boolean
+    }
   | { phase: 'broken' }
 
 export interface DataGateProps {
@@ -75,7 +87,10 @@ export interface DataGateProps {
 }
 
 const FALLBACK_WARNING =
-  'IndexedDB is not available in this browser, so OmniHR is saving your data in local storage instead. Everything still works here, but local storage has a much smaller limit, so a very large register may fail to save.'
+  'IndexedDB is unavailable, so OmniHR is using the older localStorage copy. It may not include changes made since IndexedDB was last available. Changes here are saved to localStorage and may not merge back.'
+
+const RECOVERED_WARNING =
+  'Some saved data could not be read and was replaced by demo data.'
 
 const BROKEN_MESSAGE =
   'OmniHR could not read or prepare its data storage in this browser. Close this tab and reopen OmniHR. If the problem remains, clear this site\u2019s storage from your browser settings.'
@@ -90,7 +105,14 @@ export const DataGate: React.FC<DataGateProps> = ({ children, store: storeProp }
     const boot = async () => {
       try {
         const loaded = await primary.load()
-        if (!cancelled) setPhase({ phase: 'ready', store: primary, ...loaded })
+        if (!cancelled) {
+          setPhase({
+            phase: 'ready',
+            store: primary,
+            ...loaded,
+            recovered: loaded.recovered === true,
+          })
+        }
         return
       } catch {
         /* the primary backend refused to load; the fallback below decides the outcome */
@@ -102,7 +124,14 @@ export const DataGate: React.FC<DataGateProps> = ({ children, store: storeProp }
       const fallback = new LocalStorageStore('unavailable')
       try {
         const loaded = await fallback.load()
-        if (!cancelled) setPhase({ phase: 'ready', store: fallback, ...loaded })
+        if (!cancelled) {
+          setPhase({
+            phase: 'ready',
+            store: fallback,
+            ...loaded,
+            recovered: loaded.recovered === true,
+          })
+        }
       } catch {
         // Unreachable while LocalStorageStore honours its never-throw contract. If
         // that contract is ever broken, this is the readable screen instead of a
@@ -121,7 +150,12 @@ export const DataGate: React.FC<DataGateProps> = ({ children, store: storeProp }
   const value = useMemo<DataGateValue | null>(
     () =>
       phase.phase === 'ready'
-        ? { store: phase.store, snapshot: phase.snapshot, legacyBackup: phase.legacyBackup }
+        ? {
+            store: phase.store,
+            snapshot: phase.snapshot,
+            legacyBackup: phase.legacyBackup,
+            recovered: phase.recovered,
+          }
         : null,
     [phase],
   )
@@ -145,15 +179,22 @@ export const DataGate: React.FC<DataGateProps> = ({ children, store: storeProp }
   return (
     <DataGateContext.Provider value={value}>
       {/*
-        The fallback warning lives here, above every view, because it is true on every
-        view: the banner in `App` reports single failed writes, this one reports where
-        the data lives at all. Same token classes as that banner, so the tone comes
-        from the CSS layer and the two warnings read as one system.
+        These warnings live here, above every view, because they describe the load
+        itself: the banner in `App` reports single failed writes, these report where
+        the data lives and whether any of it had to be discarded. Same token classes
+        as that banner, so the tone comes from the CSS layer and the warnings read as
+        one system. A fallback load can also have recovered rows, so both may appear.
       */}
       {phase.store.backend === 'localstorage' && (
         <div className="alert tone-warning" role="alert">
           <AlertTriangle size={16} aria-hidden="true" />
           <span>{FALLBACK_WARNING}</span>
+        </div>
+      )}
+      {phase.recovered && (
+        <div className="alert tone-warning" role="alert">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>{RECOVERED_WARNING}</span>
         </div>
       )}
       {children}

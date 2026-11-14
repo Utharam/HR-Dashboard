@@ -64,7 +64,7 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
   const okResult = async (): Promise<StoreResult> => ({ ok: true })
   return {
     backend: 'memory',
-    load: vi.fn(async () => ({ snapshot, legacyBackup: false })),
+    load: vi.fn(async () => ({ snapshot, legacyBackup: false, recovered: false })),
     saveEmployees: vi.fn(okResult),
     savePolicies: vi.fn(okResult),
     saveLeavePlans: vi.fn(okResult),
@@ -78,10 +78,10 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
 
 /** Renders what the gate published, so a test can read the context without guessing. */
 function GateProbe() {
-  const { store, snapshot, legacyBackup } = useDataGate()
+  const { store, snapshot, legacyBackup, recovered } = useDataGate()
   return (
     <div data-testid="gate-probe">
-      {`${store.backend}:${snapshot.employees.length}:${legacyBackup ? 'backup' : 'no-backup'}`}
+      {`${store.backend}:${snapshot.employees.length}:${legacyBackup ? 'backup' : 'no-backup'}:${recovered ? 'recovered' : 'clean'}`}
     </div>
   )
 }
@@ -117,9 +117,30 @@ describe('DataGate', () => {
     expect(screen.queryByTestId('gate-probe')).not.toBeInTheDocument()
 
     const probe = await screen.findByTestId('gate-probe')
-    expect(probe).toHaveTextContent('memory:5:no-backup')
+    expect(probe).toHaveTextContent('memory:5:no-backup:clean')
     // A healthy backend raises no warning.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('warns that saved data was replaced when the store reports recovery', async () => {
+    const snapshot = makeSnapshot()
+    const store = makeMockStore(snapshot, {
+      load: vi.fn(async () => ({ snapshot, legacyBackup: false, recovered: true })),
+    })
+
+    render(
+      <DataGate store={store}>
+        <GateProbe />
+      </DataGate>,
+    )
+
+    const probe = await screen.findByTestId('gate-probe')
+    expect(probe).toHaveTextContent('memory:1:no-backup:recovered')
+    // The children still render: recovery is a warning about replaced rows, not a
+    // reason to withhold the console.
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Some saved data could not be read and was replaced by demo data.',
+    )
   })
 
   it('falls back to local storage with a visible warning when the store fails to load', async () => {
@@ -133,9 +154,10 @@ describe('DataGate', () => {
 
     // The fallback loaded the same localStorage envelope the legacy path would have.
     const probe = await screen.findByTestId('gate-probe')
-    expect(probe).toHaveTextContent('localstorage:1:no-backup')
+    expect(probe).toHaveTextContent('localstorage:1:no-backup:clean')
     // The degradation is visible, never silent (D2).
-    expect(screen.getByRole('alert')).toHaveTextContent(/local storage/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/older localStorage copy/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/may not merge back/i)
   })
 
   it('uses createDataStore() when no store prop is given, taking the backend the factory picks', async () => {
@@ -150,8 +172,8 @@ describe('DataGate', () => {
     )
 
     const probe = await screen.findByTestId('gate-probe')
-    expect(probe).toHaveTextContent('localstorage:1:no-backup')
-    expect(screen.getByRole('alert')).toHaveTextContent(/local storage/i)
+    expect(probe).toHaveTextContent('localstorage:1:no-backup:clean')
+    expect(screen.getByRole('alert')).toHaveTextContent(/older localStorage copy/i)
   })
 
   it('falls back when the factory\u2019s IndexedDB store cannot even open', async () => {
@@ -172,8 +194,8 @@ describe('DataGate', () => {
     )
 
     const probe = await screen.findByTestId('gate-probe')
-    expect(probe).toHaveTextContent('localstorage:1:no-backup')
-    expect(screen.getByRole('alert')).toHaveTextContent(/local storage/i)
+    expect(probe).toHaveTextContent('localstorage:1:no-backup:clean')
+    expect(screen.getByRole('alert')).toHaveTextContent(/older localStorage copy/i)
     // The app moved on: no boot screen is left dangling above the console.
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })

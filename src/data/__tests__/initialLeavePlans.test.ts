@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createInitialLeavePlans } from '../initialLeavePlans'
+import { createInitialLeavePlans, isDemoEmployeeSet } from '../initialLeavePlans'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import {
   eachDateKey,
@@ -108,6 +108,17 @@ describe('createInitialLeavePlans', () => {
       expect(plan.createdAt).toBe(NOW.toISOString())
       expect(plan.updatedAt).toBe(NOW.toISOString())
     }
+  })
+
+  it('only treats the exact demo roster as the demo set', () => {
+    expect(isDemoEmployeeSet(INITIAL_EMPLOYEES)).toBe(true)
+    expect(isDemoEmployeeSet(INITIAL_EMPLOYEES.slice(0, 10))).toBe(false)
+    expect(isDemoEmployeeSet([...INITIAL_EMPLOYEES, INITIAL_EMPLOYEES[0]])).toBe(false)
+    expect(
+      isDemoEmployeeSet(INITIAL_EMPLOYEES.map((employee, index) =>
+        index === 0 ? { ...employee, id: 'EMP-CUSTOM-1' } : employee,
+      )),
+    ).toBe(false)
   })
 
   it('defaults to the current date when now is omitted', () => {

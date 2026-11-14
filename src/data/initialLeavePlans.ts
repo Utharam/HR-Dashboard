@@ -9,7 +9,7 @@
  * The seed is deterministic for a given `now`: the same instant yields the same plans.
  */
 
-import type { HalfDay, LeavePlan, LeaveStatus, LeaveType } from '../types'
+import type { Employee, HalfDay, LeavePlan, LeaveStatus, LeaveType } from '../types'
 import { INITIAL_EMPLOYEES } from './initialData'
 import { toDateKey } from '../utils/leavePlanner'
 
@@ -44,6 +44,26 @@ const SEED_SPECS: SeedSpec[] = [
   { offset: 28, days: 4, employeeIndex: 160, type: 'CL', status: 'Approved' },
   { offset: 35, days: 2, employeeIndex: 180, type: 'SL', status: 'Planned' },
 ]
+
+/**
+ * True only when `employees` is exactly the built-in demo roster.
+ *
+ * The demo leave seed is addressed by employee index into `INITIAL_EMPLOYEES`, so it
+ * is only meaningful when that roster is what the user has. A custom roster - even
+ * one that happens to be the same length - must never receive invented leave for
+ * people who were not part of the demo. Reordered demo employees still count as the
+ * demo set: the seed ids are stable and an order change loses no information.
+ */
+export function isDemoEmployeeSet(employees: readonly Employee[]): boolean {
+  if (employees.length !== INITIAL_EMPLOYEES.length) return false
+
+  const ids = new Set(employees.map((employee) => employee.id))
+  // A duplicate id shrinks the set; a same-length roster with duplicates is not the
+  // demo roster even if every demo id happens to appear.
+  if (ids.size !== INITIAL_EMPLOYEES.length) return false
+
+  return INITIAL_EMPLOYEES.every((employee) => ids.has(employee.id))
+}
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())

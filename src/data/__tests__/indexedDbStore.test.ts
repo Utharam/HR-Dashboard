@@ -57,6 +57,7 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
+    expect(loaded.recovered).toBe(false)
   })
 
   it('saves and reloads all four datasets', async () => {
@@ -73,6 +74,66 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.policies).toEqual(POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('rejects a duplicate employee id without writing the dataset', async () => {
+    const store = createStore()
+    await store.load()
+    await store.saveEmployees(EMPLOYEES)
+
+    const duplicate = [EMPLOYEES[0], { ...EMPLOYEES[0], name: 'Duplicate' }]
+    await expect(store.saveEmployees(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.employees).toEqual(EMPLOYEES)
+  })
+
+  it('rejects a duplicate policy id without writing the dataset', async () => {
+    const store = createStore()
+    await store.load()
+    await store.savePolicies(POLICIES)
+
+    const duplicate = [POLICIES[0], { ...POLICIES[0], title: 'Duplicate' }]
+    await expect(store.savePolicies(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.policies).toEqual(POLICIES)
+  })
+
+  it('rejects a duplicate leave-plan id without writing the dataset', async () => {
+    const store = createStore()
+    await store.load()
+    await store.saveLeavePlans(LEAVE_PLANS)
+
+    const duplicate = [LEAVE_PLANS[0], { ...LEAVE_PLANS[0] }]
+    await expect(store.saveLeavePlans(duplicate)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
+
+    expect((await store.load()).snapshot.leavePlans).toEqual(LEAVE_PLANS)
+  })
+
+  it('replaces corrupt stored rows with demo data and reports recovery', async () => {
+    const store = createStore()
+    await store.load()
+
+    // Bypass the shape guards through the typed save seam: a row written by an older
+    // build can still be present in IndexedDB even though today's predicates reject it.
+    await store.saveEmployees([{ id: 'broken' } as never])
+    await store.savePolicies([{ id: 'broken' } as never])
+    await store.saveLeavePlans([{ id: 'broken' } as never])
+
+    const loaded = await store.load()
+    expect(loaded.recovered).toBe(true)
+    expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
+    expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
+    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
   })
 
   it('treats a saved empty array as an empty dataset instead of reseeding it', async () => {

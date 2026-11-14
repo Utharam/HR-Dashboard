@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LeavePlan, PlannerSettings } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
-import type { DataSnapshot } from '../DataStore'
+import { hasUniqueIds, type DataSnapshot } from '../DataStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
@@ -36,6 +36,17 @@ function rawWithout(field: 'employees' | 'policies' | 'leavePlans' | 'settings')
   delete raw[field]
   return raw
 }
+
+describe('hasUniqueIds', () => {
+  it('accepts unique ids, including an empty dataset', () => {
+    expect(hasUniqueIds([])).toBe(true)
+    expect(hasUniqueIds([{ id: 'a' }, { id: 'b' }])).toBe(true)
+  })
+
+  it('rejects a repeated id', () => {
+    expect(hasUniqueIds([{ id: 'a' }, { id: 'a' }])).toBe(false)
+  })
+})
 
 describe('createSnapshot', () => {
   it('stamps the snapshot format and data schema versions', () => {
@@ -183,6 +194,22 @@ describe('parseSnapshot', () => {
       ok: false,
       reason: 'invalid',
     })
+  })
+
+  it('rejects duplicate ids in employees, policies and leave plans', () => {
+    const base = baseSnapshot()
+
+    expect(
+      parseSnapshot({ ...base, employees: [EMPLOYEES[0], { ...EMPLOYEES[0], name: 'Duplicate' }] }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({ ...base, policies: [POLICIES[0], { ...POLICIES[0], title: 'Duplicate' }] }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({ ...base, leavePlans: [LEAVE_PLANS[0], { ...LEAVE_PLANS[0] }] }),
+    ).toEqual({ ok: false, reason: 'invalid' })
   })
 
   it('accepts an empty dataset with valid settings', () => {

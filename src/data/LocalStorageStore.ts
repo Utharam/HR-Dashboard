@@ -18,6 +18,8 @@ import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
+  hasStoredValue,
+  hasUniqueIds,
   type DataSnapshot,
   type DataStore,
   type LoadedData,
@@ -34,17 +36,26 @@ import {
 } from '../utils/rowValidators'
 import { INITIAL_EMPLOYEES } from './initialData'
 import { INITIAL_POLICIES } from './initialPolicies'
-import { createInitialLeavePlans } from './initialLeavePlans'
+import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
 
 type LegacyKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
 
-function loadSettings(): PlannerSettings {
-  const rows = loadPersisted(
+function loadSettings(): { settings: PlannerSettings; recovered: boolean } {
+  const result = loadPersisted(
     STORAGE_KEYS.settings,
     isPlannerSettingsRow,
     [DEFAULT_PLANNER_SETTINGS],
-  ).rows
-  return rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS }
+  )
+  return {
+    settings: result.rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS },
+    recovered: result.status === 'recovered',
+  }
+}
+
+/** Writes a keyed dataset only when no id repeats; a keyed envelope would lose rows. */
+function saveRows<T extends { id: string }>(key: LegacyKey, rows: T[]): StoreResult {
+  if (!hasUniqueIds(rows)) return { ok: false, reason: 'invalid' }
+  return savePersisted(key, rows)
 }
 
 function readRaw(key: LegacyKey): string | null {
@@ -85,25 +96,31 @@ export class LocalStorageStore implements DataStore {
 
   async load(): Promise<LoadedData> {
     // Same first-run behaviour as the IndexedDB migration: an absent or corrupt
-    // dataset is replaced by the demo seed, while a valid empty envelope stays empty
-    // (it is a deliberate state, not a missing one). `App`'s save effects persist the
-    // seed on the next render, exactly as they did before this store existed.
-    const employees = loadPersisted(
+    // employees/policies dataset is replaced by the demo seed, while a valid empty
+    // envelope stays empty (it is a deliberate state, not a missing one). Leave plans
+    // are the exception below, because the demo seed belongs to the demo roster.
+    // `App`'s save effects persist the seed on the next render, as they always did.
+    const employeesResult = loadPersisted(
       STORAGE_KEYS.employees,
       isEmployeeRow,
       INITIAL_EMPLOYEES,
-    ).rows
-    const policies = loadPersisted(
+    )
+    const policiesResult = loadPersisted(
       STORAGE_KEYS.policies,
       isPolicyRow,
       INITIAL_POLICIES,
-    ).rows
-    const leavePlans = loadPersisted(
-      STORAGE_KEYS.leavePlans,
-      isLeavePlanRow,
-      createInitialLeavePlans(),
-    ).rows
-    const settings = loadSettings()
+    )
+    // The leave key gets an empty fallback, not the demo seed, so a custom roster is
+    // never shown leave for demo employees it does not contain. The seed is applied
+    // below only for an absent key on an exactly-demo roster.
+    const leavePlansResult = loadPersisted(STORAGE_KEYS.leavePlans, isLeavePlanRow, [])
+    const settingsResult = loadSettings()
+
+    const employees = employeesResult.rows
+    const leavePlans =
+      !hasStoredValue(STORAGE_KEYS.leavePlans) && isDemoEmployeeSet(employees)
+        ? createInitialLeavePlans()
+        : leavePlansResult.rows
 
     return {
       snapshot: {
@@ -111,26 +128,33 @@ export class LocalStorageStore implements DataStore {
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         employees,
-        policies,
+        policies: policiesResult.rows,
         leavePlans,
-        settings,
+        settings: settingsResult.settings,
       },
       // In this backend the legacy keys ARE the live store, so there is no separate
       // read-only backup to advertise.
       legacyBackup: false,
+      // A corrupt envelope was replaced above. The fallback backend still has to admit
+      // that the saved copy it found was unusable.
+      recovered:
+        employeesResult.status === 'recovered' ||
+        policiesResult.status === 'recovered' ||
+        leavePlansResult.status === 'recovered' ||
+        settingsResult.recovered,
     }
   }
 
   async saveEmployees(rows: Employee[]): Promise<StoreResult> {
-    return savePersisted(STORAGE_KEYS.employees, rows)
+    return saveRows(STORAGE_KEYS.employees, rows)
   }
 
   async savePolicies(rows: HRPolicy[]): Promise<StoreResult> {
-    return savePersisted(STORAGE_KEYS.policies, rows)
+    return saveRows(STORAGE_KEYS.policies, rows)
   }
 
   async saveLeavePlans(rows: LeavePlan[]): Promise<StoreResult> {
-    return savePersisted(STORAGE_KEYS.leavePlans, rows)
+    return saveRows(STORAGE_KEYS.leavePlans, rows)
   }
 
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
