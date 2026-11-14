@@ -141,10 +141,10 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         </div>
 
         <div className="omni-card kpi-card kpi-card--compact">
-          <span className="kpi-label">Gross Earnings</span>
+          <span className="kpi-label">Total Earnings</span>
           <div className="kpi-value text-primary">{formatCrores(totalGrossEarnings)}</div>
           <span className="kpi-sub">
-            Including ₹{formatINR(totalBonus)} of this month's bonuses
+            Gross ₹{formatINR(totalMonthlyGross)} plus ₹{formatINR(totalBonus)} in bonuses
           </span>
         </div>
 
@@ -268,8 +268,8 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
                 <th scope="col">Department</th>
                 <th scope="col">Status</th>
                 <th scope="col">Monthly CTC</th>
-                <th scope="col">Gross Earnings</th>
-                <th scope="col">Bonus</th>
+                <th scope="col">Total Earnings</th>
+                <th scope="col">Bonus (incl.)</th>
                 <th scope="col">EPF (12%)</th>
                 <th scope="col" className="col-optional">PT</th>
                 <th scope="col">LOP</th>

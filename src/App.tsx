@@ -1068,6 +1068,34 @@ export const App: React.FC<{
     [filteredEmployees, currentMonthRollup],
   );
 
+  // The same current-month rollup over the FULL register. The Payslip Designer
+  // has no page toolbar, so it must not inherit a filter left on Directory; its
+  // preview still has to price the month exactly as the Payroll table does.
+  const payrollRoster = useMemo<PayrollEmployee[]>(
+    () =>
+      employees.map((emp) => {
+        const rollup = currentMonthRollup.get(emp.id);
+        if (!rollup || !rollup.hasRecords) return emp;
+        return {
+          ...emp,
+          presentDays: rollup.presentDays,
+          lopDays: rollup.lopDays,
+          attendancePct:
+            rollup.workingDays > 0 ? (rollup.presentDays / rollup.workingDays) * 100 : 0,
+          workingDays: rollup.workingDays,
+        };
+      }),
+    [employees, currentMonthRollup],
+  );
+
+  // Directory/Overview open the modal with the raw employee; price the current
+  // month from the same rollup the Payroll table uses. A Finance Report selection
+  // already carries its own month's present/LOP figures and is left untouched.
+  const selectedEmployeeForPayslip =
+    selectedEmployee && !selectedEmployeeMonthKey
+      ? payrollRoster.find((employee) => employee.id === selectedEmployee.id) ?? selectedEmployee
+      : selectedEmployee;
+
   // Export Complete Employee Roster to Excel
   const handleExportEmployees = () => {
     // One contract for the writer and the importer: see `utils/excelSchema.ts`. The old
@@ -1497,7 +1525,7 @@ export const App: React.FC<{
         */}
         {activeTab === 'payslip' && (
           <PayslipDesignerSection
-            employees={employees}
+            employees={payrollRoster}
             payStructure={payStructure}
             payOverrides={payOverrides}
             payrollBonuses={payrollBonuses}
@@ -1628,7 +1656,7 @@ export const App: React.FC<{
           calculation the Payroll tab uses: the company template, the per-employee
           overrides and this month's bonuses ride along. */}
       <EmployeeModal 
-        employee={selectedEmployee} 
+        employee={selectedEmployeeForPayslip} 
         onClose={() => {
           setSelectedEmployee(null);
           setSelectedEmployeeMonthKey(null);

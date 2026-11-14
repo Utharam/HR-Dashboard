@@ -289,7 +289,29 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                     <span className="badge badge-primary">Tab: Payroll</span>
                   </div>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Complies with Indian statutory payroll standards: 50% Basic Salary, 25% HRA, 25% Special Allowance. Computes EPF (12% capped at ₹15,000 basic ceiling = ₹1,800/mo), Professional Tax (₹200/mo), and Net Take-Home Salary. Features one-click printable executive payslips.
+                    The default structure follows Indian statutory payroll practice: 50% Basic Salary, 25% HRA, 25% Special Allowance, with EPF (12% capped at ₹15,000 basic ceiling = ₹1,800/mo), Professional Tax (₹200/mo), LOP and Net Take-Home. HR can change the company template in <strong>Payslip Designer</strong>, add per-employee overrides, and apply performance or custom bonuses for the month. Every payslip and export uses that configured structure.
+                  </p>
+                </div>
+
+                {/* Payslip Designer */}
+                <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong className="text-bright" style={{ fontSize: 'var(--fs-base)' }}>Payslip Designer</strong>
+                    <span className="badge badge-primary">Tab: Payslip Designer</span>
+                  </div>
+                  <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
+                    One company pay-structure template with optional per-employee overrides. Each earning line is a percentage of CTC, a percentage of Basic, a fixed amount or the remainder. EPF and Professional Tax can be switched on or off per structure; performance-bonus rules map a 1–5 rating to a percent of Basic. The live preview shows the resulting payslip before saving.
+                  </p>
+                </div>
+
+                {/* Finance Report */}
+                <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong className="text-bright" style={{ fontSize: 'var(--fs-base)' }}>Finance Report</strong>
+                    <span className="badge badge-primary">Tab: Finance Report</span>
+                  </div>
+                  <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
+                    A month statement for finance: employees paid, gross earnings, performance and custom bonuses, EPF, Professional Tax, LOP recovery, net payable, employer EPF and total cost to company. Includes a department breakdown, an employee-level breakup, an Excel workbook (Summary / Departments / Employees) and a clean print layout.
                   </p>
                 </div>
 
@@ -414,14 +436,14 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-success-soft">• Inspecting & Printing Payslips:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    In the Directory or Payroll tab, click <strong>View</strong> or <strong>Slip</strong> on any employee. In the modal, click <strong>Print Payslip</strong> to generate a clean PDF with headers/footers suppressed.
+                    In the Directory, Payroll or Finance Report tab, click <strong>View</strong>, <strong>Slip</strong> or <strong>Payslip</strong> on any employee. In the modal, click <strong>Print Payslip</strong> to generate a clean PDF with headers/footers suppressed.
                   </p>
                 </div>
 
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-warning-soft">• Restoring Factory Demo Data:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Open <strong>Admin &amp; Settings</strong> and click <strong>Reset Demo State</strong> in the Workspace actions card. This resets all six business datasets and the planner settings: the roster returns to the original 200 corporate staff records, HR policies, leave plans, planner events and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list.
+                    Open <strong>Admin &amp; Settings</strong> and click <strong>Reset Demo State</strong> in the Workspace actions card. This resets all six business datasets and the planner settings: the roster returns to the original 200 corporate staff records, HR policies, leave plans, planner events and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list. The company pay structure returns to the default 50/25/25 template, and all per-employee overrides and monthly bonuses are cleared.
                   </p>
                 </div>
               </div>

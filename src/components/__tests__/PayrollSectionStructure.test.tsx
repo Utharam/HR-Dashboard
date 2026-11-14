@@ -133,8 +133,8 @@ describe('PayrollSection — structure-aware columns', () => {
       'Department',
       'Status',
       'Monthly CTC',
-      'Gross Earnings',
-      'Bonus',
+      'Total Earnings',
+      'Bonus (incl.)',
       'EPF (12%)',
       'PT',
       'LOP',
@@ -180,12 +180,12 @@ describe('PayrollSection — structure-aware columns', () => {
     const ctcCard = screen.getByText('Total Monthly CTC').closest('.omni-card');
     expect(ctcCard?.querySelector('.kpi-value')?.textContent).toBe(formatCrores(activeCTC));
 
-    // Gross earnings include the bonus; the sub says how much of it is one-off.
+    // Total earnings include the bonus; the sub says how much of it is one-off.
     // (The column header shares the label, so the unique sub text finds the KPI.)
     const grossCard = screen
-      .getByText(/Including ₹2,500 of this month's bonuses/)
+      .getByText(/plus ₹2,500 in bonuses/)
       .closest('.omni-card');
-    expect(grossCard?.textContent).toContain("this month's bonuses");
+    expect(grossCard?.textContent).toContain('in bonuses');
     // EPF 3,000 (Asha only) + PT 0.
     const statutoryCard = screen.getByText('Statutory EPF & PT').closest('.omni-card');
     expect(statutoryCard?.querySelector('.kpi-value')?.textContent).toBe('₹3,000');

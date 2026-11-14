@@ -2150,6 +2150,11 @@ textarea.omni-input {
 /* ── 10. Print ──────────────────────────────────────────────────────────── */
 @media print {
   body { background: white !important; color: black !important; }
+  /* The sidebar is hidden, but its grid column still reserved --sidebar-w and
+     pushed <main> into a ~230px first track: the printed statement rendered as
+     a narrow left strip. Collapse the shell to one column on paper. */
+  .app-shell { grid-template-columns: 1fr !important; }
+  .app-shell__main { padding: 0 !important; }
   .no-print, header, aside, .btn, .pagination, .pagination-controls { display: none !important; }
   .modal-window { box-shadow: none; border: none; max-width: 100%; width: 100%; }
   .omni-table th { background: #f1f5f9 !important; color: black !important; }
@@ -3535,6 +3540,10 @@ button.attendance-cell:focus-visible {
   }
   .finance-report .omni-table tr {
     break-inside: avoid;
+  }
+  /* The payslip action is screen-only; an empty "Payslip" column on paper is noise. */
+  .finance-report .finance-report__payslip-col {
+    display: none !important;
   }
   .finance-report .finance-report__total-cell {
     background: #e2e8f0 !important;

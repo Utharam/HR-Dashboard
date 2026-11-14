@@ -179,7 +179,7 @@ flowchart TD
 
 ## 7. Export Formats & Bank-Ready Registers
 
-OmniHR provides four standardized Excel export capabilities:
+OmniHR provides five standardized Excel export capabilities:
 
 ### 1. Complete Staff Master Roster (`OmniHR_Staff_Roster_YYYY-MM-DD.xlsx`)
 - **Use Case:** Comprehensive backup, annual HR audit, insurance enrollment.
@@ -189,8 +189,9 @@ OmniHR provides four standardized Excel export capabilities:
 
 ### 2. Monthly Payroll Register (`OmniHR_Payroll_Register_YYYY-MM-DD.xlsx`)
 - **Use Case:** Direct bank salary transfer advice, CFO approval, statutory compliance filing.
-- **Includes 14 Columns:**
-  `Employee ID`, `Employee Name`, `Department`, `Designation`, `Location`, `Monthly Gross CTC`, `Basic (50%)`, `HRA (25%)`, `Special Allowance (25%)`, `EPF (12% @ ₹15k cap)`, `Professional Tax`, `Loss of Pay (LOP)`, `Total Deductions`, `Net Salary Payable`.
+- **Includes 16 Columns:**
+  `Employee ID`, `Employee Name`, `Department`, `Designation`, `Location`, `Monthly CTC`, `Gross Earnings`, `Bonus`, `Basic`, `HRA`, `Special Allowance`, `EPF (12% @ ₹15k cap)`, `Professional Tax`, `Loss of Pay (LOP)`, `Total Deductions`, `Net Salary Payable`.
+- **Structure-aware:** the register is priced from the company pay structure or the employee's override, and the month's performance/custom bonuses ride in the `Bonus` column. A custom component that is not HRA/Special remains visible in the employee's payslip and in the Gross Earnings figure.
 
 ### 3. Pre-Formatted Blank Template (`OmniHR_Employee_Template.xlsx`)
 - **Use Case:** Distribution to departmental heads or branch managers for new employee data collection.
@@ -205,6 +206,15 @@ OmniHR provides four standardized Excel export capabilities:
 - **Cell codes:** `P` Present, `A` Absent, `W` WFH, `HD` Half-day, `HD-CL`/`HD-SL`/`HD-EL`/`HD-LOP`/`HD-ML`/`HD-PL`/`HD-CO`/`HD-O` half-day with a leave type, `CL`/`SL`/`EL`/`LOP`/`ML`/`PL`/`CO`/`O` typed leave, `H` holiday, `WO` Sunday, blank unmarked. Sundays are pre-filled `WO`, holidays from the company calendar `H`, existing records for the month are carried into the template as their own codes, approved leave plans are pre-filled with their code (approved half-day leave as `HD-<code>`), and other working days `P` when prefill-present is on.
 - **Round-trip safe:** a generated template parsed back produces exactly the intended records; `H`/`WO`/blank cells never become records.
 - **Import & replace-month semantics:** upload on the Attendance tab (`.xlsx`/`.xls` only). The month is read from `B2`, rows are matched by `Employee ID` (name/department columns are ignored), and the preview reports employees matched, records to create, existing records to replace, per-cell issues, and roster gaps (employee IDs not found on the sheet and day columns missing from the header). **Confirmation replaces the whole month's records** — every record dated in that month is removed and the parsed rows take their place — and never touches other months. Unknown employee IDs, invalid codes and day numbers outside the month become preview issues rather than silent skips. A failed import leaves the previous month untouched.
+
+### 5. Finance Report (`OmniHR_Finance_Report_YYYY-MM.xlsx`)
+- **Use Case:** Month-close handoff to finance, payroll reconciliation and cost review.
+- **Where:** Finance Report tab → **Export Excel**.
+- **Sheets:**
+  - `Summary` — month, generated timestamp, employees paid, gross earnings, bonuses, EPF, PT, LOP recovery, net payable, employer EPF and total cost to company.
+  - `Departments` — headcount, gross, bonuses, deductions, net, employer EPF and total cost per department.
+  - `Employees` — one row per paid employee with gross, performance bonus, custom bonus, EPF, PT, LOP, net and employer EPF.
+- **Structure-aware:** every figure comes from the company pay structure (or the employee override) and the selected month's attendance rollup and bonuses, so the workbook reconciles with the payslips and the Payroll register.
 
 ---
 

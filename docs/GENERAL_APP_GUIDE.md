@@ -16,6 +16,8 @@ This manual provides an exhaustive operational reference for HR administrators, 
    - [3.2 Employee Master Directory](#32-employee-master-directory)
    - [3.3 Time & Attendance — Daily Ledger, Monthly Matrix & Holiday Calendar](#33-time--attendance--daily-ledger-monthly-matrix--holiday-calendar)
    - [3.4 Payroll & Compensation Engine](#34-payroll--compensation-engine)
+     - [3.4.1 Payslip Designer](#341-payslip-designer)
+     - [3.4.2 Finance Report](#342-finance-report)
    - [3.5 Performance & 9-Box Talent Matrix](#35-performance--9-box-talent-matrix)
    - [3.6 Talent Acquisition & Hiring Pipeline](#36-talent-acquisition--hiring-pipeline)
    - [3.7 Statutory EOSB & Gratuity Calculator](#37-statutory-eosb--gratuity-calculator)
@@ -49,20 +51,22 @@ The OmniHR interface is divided into two primary zones:
 
 ### 2.1 Left Navigation Sidebar
 - **OmniHR Brand Badge:** Displays the suite version.
-- **Navigation Tabs (12 top-level sections, with Workforce Planning as a group):**
+- **Navigation Tabs (14 top-level sections, with Workforce Planning as a group):**
   1. `Executive Overview` — C-suite KPI metrics & visual charts.
   2. `Employee Directory` — Master roster with multi-column filtering.
   3. `Time & Attendance` — daily ledger, monthly matrix, holiday calendar & rollup.
   4. `Planner` — month calendar for employee leave and general company events.
-  5. `Payroll & Compensation` — Disbursable net pay & payslip viewer.
-  6. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
-  7. `Workforce Planning` — expandable group with three submodules:
+  5. `Payroll & Compensation` — structure-aware net pay, bonuses & payslip viewer.
+  6. `Payslip Designer` — company pay structure, per-employee overrides & bonus rules.
+  7. `Finance Report` — monthly salary totals, department/employee breakup & export.
+  8. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
+  9. `Workforce Planning` — expandable group with three submodules:
      - `Recruitment Pipeline` — active requisitions & candidate stages.
      - `EOSB & Gratuity Calc` — end-of-service settlement engine.
      - `3-Year Headcount Trends` — 33-month historical financial ledger.
-  8. `Admin & Settings` — business-data snapshots, workspace actions and the Excel ingestion hub.
-  9. `HR Policy Hub` — statutory leave policies, benefits and custom rules.
-  10. `User Guides & Manual` — in-app documentation and Excel handling guide.
+  10. `Admin & Settings` — business-data snapshots, workspace actions and the Excel ingestion hub.
+  11. `HR Policy Hub` — statutory leave policies, benefits and custom rules.
+  12. `User Guides & Manual` — in-app documentation and Excel handling guide.
 - **Workspace actions are not in the sidebar.** Export Roster, Reset Demo State and Sign out live in the **Admin & Settings → Workspace actions** card.
 
 ### 2.2 Top Header and Page Toolbars
@@ -133,19 +137,35 @@ Manages daily attendance, leave balances, and wage deductions. Attendance is a *
 ---
 
 ### 3.4 Payroll & Compensation Engine
-Implements standard Indian corporate compensation structures:
-- **Cost to Company (CTC) Breakdown:**
-  - **Basic Salary:** Fixed at 50% of Gross Monthly CTC.
-  - **House Rent Allowance (HRA):** Fixed at 25% of Gross Monthly CTC (50% of Basic).
-  - **Special / Executive Allowance:** Balancing 25% of Gross Monthly CTC.
-- **Statutory Deductions:**
-  - **EPF (Employees' Provident Fund):** Under the Employees' Provident Funds Act 1952, employee contribution is 12% of eligible Basic, capped at the statutory wage ceiling of ₹15,000/month:
+Prices the payroll from the company pay structure, not a hard-coded split:
+- **Default structure:** Basic Salary 50% of monthly CTC, HRA 50% of Basic, Special Allowance as the remainder. A fresh install therefore pays the familiar 50/25/25 split.
+- **Configurable structure:** HR can change the company template in Payslip Designer. Each earning line is a percent of CTC, a percent of Basic, a fixed amount or the single remainder line. Basic is computed first; every line is rounded to the rupee.
+- **Statutory deductions:**
+  - **EPF (Employees' Provident Funds Act 1952):** 12% of eligible Basic, capped at the statutory wage ceiling of ₹15,000/month:
     $$\text{EPF} = \min(\text{Basic Salary}, 15000) \times 12\% = \text{Maximum ₹1,800/month}$$
   - **Professional Tax (PT):** State statutory deduction of ₹200/month.
-  - **Loss of Pay (LOP):** Computed dynamically based on absence days.
+  - **Loss of Pay (LOP):** `(Basic / 26) × LOP days`, capped at 26 days.
+  - EPF and PT are switches on the structure; LOP is always applied.
+- **Monthly bonuses:** performance and custom one-off bonuses are added to gross and net, but never change EPF, PT or LOP.
 - **Disbursable Net Salary (Take-Home):**
-  $$\text{Net Pay} = \text{Monthly CTC} - (\text{EPF} + \text{PT} + \text{LOP})$$
-- **Verified Executive Payslip Modal:** Displays line-by-line earnings, deductions, leave balance summary, and includes a **Print Payslip** button optimized for clean PDF generation.
+  $$\text{Net Pay} = \max(0,\ \text{Gross Earnings} + \text{Bonuses} - (\text{EPF} + \text{PT} + \text{LOP}))$$
+- **Verified Executive Payslip Modal:** Displays the resolved earnings lines, bonuses, deductions, leave balance summary, employer EPF as a company-cost note, and includes a **Print Payslip** button optimized for clean PDF generation.
+
+### 3.4.1 Payslip Designer
+The setup surface for the pay structure:
+- **Company template:** add, rename and remove earning components; choose the basis and value; mark exactly one line as Basic; allow at most one Remainder; toggle EPF and Professional Tax.
+- **Performance-bonus rules:** map each rating (1–5) to a percent of Basic. The rule is a suggestion; HR can overwrite a bonus amount when adding it.
+- **Per-employee overrides:** select an employee, clone the company template into a private structure, edit it, add a note and save. The override wins until it is removed; later company-template changes do not touch it.
+- **Live preview:** the payslip updates as the draft changes, using the selected employee and the current month's bonuses. Save is blocked with a visible reason list when the structure is invalid.
+- **Bonus entry:** monthly performance/custom bonuses are added from the Payroll page's **Bonuses this month** card.
+
+### 3.4.2 Finance Report
+A month-close statement for the finance team:
+- **Month selector:** choose any month; the report computes that month's attendance rollup and applies present/LOP to employees with daily records, keeping legacy monthly fields for everyone else.
+- **Summary:** employees paid, gross earnings, bonuses, statutory deductions, LOP recovery, net payable, employer EPF and total cost to company.
+- **Department breakdown:** headcount, gross, bonuses, deductions, net, employer EPF and total cost per department.
+- **Employee breakup:** gross, performance bonus, custom bonus, EPF, PT, LOP, net and employer EPF, with a Payslip action that opens the employee's payslip for the report month.
+- **Export:** an Excel workbook with Summary, Departments and Employees sheets. **Print report** produces a clean statement with the report header.
 
 ---
 
@@ -304,18 +324,18 @@ A single calendar for who is away and what the company has planned, for HR input
 The **Admin & Settings** page owns the workspace actions, the business-data snapshot and the Excel Hub:
 
 1. **Data Snapshot Card:**
-   - Record counts for every business dataset - employees, policies, leave plans, planner events, attendance records and holidays - plus the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
+   - Record counts for every business dataset - employees, policies, leave plans, planner events, attendance records, holidays, pay overrides and bonuses - plus the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
 
 2. **Workspace Actions:**
    - `Export Roster (Excel)`, `Reset Demo State` and `Sign out` live here, not in the sidebar footer.
-   - `Reset Demo State` restores all six business datasets and the planner settings to the pristine demo data.
+   - `Reset Demo State` restores all six business datasets, the planner settings and the default pay structure, and clears overrides and monthly bonuses.
 
 3. **Export Snapshot:**
-   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, planner events, daily attendance and holidays) in one versioned JSON file, snapshot format v3.
+   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, planner events, daily attendance, holidays, the company pay structure, per-employee overrides and monthly bonuses) in one versioned JSON file, snapshot format v4.
    - Snapshots are the backup: save each exported file to Google Drive, OneDrive or any shared drive.
 
 4. **Import Snapshot:**
-   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing. A v1 snapshot (made before daily attendance) imports with an empty attendance ledger and holiday calendar; a v2 snapshot (made before planner events) imports with no events.
+   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing. A v1 snapshot (made before daily attendance) imports with an empty attendance ledger and holiday calendar; a v2 snapshot (made before planner events) imports with no events; a v3 snapshot imports with the default pay structure and no overrides or bonuses.
    - After a confirmed import, the console shows the data from the file.
    - **Imported copies are local:** a snapshot loaded into one browser does not propagate changes back to HR or to any other browser.
 
@@ -333,7 +353,7 @@ OmniHR implements the following Indian statutory regulations:
 | **Industrial Disputes Act, 1947 (Sec 25F)** | 1 month notice pay + 15 days average pay per completed year of service for retrenched workmen. | `Basic + (15 * Basic * Tenure / 30)` |
 | **State Professional Tax Acts** | Monthly state tax deduction on salaried income. | Standard `₹200 / month` |
 | **Standard Monthly Working Cycle (LOP pricing)** | The LOP wage deduction uses a fixed 26-day denominator, a company/statutory policy constant — independent of a month's actual working days. | LOP deduction = `(Basic / 26) * LOP Days` |
-| **CTC Structure Guidelines** | 50% Basic, 25% HRA, 25% Special Allowance. | Basic = 50% CTC; HRA = 50% Basic; Special = CTC - (Basic + HRA) |
+| **Default CTC Structure** | The fresh-install template: 50% Basic, 25% HRA, 25% Special Allowance. HR can change the company template or add per-employee overrides in Payslip Designer. | Default: Basic = 50% CTC; HRA = 50% Basic; Special = CTC - (Basic + HRA) |
 
 ---
 
@@ -345,16 +365,29 @@ OmniHR implements the following Indian statutory regulations:
 3. Select their Designation/Title, Office Location Hub, and Date of Joining (DOJ).
 4. Enter their agreed Monthly Gross CTC in INR (e.g., `180000`).
 5. Select Gender and click **Save Staff Profile**.
-6. OmniHR automatically generates a sequential ID (`EMP-xxxx`), derives their Basic (50%), HRA (25%), Special Allowance (25%), assigns standard leave quotas (10 CL, 10 SL, 15 EL), generates a PF UAN, and syncs the record into IndexedDB.
+6. OmniHR automatically generates a sequential ID (`EMP-xxxx`), derives their stored Basic (50%), HRA (25%) and Special Allowance (25%) defaults, assigns standard leave quotas (10 CL, 10 SL, 15 EL), generates a PF UAN, and syncs the record into IndexedDB. Payroll prices the active company pay structure, so a later template or per-employee override applies without editing the stored defaults.
 
 ### Workflow 2: Generating and Printing a Monthly Payslip
-1. Navigate to the **Payroll & Compensation** tab (or **Employee Directory**).
-2. Locate the employee using the search bar or department dropdown.
-3. Click the **Slip** (or **View**) button next to their name.
-4. The verified executive payslip modal displays the complete compensation breakdown: Gross CTC, Basic, HRA, Special Allowance, EPF, PT, LOP deductions, and Net Take-Home.
+1. Navigate to **Payroll & Compensation**, **Employee Directory** or **Finance Report**.
+2. Locate the employee using the search bar, department dropdown or report table.
+3. Click **Slip**, **View** or **Payslip** next to their name.
+4. The payslip modal displays the resolved earnings lines from the company structure or the employee's override, any monthly bonuses, EPF, PT, LOP deductions, employer EPF as a company cost, and Net Take-Home.
 5. Click **Print Payslip** to open the browser print dialog. Unnecessary UI elements (sidebar, headers, buttons) are automatically hidden via `@media print` CSS for a clean, professional PDF.
 
-### Workflow 3: Calculating Employee Separation & Gratuity
+### Workflow 3: Changing the Pay Structure or Adding a Bonus
+1. Open **Payslip Designer**.
+2. In **Company template**, edit the earning components, mark one line as Basic, choose the basis and value, toggle EPF/PT, and adjust the rating-to-percent performance rules. The live preview updates as you type; save when valid.
+3. For an individual exception, switch to **Employee overrides**, select the employee, click **Customize for this employee**, edit the cloned structure and save. **Remove override** returns them to the company template.
+4. Open **Payroll & Compensation** and find **Bonuses this month**. Click **Add bonus**, choose Performance or Custom, and enter the label and amount. A performance bonus preselects the employee's rating and suggests a percent of Basic; overwrite the amount if needed.
+5. The payslip, payroll table, payroll export and Finance Report all include the saved bonus for that month.
+
+### Workflow 4: Preparing the Monthly Finance Report
+1. Open **Finance Report** and choose the month with the prev/next controls.
+2. Review the summary cards, department breakdown and employee breakup. Every row reconciles gross + bonuses − deductions = net.
+3. Click **Export Excel** to download `OmniHR_Finance_Report_YYYY-MM.xlsx` with Summary, Departments and Employees sheets, or **Print report** for a clean statement.
+4. Open an employee's **Payslip** action to inspect that report month's bonuses and LOP.
+
+### Workflow 5: Calculating Employee Separation & Gratuity
 1. Navigate to the **EOSB & Gratuity Calc** tab.
 2. Select an employee from the dropdown. Their last drawn basic salary, tenure, and unused leave days populate automatically.
 3. Choose the separation type:
@@ -368,11 +401,11 @@ OmniHR implements the following Indian statutory regulations:
 ## 6. Offline Architecture & Data Privacy
 
 - **100% Client-Side Processing:** All data parsing, calculations, and Chart.js graphics execute strictly within your local browser runtime.
-- **IndexedDB Primary Store:** Business data — employees, policies, leave plans, planner settings, planner events, the daily attendance ledger and the holiday calendar — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `plannerEvents`, `attendance`, `holidays`, `meta`).
+- **IndexedDB Primary Store:** Business data — employees, policies, leave plans, planner settings, planner events, the daily attendance ledger, the holiday calendar, the company pay structure, per-employee overrides and monthly bonuses — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `plannerEvents`, `attendance`, `holidays`, `payStructure`, `payOverrides`, `payrollBonuses`, `meta`).
 - **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and Admin & Settings reports that they exist.
 - **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
-- **Snapshot Backups:** Export the full business-data JSON snapshot (format v3, planner events, attendance and holidays included) from **Admin & Settings** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar; v2 snapshots import with no planner events.
-- **Restoring Default State:** If you wish to restore the factory demo state at any time, open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. It resets all six business datasets and the planner settings: the register returns to the 200-employee corporate dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed.
+- **Snapshot Backups:** Export the full business-data JSON snapshot (format v4, pay structure, overrides, bonuses, planner events, attendance and holidays included) from **Admin & Settings** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar; v2 snapshots import with no planner events; v3 snapshots import with the default pay structure and no overrides or bonuses.
+- **Restoring Default State:** If you wish to restore the factory demo state at any time, open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. It resets all six business datasets and the planner settings: the register returns to the 200-employee corporate dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed. The pay structure returns to the default 50/25/25 template and all overrides and monthly bonuses are cleared.
 
 ---
 

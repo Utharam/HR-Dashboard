@@ -426,7 +426,7 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
                 <th scope="col">LOP</th>
                 <th scope="col">Net</th>
                 <th scope="col">Employer EPF</th>
-                <th scope="col">Payslip</th>
+                <th scope="col" className="finance-report__payslip-col">Payslip</th>
               </tr>
             </thead>
             <tbody>
@@ -460,7 +460,7 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
                       )}
                     </td>
                     <td>₹{formatINR(row.employerEpf)}</td>
-                    <td>
+                    <td className="finance-report__payslip-col">
                       {employee && (
                         <button
                           type="button"
