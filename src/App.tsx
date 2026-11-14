@@ -20,6 +20,7 @@ import { Callout } from './components/Callout';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 import type { Employee, ActiveTab, HRPolicy } from './types';
+import type { DataSnapshot, DataStore } from './data/DataStore';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_DEPARTMENTS, 
@@ -87,19 +88,43 @@ const DISCARDED_NOTICE_COPY: Record<'employees' | 'policies', string> = {
     'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
 };
 
-export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
-  // Read once per mount through the validating loader. `loadPersisted` is a pure read of
-  // storage, so a re-run is harmless and returns the same answer.
+export const App: React.FC<{
+  onSignOut?: () => void;
+  /**
+   * Completed business data, handed over by the DataGate. When absent, App keeps its
+   * original synchronous contract and reads localStorage itself - the path every
+   * existing test exercises, which must not change (design decision D9).
+   */
+  initialData?: DataSnapshot;
+  /**
+   * Destination for saves. When absent, saves go through `savePersisted`, exactly as
+   * they always have. The two props are independent: `initialData` replaces the read
+   * path, `dataStore` the write path, so a test can exercise either alone.
+   */
+  dataStore?: DataStore;
+}> = ({ onSignOut, initialData, dataStore }) => {
+  // Read once per mount. Two sources:
+  //
+  // - with `initialData`, the DataGate has already loaded and validated the data, and
+  //   the console must NOT go back to localStorage - that is the point of the seam.
+  //   A store load that had to substitute seed data is the STORE's recovery, not a
+  //   localStorage loss, so no discarded banner is raised from here;
+  // - without it, the validating loader reads localStorage. `loadPersisted` is a pure
+  //   read of storage, so a re-run is harmless and returns the same answer.
   //
   // Only `status === 'recovered'` produces a notice. `'empty'` covers both a first visit
   // and a register the user deliberately emptied, and warning about either would be a
   // lie about data that does not exist.
   const initialLoad = useMemo(
     () => ({
-      employees: loadPersisted(EMPLOYEES_KEY, isEmployeeRow, INITIAL_EMPLOYEES),
-      policies: loadPersisted(POLICIES_KEY, isPolicyRow, INITIAL_POLICIES),
+      employees: initialData
+        ? { rows: initialData.employees, status: 'loaded' as const }
+        : loadPersisted(EMPLOYEES_KEY, isEmployeeRow, INITIAL_EMPLOYEES),
+      policies: initialData
+        ? { rows: initialData.policies, status: 'loaded' as const }
+        : loadPersisted(POLICIES_KEY, isPolicyRow, INITIAL_POLICIES),
     }),
-    [],
+    [initialData],
   );
 
   const [employees, setEmployees] = useState<Employee[]>(initialLoad.employees.rows);
@@ -209,12 +234,17 @@ export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
     setPolicies(INITIAL_POLICIES);
   };
 
-  // Sync to localStorage. `savePersisted` reports failure instead of throwing: an
-  // unguarded `setItem` raised `QuotaExceededError` at roughly 9,300 employees
-  // (~494 bytes a row against a 5 MB origin budget), which propagated out of this
-  // effect, unmounted the root, and did so AFTER the user had been told their import
-  // succeeded. A failure now becomes a visible notice and nothing else claims to have
-  // been saved.
+  // Sync to storage. Two targets, one contract: the change on screen is either
+  // written down or loudly reported as not written down.
+  //
+  // - With `dataStore` (the DataGate path), the store is the single destination. Its
+  //   contract is to report, never to throw, so a failed save arrives as a result and
+  //   becomes the same `not-saved` notice as before. The `cancelled` guard keeps a
+  //   late resolution from an unmounted tree from raising a banner nobody can see.
+  //   `invalid`/`version` are import-time reasons a save cannot honestly produce; a
+  //   write that failed in some unknown way is still a write the user was not told
+  //   about, so it degrades to the generic `unavailable` copy rather than to silence.
+  // - Without it, the legacy synchronous `savePersisted` path runs unchanged.
   //
   // The setState-in-effect warnings below are suppressed on purpose. Writing to an
   // external system and reporting that it failed is precisely an effect's job, and the
@@ -223,20 +253,54 @@ export const App: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
   // cannot cascade: the notice only changes the banner, and the effect's dependency is
   // the roster, so the effect does not re-run.
   useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.saveEmployees(employees).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'employees',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const result = savePersisted(EMPLOYEES_KEY, employees);
     if (!result.ok) {
       // oxlint-disable-next-line react/set-state-in-effect -- see the note above
       setNotice({ kind: 'not-saved', scope: 'employees', reason: result.reason });
     }
-  }, [employees]);
+  }, [dataStore, employees]);
 
   useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.savePolicies(policies).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'policies',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const result = savePersisted(POLICIES_KEY, policies);
     if (!result.ok) {
       // oxlint-disable-next-line react/set-state-in-effect -- see the note above
       setNotice({ kind: 'not-saved', scope: 'policies', reason: result.reason });
     }
-  }, [policies]);
+  }, [dataStore, policies]);
 
   // Global Filtered Employees
   const filteredEmployees = useMemo(() => {
