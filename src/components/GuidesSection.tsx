@@ -442,10 +442,10 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
               </p>
             </div>
             <button 
-              onClick={() => onNavigateTab('excel')} 
+              onClick={() => onNavigateTab('admin')} 
               className="btn btn-primary"
             >
-              <Upload size={15} /> Open Excel Data Hub
+              <Upload size={15} /> Open Excel Hub in Admin
             </button>
           </div>
 

@@ -66,7 +66,7 @@ export type ActiveTab =
   | 'recruitment' 
   | 'retention' 
   | 'trends' 
-  | 'excel'
+  | 'admin'
   | 'policies'
   | 'guides';
 

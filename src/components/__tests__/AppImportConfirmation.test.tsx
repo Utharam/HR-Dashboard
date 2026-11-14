@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as XLSX from 'xlsx';
 import { App } from '../../App';
@@ -70,13 +70,16 @@ const storedRoster = () =>
   JSON.parse(localStorage.getItem(EMPLOYEES_KEY) as string).rows as { id: string; name: string }[];
 
 const openExcelHub = async () => {
-  await userEvent.click(screen.getByRole('button', { name: /Excel Data Hub/i }));
+  // The Admin page owns the Excel Hub now, so navigation goes through the sidebar's
+  // Admin item - which the header shortcut shares a name with, hence the nav scope.
+  const nav = screen.getByRole('navigation');
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
   // The page title and the card heading both mention spreadsheet ingestion, so the tab is
   // recognised by the one control the hub alone owns.
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
 };
 
-const uploadRoster = async (container: HTMLElement) => {
+const uploadRoster = async () => {
   const ws = XLSX.utils.json_to_sheet(IMPORTED_ROWS);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -85,7 +88,9 @@ const uploadRoster = async (container: HTMLElement) => {
     'q3-roster.xlsx',
     { type: 'application/vnd.ms-excel' },
   );
-  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  // The Admin page also carries the snapshot card's JSON input, so the hub's input
+  // is picked by its own id rather than by the first file input on the page.
+  const input = document.getElementById('excelFileInput') as HTMLInputElement;
   Object.defineProperty(input, 'files', { value: [file], configurable: true });
   input.dispatchEvent(new Event('change', { bubbles: true }));
   await screen.findByRole('table', { name: /Pre-sync import preview/i });
@@ -104,7 +109,7 @@ describe('App destructive import', () => {
   it('leaves the register alone until the question is answered', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
 
     await userEvent.click(screen.getByRole('button', { name: /sync into live dashboard/i }));
 
@@ -119,7 +124,7 @@ describe('App destructive import', () => {
     await waitFor(() => expect(storedRoster()).toHaveLength(INITIAL_EMPLOYEES.length));
 
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
     await confirmReplacement();
 
     await waitFor(() => expect(storedRoster()).toHaveLength(1));
@@ -141,7 +146,7 @@ describe('App destructive import', () => {
   it('stores the snapshot in the same versioned envelope as the live register', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
     await confirmReplacement();
 
     await waitFor(() => expect(localStorage.getItem(BACKUP_KEY)).not.toBeNull());
@@ -153,7 +158,7 @@ describe('App destructive import', () => {
   it('restores the register from the snapshot when the banner Undo is used', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
     await confirmReplacement();
 
     await waitFor(() => expect(storedRoster()).toHaveLength(1));
@@ -166,7 +171,7 @@ describe('App destructive import', () => {
   it('clears the snapshot once it has been used', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
     await confirmReplacement();
     await waitFor(() => expect(localStorage.getItem(BACKUP_KEY)).not.toBeNull());
 
@@ -180,7 +185,7 @@ describe('App destructive import', () => {
   it('adds rather than replaces when append is the answer given', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
 
     await userEvent.click(screen.getByRole('button', { name: /sync into live dashboard/i }));
     await userEvent.click(screen.getByRole('button', { name: /append to the existing/i }));
@@ -197,7 +202,7 @@ describe('App destructive import', () => {
   it('says what happened without claiming the write succeeded', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
     await openExcelHub();
-    await uploadRoster(document.body);
+    await uploadRoster();
     await confirmReplacement();
 
     const confirmation = await screen.findByRole('status');

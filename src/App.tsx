@@ -12,6 +12,7 @@ import { RecruitmentSection } from './components/RecruitmentSection';
 import { RetentionSection } from './components/RetentionSection';
 import { TrendsSection } from './components/TrendsSection';
 import { ExcelHubSection } from './components/ExcelHubSection';
+import { AdminSection } from './components/AdminSection';
 import { PolicySection } from './components/PolicySection';
 import { GuidesSection } from './components/GuidesSection';
 import { LeavePlannerSection } from './components/LeavePlannerSection';
@@ -21,7 +22,12 @@ import { Callout } from './components/Callout';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 import type { Employee, ActiveTab, HRPolicy, LeavePlan, PlannerSettings } from './types';
-import { DEFAULT_PLANNER_SETTINGS, type DataSnapshot, type DataStore } from './data/DataStore';
+import {
+  DEFAULT_PLANNER_SETTINGS,
+  type DataSnapshot,
+  type DataStore,
+  type StoreBackend,
+} from './data/DataStore';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_DEPARTMENTS, 
@@ -132,7 +138,18 @@ export const App: React.FC<{
    * path, `dataStore` the write path, so a test can exercise either alone.
    */
   dataStore?: DataStore;
-}> = ({ onSignOut, initialData, dataStore }) => {
+  /**
+   * Where business data lives in this session, reported by the Admin page's snapshot
+   * card. It describes the ACTIVE backend, which only the DataGate knows: with the
+   * legacy path the data is in localStorage by definition.
+   */
+  backend?: StoreBackend;
+  /**
+   * Whether the store's one-time migration found and kept the legacy localStorage
+   * copy. The Admin page surfaces it; the legacy path has no migration, so no backup.
+   */
+  legacyBackup?: boolean;
+}> = ({ onSignOut, initialData, dataStore, backend = 'localstorage', legacyBackup = false }) => {
   // Read once per mount. Two sources:
   //
   // - with `initialData`, the DataGate has already loaded and validated the data, and
@@ -307,6 +324,26 @@ export const App: React.FC<{
 
   const handleUpdatePlannerSettings = (next: PlannerSettings) => {
     setPlannerSettings(next);
+  };
+
+  /**
+   * A confirmed snapshot import wrote EVERY dataset straight into the store, so the
+   * state App holds is now stale from four directions at once. Reloading from the
+   * same store is the one honest response: re-deriving four datasets by hand from
+   * the file would be a second import path, and a page reload would throw away the
+   * session for a change that is already in memory.
+   *
+   * The subsequent save effects write the reloaded datasets straight back; a
+   * round-trip of data the store already holds is harmless.
+   */
+  const handleSnapshotImported = () => {
+    if (!dataStore) return;
+    void dataStore.load().then((loaded) => {
+      setEmployees(loaded.snapshot.employees);
+      setPolicies(loaded.snapshot.policies);
+      setLeavePlans(loaded.snapshot.leavePlans);
+      setPlannerSettings(loaded.snapshot.settings);
+    });
   };
 
   // Sync to storage. Two targets, one contract: the change on screen is either
@@ -613,7 +650,7 @@ export const App: React.FC<{
           departments={departments}
           locations={locations}
           onOpenAddModal={() => setIsAddModalOpen(true)}
-          onNavigateToExcel={() => setActiveTab('excel')}
+          onNavigateToAdmin={() => setActiveTab('admin')}
           onNavigateToGuides={() => handleNavigateToGuides('general')}
           onToggleNav={() => setIsSidebarOpen(open => !open)}
           navOpen={isSidebarOpen}
@@ -747,15 +784,33 @@ export const App: React.FC<{
           />
         )}
 
-        {activeTab === 'excel' && (
-          <ExcelHubSection
-            employees={filteredEmployees}
-            registerSize={employees.length}
-            onImportEmployees={handleImportEmployees}
-            onExportEmployees={handleExportEmployees}
-            onExportPayroll={handleExportPayroll}
-            onNavigateToGuides={(sec) => handleNavigateToGuides(sec || 'excel')}
-          />
+        {/*
+          The Admin page composes the snapshot exchange card and the existing Excel
+          Hub. The card deliberately receives the FULL datasets - its counts and its
+          export describe the store, which is not narrowed by the header's filters,
+          while the Excel Hub below keeps its filter-aware exports.
+        */}
+        {activeTab === 'admin' && (
+          <>
+            <AdminSection
+              employees={employees}
+              policies={policies}
+              leavePlans={leavePlans}
+              settings={plannerSettings}
+              store={dataStore}
+              backend={backend}
+              legacyBackup={legacyBackup}
+              onImported={handleSnapshotImported}
+            />
+            <ExcelHubSection
+              employees={filteredEmployees}
+              registerSize={employees.length}
+              onImportEmployees={handleImportEmployees}
+              onExportEmployees={handleExportEmployees}
+              onExportPayroll={handleExportPayroll}
+              onNavigateToGuides={(sec) => handleNavigateToGuides(sec || 'excel')}
+            />
+          </>
         )}
 
         {activeTab === 'policies' && (

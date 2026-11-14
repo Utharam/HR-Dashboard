@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, UserPlus, FileSpreadsheet, Building2, MapPin, BookOpen, Menu } from 'lucide-react';
+import { Search, UserPlus, Database, Building2, MapPin, BookOpen, Menu } from 'lucide-react';
 import type { ActiveTab, Department } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -14,7 +14,8 @@ interface HeaderProps {
   departments: Department[];
   locations: string[];
   onOpenAddModal: () => void;
-  onNavigateToExcel: () => void;
+  /** Jumps to the Admin page, which owns the snapshot exchange and the Excel Hub. */
+  onNavigateToAdmin: () => void;
   onNavigateToGuides?: () => void;
   /**
    * Opens and closes the navigation. Required rather than optional: below the collapse
@@ -37,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   departments,
   locations,
   onOpenAddModal,
-  onNavigateToExcel,
+  onNavigateToAdmin,
   onNavigateToGuides,
   onToggleNav,
   navOpen
@@ -53,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'recruitment': return { title: 'Talent Acquisition & Hiring Pipeline', sub: 'Active requisitions, candidate funnel stages & time-to-hire' };
       case 'retention': return { title: 'Statutory EOSB & Gratuity Calculator', sub: 'Payment of Gratuity Act 1972 compliance with tenure rounding & ₹20L cap' };
       case 'trends': return { title: '33-Month Financial & Headcount Analytics', sub: 'Historical trends from Jan 2024 to Sep 2026' };
-      case 'excel': return { title: 'Excel Data Hub & Spreadsheet Ingestion', sub: 'Drag-and-drop parser for any HR/payroll Excel workbook' };
+      case 'admin': return { title: 'Admin & Data Exchange', sub: 'Business-data snapshots, storage status and the Excel ingestion hub' };
       case 'policies': return { title: 'Corporate HR Policy & Benefits Hub', sub: 'Maternal & paternal provisions, leave quotas, notice periods, sabbaticals & custom enterprise rules' };
       case 'guides': return { title: 'OmniHR Knowledge Base & Operational Guides', sub: 'Comprehensive operational manual and technical Excel spreadsheet synchronization guide' };
     }
@@ -144,8 +145,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button onClick={onOpenAddModal} className="btn btn-primary">
           <UserPlus size={16} /> Add Staff
         </button>
-        <button onClick={onNavigateToExcel} className="btn btn-secondary">
-          <FileSpreadsheet size={16} /> Excel Hub
+        <button onClick={onNavigateToAdmin} className="btn btn-secondary">
+          <Database size={16} /> Admin
         </button>
         {onNavigateToGuides && (
           <button 

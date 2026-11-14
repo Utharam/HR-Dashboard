@@ -2324,3 +2324,100 @@ textarea.omni-input {
   font-size: var(--fs-xs);
   color: var(--text-dim);
 }
+
+/* ── Admin / data exchange ────────────────────────────────────────────────
+   The snapshot card: counts, storage facts, the export/import actions and
+   the backup note. Same token discipline as the planner above. ---------- */
+.admin-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.admin-snapshot__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.admin-snapshot__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  color: var(--primary);
+}
+.admin-snapshot__counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.admin-snapshot__count {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--space-3);
+}
+.admin-snapshot__count dt {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.admin-snapshot__count dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+.admin-snapshot__facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.admin-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-inline);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.admin-fact:last-child {
+  border-bottom: none;
+}
+.admin-fact dt {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.admin-fact dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.admin-snapshot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.admin-snapshot__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-inline);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.admin-snapshot__note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-dim);
+}

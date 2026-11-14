@@ -19,9 +19,10 @@ type DoorView = 'landing' | 'login'
  */
 const RootView: React.FC = () => {
   const { status, signOut } = useAuth()
-  // The gate's completed load. The console below receives the same snapshot and the
-  // same store the gate loaded once; nothing else in the app reads storage for data.
-  const { store, snapshot } = useDataGate()
+  // The gate's completed load. The console below receives the same snapshot, the
+  // same store and the same legacy-backup flag the gate loaded once; nothing else
+  // in the app reads storage for data.
+  const { store, snapshot, legacyBackup } = useDataGate()
   const [view, setView] = useState<DoorView>('landing')
 
   if (status === 'loading') {
@@ -47,6 +48,8 @@ const RootView: React.FC = () => {
         }}
         initialData={snapshot}
         dataStore={store}
+        backend={store.backend}
+        legacyBackup={legacyBackup}
       />
     )
   }

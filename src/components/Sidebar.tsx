@@ -9,7 +9,7 @@ import {
   Briefcase, 
   ShieldCheck, 
   LineChart, 
-  FileSpreadsheet,
+  Database,
   BookOpen,
   Scale,
   Download,
@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'recruitment', label: 'Recruitment Pipeline', icon: <Briefcase size={18} /> },
     { id: 'retention', label: 'EOSB & Gratuity Calc', icon: <ShieldCheck size={18} /> },
     { id: 'trends', label: '3-Year Headcount Trends', icon: <LineChart size={18} /> },
-    { id: 'excel', label: 'Excel Data Hub', icon: <FileSpreadsheet size={18} /> },
+    { id: 'admin', label: 'Admin', icon: <Database size={18} /> },
     { id: 'policies', label: 'HR Policy Hub', icon: <Scale size={18} /> },
     { id: 'guides', label: 'User Guides & Manual', icon: <BookOpen size={18} /> },
   ];

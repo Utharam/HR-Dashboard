@@ -19,13 +19,21 @@ import { render, type RenderResult } from '@testing-library/react'
 import { App } from '../App'
 import { ThemeProvider } from '../theme/ThemeContext'
 import { MemoryStore } from '../data/MemoryStore'
-import type { DataSnapshot, DataStore } from '../data/DataStore'
+import type { DataSnapshot, DataStore, StoreBackend } from '../data/DataStore'
 
 export interface RenderAppOptions {
   /** Replaces the store's own snapshot as the data App starts from. */
   initialData?: DataSnapshot
   /** Defaults to a fresh `MemoryStore`. */
   dataStore?: DataStore
+  /**
+   * What the Admin page reports as the storage backend. Defaults to the store's
+   * own backend - the exact value the DataGate hands RootView in production -
+   * so a test can override it only when it wants to pin a specific report.
+   */
+  backend?: StoreBackend
+  /** Defaults to `false`, as the DataGate reports for a store with no migration. */
+  legacyBackup?: boolean
 }
 
 export interface RenderAppResult extends RenderResult {
@@ -36,10 +44,16 @@ export interface RenderAppResult extends RenderResult {
 export async function renderApp(options: RenderAppOptions = {}): Promise<RenderAppResult> {
   const store = options.dataStore ?? new MemoryStore()
   const initialData = options.initialData ?? (await store.load()).snapshot
+  const backend = options.backend ?? store.backend
 
   const view = render(
     <ThemeProvider>
-      <App initialData={initialData} dataStore={store} />
+      <App
+        initialData={initialData}
+        dataStore={store}
+        backend={backend}
+        legacyBackup={options.legacyBackup ?? false}
+      />
     </ThemeProvider>,
   )
 
