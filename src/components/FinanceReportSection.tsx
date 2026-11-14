@@ -313,7 +313,7 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
       </div>
 
       {/* Department table */}
-      <section className="omni-card omni-card--flush" aria-labelledby="finance-departments-title">
+      <section className="omni-card omni-card--flush finance-report__departments" aria-labelledby="finance-departments-title">
         <div className="omni-card-header">
           <div>
             <h3 id="finance-departments-title" className="omni-card-title">

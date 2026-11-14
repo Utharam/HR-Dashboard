@@ -3485,7 +3485,22 @@ button.attendance-cell:focus-visible {
 
 @media print {
   .finance-report {
-    gap: var(--space-4);
+    gap: var(--space-3);
+  }
+  .finance-report .grid--kpi-lg {
+    gap: 8px;
+  }
+  .finance-report .kpi-card {
+    padding: 8px 10px;
+  }
+  .finance-report .kpi-value {
+    font-size: 12pt;
+  }
+  .finance-report .kpi-sub {
+    font-size: 7.5pt;
+  }
+  .finance-report__departments {
+    break-inside: avoid;
   }
   .finance-report__print-head {
     display: block;
@@ -3548,6 +3563,12 @@ button.attendance-cell:focus-visible {
   .finance-report .omni-table td {
     padding: 4px 5px;
     white-space: normal;
+  }
+  .finance-report .omni-table th {
+    font-size: 7.5pt;
+    overflow-wrap: normal;
+  }
+  .finance-report .omni-table td {
     overflow-wrap: anywhere;
   }
   /* A long employee table repeats its header on every printed page, and a row
