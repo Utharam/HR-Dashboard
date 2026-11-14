@@ -8,7 +8,13 @@ import { snapshotToJson } from '../../data/snapshot';
 import { DATA_SCHEMA_VERSION } from '../../utils/storage';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 import { INITIAL_POLICIES } from '../../data/initialPolicies';
-import type { Employee, HRPolicy, LeavePlan } from '../../types';
+import type {
+  AttendanceRecord,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+} from '../../types';
 
 /*
  * The snapshot card is the one screen where a click can replace EVERY dataset in
@@ -47,6 +53,32 @@ const PLAN: LeavePlan = {
   updatedAt: '2026-11-01T00:00:00.000Z',
 };
 
+const record = (
+  employeeId: string,
+  date: string,
+  status: AttendanceRecord['status'],
+  extra: Partial<AttendanceRecord> = {},
+): AttendanceRecord => ({
+  id: `${employeeId}|${date}`,
+  employeeId,
+  date,
+  status,
+  source: 'seed',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+  ...extra,
+});
+
+const ATTENDANCE: AttendanceRecord[] = [
+  record('EMP-LOCAL-1', '2026-11-10', 'Present'),
+  record('EMP-LOCAL-1', '2026-11-11', 'Absent'),
+  record('EMP-LOCAL-2', '2026-11-10', 'WFH'),
+  record('EMP-LOCAL-2', '2026-11-12', 'HalfDay'),
+];
+
+const HOLIDAYS: Holiday[] = [
+  { id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' },
+];
+
 const SNAPSHOT_META_KEY = 'omnihr_snapshot_meta';
 
 /** A mock store that records every call while behaving like a real one. */
@@ -73,6 +105,8 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   employees: EMPLOYEES,
   policies: [POLICY],
   leavePlans: [PLAN],
+  attendance: ATTENDANCE,
+  holidays: HOLIDAYS,
   settings: { maxConcurrentLeave: 3 },
   store: makeMockStore({
     v: 2,
@@ -81,8 +115,8 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
     employees: EMPLOYEES,
     policies: [POLICY],
     leavePlans: [PLAN],
-    attendance: [],
-    holidays: [],
+    attendance: ATTENDANCE,
+    holidays: HOLIDAYS,
     settings: { maxConcurrentLeave: 3 },
   }),
   backend: 'indexeddb',
@@ -103,8 +137,10 @@ const IMPORTED_SNAPSHOT: DataSnapshot = {
   ],
   policies: [{ ...INITIAL_POLICIES[0], id: 'POL-IMPORT-1' }],
   leavePlans: [PLAN],
-  attendance: [],
-  holidays: [],
+  attendance: [
+    record('EMP-IMPORT-1', '2026-12-01', 'Present', { source: 'excel' }),
+  ],
+  holidays: [{ id: 'holiday-2026-12-24', date: '2026-12-24', name: 'Foundation Day' }],
   settings: { maxConcurrentLeave: 4 },
 };
 
@@ -128,6 +164,13 @@ const factRow = (label: string): HTMLElement => {
   const row = screen.getByText(label).closest('.admin-fact');
   if (!(row instanceof HTMLElement)) throw new Error(`No fact row for ${label}`);
   return row;
+};
+
+/** The count tile whose dt reads `label`, scoped to the snapshot card. */
+const countBlock = (label: string): HTMLElement => {
+  const block = screen.getByText(label).closest('.admin-snapshot__count');
+  if (!(block instanceof HTMLElement)) throw new Error(`No count tile for ${label}`);
+  return block;
 };
 
 // ── Export plumbing ─────────────────────────────────────────────────────────
@@ -180,6 +223,10 @@ describe('Admin snapshot card — display', () => {
     expect(within(card).getByText('2')).toBeInTheDocument();
     expect(within(card).getByText('Leave plans')).toBeInTheDocument();
     expect(within(card).getByText('3')).toBeInTheDocument();
+
+    // The daily ledger and the holiday calendar joined the card's counts.
+    expect(within(countBlock('Attendance')).getByText('4')).toBeInTheDocument();
+    expect(within(countBlock('Holidays')).getByText('1')).toBeInTheDocument();
 
     expect(within(card).getByText('IndexedDB (this browser)')).toBeInTheDocument();
     expect(
@@ -248,6 +295,12 @@ describe('Admin snapshot card — export', () => {
         ]),
         policies: [expect.objectContaining({ id: 'POL-LOCAL-1' })],
         leavePlans: [expect.objectContaining({ id: 'plan-local-1' })],
+        // The daily ledger and the holiday calendar travel in the snapshot too,
+        // or the backup would quietly lose them while claiming to be complete.
+        attendance: expect.arrayContaining([
+          expect.objectContaining({ id: 'EMP-LOCAL-1|2026-11-10' }),
+        ]),
+        holidays: [expect.objectContaining({ id: 'holiday-2026-12-25' })],
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -327,6 +380,10 @@ describe('Admin snapshot card — import', () => {
     const dialog = confirmDialog();
     expect(dialog).toHaveTextContent(/3 employee records/);
     expect(dialog).toHaveTextContent(/currently 2 employee records/);
+    // The new datasets are named on both sides too, so the replacement is stated
+    // in full rather than hiding the attendance ledger it also deletes.
+    expect(dialog).toHaveTextContent(/1 attendance records and 1 holiday records/);
+    expect(dialog).toHaveTextContent(/4 attendance records and 1 holiday records/);
     // Asked, not answered: the store is untouched while the question is open.
     expect(props.store?.importSnapshot).not.toHaveBeenCalled();
     expect(props.onImported).not.toHaveBeenCalled();

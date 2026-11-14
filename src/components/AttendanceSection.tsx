@@ -53,19 +53,14 @@ type ParsedAttendance = Extract<ParseAttendanceResult, { ok: true }>;
 
 interface AttendanceSectionProps {
   employees: Employee[];
-  /**
-   * The remaining props are declared optional only because Task 4 (App
-   * integration) has not wired them yet; the section behaves as an empty,
-   * no-op console until then and every real caller passes them all.
-   */
-  attendance?: AttendanceRecord[];
-  holidays?: Holiday[];
-  leavePlans?: LeavePlan[];
-  onSaveRecord?: (record: AttendanceRecord) => void;
-  onDeleteRecord?: (id: string) => void;
-  onReplaceMonth?: (monthKey: string, records: AttendanceRecord[]) => void;
-  onSaveHoliday?: (holiday: Holiday) => void;
-  onDeleteHoliday?: (id: string) => void;
+  attendance: AttendanceRecord[];
+  holidays: Holiday[];
+  leavePlans: LeavePlan[];
+  onSaveRecord: (record: AttendanceRecord) => void;
+  onDeleteRecord: (id: string) => void;
+  onReplaceMonth: (monthKey: string, records: AttendanceRecord[]) => void;
+  onSaveHoliday: (holiday: Holiday) => void;
+  onDeleteHoliday: (id: string) => void;
 }
 
 const MONTH_LABEL = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
@@ -118,14 +113,14 @@ const nowIso = (): string => new Date().toISOString();
 
 export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   employees,
-  attendance = [],
-  holidays = [],
-  leavePlans = [],
-  onSaveRecord = () => {},
-  onDeleteRecord = () => {},
-  onReplaceMonth = () => {},
-  onSaveHoliday = () => {},
-  onDeleteHoliday = () => {},
+  attendance,
+  holidays,
+  leavePlans,
+  onSaveRecord,
+  onDeleteRecord,
+  onReplaceMonth,
+  onSaveHoliday,
+  onDeleteHoliday,
 }) => {
   // Captured once per mount: "today" cannot drift between renders.
   const [today] = useState(() => new Date());

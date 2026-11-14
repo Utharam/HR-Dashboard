@@ -21,7 +21,15 @@ import { AddEmployeeModal } from './components/AddEmployeeModal';
 import { Callout } from './components/Callout';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
-import type { Employee, ActiveTab, HRPolicy, LeavePlan, PlannerSettings } from './types';
+import type {
+  AttendanceRecord,
+  Employee,
+  ActiveTab,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  PlannerSettings,
+} from './types';
 import {
   DEFAULT_PLANNER_SETTINGS,
   type DataSnapshot,
@@ -38,10 +46,13 @@ import {
 import { INITIAL_POLICIES } from './data/initialPolicies';
 import { createInitialLeavePlans } from './data/initialLeavePlans';
 import { computePayroll, isActive } from './utils/payroll';
+import { rollupMonth } from './utils/attendance';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
 import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
 import {
+  isAttendanceRecordRow,
   isEmployeeRow,
+  isHolidayRow,
   isLeavePlanRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -56,6 +67,11 @@ const POLICIES_KEY = 'omnihr_policies';
 // path and should not need the store module's key map to do so).
 const LEAVE_PLANS_KEY = 'omnihr_leave_plans';
 const PLANNER_SETTINGS_KEY = 'omnihr_planner_settings';
+// The daily attendance ledger and the company holiday calendar join them under
+// the same rule: these literals are the exact keys the store layer reads and
+// writes, so a browser that switches backend finds the same data either way.
+const ATTENDANCE_KEY = 'omnihr_attendance';
+const HOLIDAYS_KEY = 'omnihr_holidays';
 
 /**
  * True when the sidebar is the off-canvas drawer (the 760px breakpoint in
@@ -90,11 +106,13 @@ const EMPLOYEES_BACKUP_KEY = 'omnihr_employees_backup';
  * `scope` names the dataset the banner is about. `leave` covers both the leave plans
  * and the planner settings: one calendar and one number belong to the same planner,
  * and a failed write of either is the same "on screen but not written down" event.
+ * `attendance` and `holidays` name the daily ledger and the company calendar, which
+ * are separate datasets with separate saves.
  *
  * A user must never have to guess whether the register they are looking at is the one
  * that will survive a refresh.
  */
-type NoticeScope = 'employees' | 'policies' | 'leave';
+type NoticeScope = 'employees' | 'policies' | 'leave' | 'attendance' | 'holidays';
 
 type AppNotice =
   | { kind: 'discarded'; scope: NoticeScope }
@@ -115,6 +133,18 @@ const SAVE_NOTICE_COPY: Record<NoticeScope, Record<'quota' | 'unavailable', stri
     unavailable:
       'Your leave planner change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
   },
+  attendance: {
+    quota:
+      'Your attendance change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your attendance change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
+  holidays: {
+    quota:
+      'Your holiday change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your holiday change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
 };
 
 const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
@@ -124,6 +154,10 @@ const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
     'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
   leave:
     'The leave plans saved in this browser could not be read and have been set aside. The planner is empty in their place - any leave you recorded earlier is gone. Re-enter the leave to continue.',
+  attendance:
+    'The attendance records saved in this browser could not be read and have been set aside. The daily ledger is empty in their place - any marks you made or imported earlier are gone. Mark attendance again or re-import the monthly matrix to continue.',
+  holidays:
+    'The company holidays saved in this browser could not be read and have been set aside. The holiday calendar is empty in their place - any holiday you added is gone. Re-add the holidays to continue.',
 };
 
 /**
@@ -199,6 +233,19 @@ export const App: React.FC<{
         : loadPersisted(PLANNER_SETTINGS_KEY, isPlannerSettingsRow, [
             DEFAULT_PLANNER_SETTINGS,
           ]).rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS },
+      // The daily ledger and the holiday calendar read the same keys the store
+      // layer reads. Both fall back to EMPTY datasets on the legacy path: the
+      // demo ledger and the holiday seed belong to the stores (the IndexedDB
+      // migration and the fallback store install them themselves, and only for
+      // the demo roster), so App inventing them here would seed a custom roster
+      // with records for employees it does not contain. An unreadable stored
+      // payload is still `recovered`, which is what raises the banner below.
+      attendance: initialData
+        ? { rows: initialData.attendance, status: 'loaded' as const }
+        : loadPersisted(ATTENDANCE_KEY, isAttendanceRecordRow, []),
+      holidays: initialData
+        ? { rows: initialData.holidays, status: 'loaded' as const }
+        : loadPersisted(HOLIDAYS_KEY, isHolidayRow, []),
     }),
     [initialData],
   );
@@ -214,6 +261,12 @@ export const App: React.FC<{
   // callbacks, and written back by the save effects below.
   const [leavePlans, setLeavePlans] = useState<LeavePlan[]>(initialLoad.leavePlans.rows);
   const [plannerSettings, setPlannerSettings] = useState<PlannerSettings>(initialLoad.settings);
+
+  // Daily attendance and the company holidays share that lifecycle too: read once
+  // at mount, edited through the Attendance section's callbacks, persisted by the
+  // save effects below.
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialLoad.attendance.rows);
+  const [holidays, setHolidays] = useState<Holiday[]>(initialLoad.holidays.rows);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -292,6 +345,12 @@ export const App: React.FC<{
     if (initialLoad.leavePlans.status === 'recovered') {
       return { kind: 'discarded', scope: 'leave' };
     }
+    if (initialLoad.attendance.status === 'recovered') {
+      return { kind: 'discarded', scope: 'attendance' };
+    }
+    if (initialLoad.holidays.status === 'recovered') {
+      return { kind: 'discarded', scope: 'holidays' };
+    }
     return null;
   });
 
@@ -338,10 +397,63 @@ export const App: React.FC<{
     setPlannerSettings(next);
   };
 
+  // Attendance intents, reported by AttendanceSection. A save is an upsert by id:
+  // the id is `${employeeId}|${date}`, so one record per employee per date is the
+  // whole key space and a replace and an add are the same callback.
+  const handleSaveRecord = (record: AttendanceRecord) => {
+    setAttendance(prev =>
+      prev.some(r => r.id === record.id)
+        ? prev.map(r => (r.id === record.id ? record : r))
+        : [...prev, record],
+    );
+  };
+
+  const handleDeleteRecord = (id: string) => {
+    setAttendance(prev => prev.filter(r => r.id !== id));
+  };
+
+  /**
+   * A confirmed matrix import replaces ONE month, atomically as far as the state
+   * is concerned: every record dated in `monthKey` is removed and the parsed rows
+   * take their place. Other months are untouched - the prefix is the full
+   * `YYYY-MM-`, so `2026-11` cannot reach into `2026-10`. Adding through a Map
+   * keyed by id keeps one record per employee/date even if a file somehow carried
+   * a repeat, because a keyed store would silently collapse a duplicate and then
+   * refuse the whole save.
+   */
+  const handleReplaceMonth = (monthKey: string, records: AttendanceRecord[]) => {
+    const monthPrefix = `${monthKey}-`;
+    setAttendance(prev => {
+      const byId = new Map(
+        prev.filter(r => !r.date.startsWith(monthPrefix)).map(r => [r.id, r] as const),
+      );
+      for (const record of records) byId.set(record.id, record);
+      return [...byId.values()];
+    });
+  };
+
+  /**
+   * Holidays are unique by DATE everywhere downstream: the matrix looks them up
+   * by date and the store refuses a save that carries two rows for one day.
+   * Replacing by date here (keeping the incoming id) means a differently-id'd
+   * sibling for the same day can never reach a save that would have been refused
+   * as a whole.
+   */
+  const handleSaveHoliday = (holiday: Holiday) => {
+    setHolidays(prev => [
+      ...prev.filter(h => h.id !== holiday.id && h.date !== holiday.date),
+      holiday,
+    ]);
+  };
+
+  const handleDeleteHoliday = (id: string) => {
+    setHolidays(prev => prev.filter(h => h.id !== id));
+  };
+
   /**
    * A confirmed snapshot import wrote EVERY dataset straight into the store, so the
-   * state App holds is now stale from four directions at once. Reloading from the
-   * same store is the one honest response: re-deriving four datasets by hand from
+   * state App holds is now stale from six directions at once. Reloading from the
+   * same store is the one honest response: re-deriving six datasets by hand from
    * the file would be a second import path, and a page reload would throw away the
    * session for a change that is already in memory.
    *
@@ -364,6 +476,10 @@ export const App: React.FC<{
         setPolicies(loaded.snapshot.policies);
         setLeavePlans(loaded.snapshot.leavePlans);
         setPlannerSettings(loaded.snapshot.settings);
+        // The daily ledger and the holiday calendar are part of the snapshot too
+        // (v2), so the screen follows the store for them as well.
+        setAttendance(loaded.snapshot.attendance);
+        setHolidays(loaded.snapshot.holidays);
         setConfirmation(null);
         clearPersisted(EMPLOYEES_BACKUP_KEY);
       })
@@ -497,6 +613,60 @@ export const App: React.FC<{
     }
   }, [dataStore, plannerSettings]);
 
+  // The attendance ledger and the holiday calendar persist under the identical
+  // contract. A whole-dataset save is deliberate: like the register, the ledger
+  // is the unit the store and the snapshot vouch for, and a per-record write
+  // would need a second failure story for a partial save.
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.saveAttendance(attendance).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'attendance',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(ATTENDANCE_KEY, attendance);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'attendance', reason: result.reason });
+    }
+  }, [dataStore, attendance]);
+
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.saveHolidays(holidays).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'holidays',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(HOLIDAYS_KEY, holidays);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'holidays', reason: result.reason });
+    }
+  }, [dataStore, holidays]);
+
   // Global Filtered Employees
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -514,6 +684,42 @@ export const App: React.FC<{
       return matchSearch && matchDept && matchLoc;
     });
   }, [employees, searchQuery, selectedDept, selectedLocation]);
+
+  // The CURRENT month's daily rollup, feeding payroll and the overview. `today`
+  // is captured once per mount, like AttendanceSection's own clock, so the
+  // figures on screen cannot drift because a render straddled midnight.
+  const [today] = useState(() => new Date());
+  const currentYear = today.getFullYear();
+  const currentMonthIndex = today.getMonth();
+
+  const currentMonthRollup = useMemo(
+    () => rollupMonth(attendance, employees, holidays, currentYear, currentMonthIndex),
+    [attendance, employees, holidays, currentYear, currentMonthIndex],
+  );
+
+  /**
+   * The register as payroll and the overview should see it (design decision D8).
+   *
+   * An employee with ANY daily record in the current month gets their
+   * `presentDays`/`lopDays` replaced by the rollup; everyone else keeps the
+   * legacy monthly fields exactly as they were. Derived counts pass through
+   * unrounded - a half-day is 0.5 present days, and `computeLOP` prices
+   * fractional days honestly - so a payroll figure never disagrees with the
+   * ledger it was derived from.
+   *
+   * This starts from `filteredEmployees`, the register the sections already
+   * receive, so the header's filters keep narrowing these tabs and only the
+   * day-level figures change.
+   */
+  const payrollEmployees = useMemo(
+    () =>
+      filteredEmployees.map((emp) => {
+        const rollup = currentMonthRollup.get(emp.id);
+        if (!rollup || !rollup.hasRecords) return emp;
+        return { ...emp, presentDays: rollup.presentDays, lopDays: rollup.lopDays };
+      }),
+    [filteredEmployees, currentMonthRollup],
+  );
 
   // Export Complete Employee Roster to Excel
   const handleExportEmployees = () => {
@@ -815,7 +1021,7 @@ export const App: React.FC<{
         {/* View Switching */}
         {activeTab === 'overview' && (
           <OverviewSection
-            employees={filteredEmployees}
+            employees={payrollEmployees}
             departments={departments}
             onSelectEmployee={setSelectedEmployee}
             onClearFilters={handleClearFilters}
@@ -829,9 +1035,24 @@ export const App: React.FC<{
           />
         )}
 
+        {/*
+          The attendance workspace receives the FULL register, like the leave
+          planner: it owns its own department/location/search filters, and a
+          global search left behind from another tab must not blank the matrix
+          or the day panel. Sundays and holidays are derived inside the section;
+          approved leave plans ride along as ghost cells only.
+        */}
         {activeTab === 'attendance' && (
-          <AttendanceSection 
-            employees={filteredEmployees}
+          <AttendanceSection
+            employees={employees}
+            attendance={attendance}
+            holidays={holidays}
+            leavePlans={leavePlans}
+            onSaveRecord={handleSaveRecord}
+            onDeleteRecord={handleDeleteRecord}
+            onReplaceMonth={handleReplaceMonth}
+            onSaveHoliday={handleSaveHoliday}
+            onDeleteHoliday={handleDeleteHoliday}
           />
         )}
 
@@ -856,7 +1077,7 @@ export const App: React.FC<{
 
         {activeTab === 'payroll' && (
           <PayrollSection 
-            employees={filteredEmployees}
+            employees={payrollEmployees}
             onSelectEmployee={setSelectedEmployee}
           />
         )}
@@ -909,6 +1130,8 @@ export const App: React.FC<{
               employees={employees}
               policies={policies}
               leavePlans={leavePlans}
+              attendance={attendance}
+              holidays={holidays}
               settings={plannerSettings}
               store={dataStore}
               backend={backend}

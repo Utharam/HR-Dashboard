@@ -1,6 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { Database, Download, ShieldCheck, Upload } from 'lucide-react';
-import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types';
+import type {
+  AttendanceRecord,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  PlannerSettings,
+} from '../types';
 import type { DataSnapshot, DataStore, StoreBackend } from '../data/DataStore';
 import {
   createSnapshot,
@@ -97,6 +104,9 @@ interface AdminSectionProps {
   employees: Employee[];
   policies: HRPolicy[];
   leavePlans: LeavePlan[];
+  /** The FULL daily attendance ledger and company holiday calendar, same rule. */
+  attendance: AttendanceRecord[];
+  holidays: Holiday[];
   settings: PlannerSettings;
   /**
    * The store every read and write goes through. Optional only because the
@@ -120,6 +130,8 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
   employees,
   policies,
   leavePlans,
+  attendance,
+  holidays,
   settings,
   store,
   backend,
@@ -149,7 +161,14 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
     // The whole flow is all-or-nothing - any failure leaves the meta timestamps
     // untouched and reports itself in a danger notice instead of a success.
     try {
-      const snapshot = createSnapshot({ employees, policies, leavePlans, settings });
+      const snapshot = createSnapshot({
+        employees,
+        policies,
+        leavePlans,
+        attendance,
+        holidays,
+        settings,
+      });
       const fileName = snapshotFileName();
       const blob = new Blob([snapshotToJson(snapshot)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -261,6 +280,14 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
             <dd>{leavePlans.length}</dd>
           </div>
           <div className="admin-snapshot__count">
+            <dt>Attendance</dt>
+            <dd>{attendance.length}</dd>
+          </div>
+          <div className="admin-snapshot__count">
+            <dt>Holidays</dt>
+            <dd>{holidays.length}</dd>
+          </div>
+          <div className="admin-snapshot__count">
             <dt>Peak threshold</dt>
             <dd>{settings.maxConcurrentLeave}</dd>
           </div>
@@ -355,7 +382,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
         title="Replace the data in this browser with the snapshot?"
         message={
           pending
-            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records and ${pending.leavePlans.length} leave records. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records and ${leavePlans.length} leave records - with the file's contents. This cannot be undone.`
+            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records, ${pending.leavePlans.length} leave records, ${pending.attendance.length} attendance records and ${pending.holidays.length} holiday records. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records, ${leavePlans.length} leave records, ${attendance.length} attendance records and ${holidays.length} holiday records - with the file's contents. This cannot be undone.`
             : ''
         }
         confirmLabel="Replace data"

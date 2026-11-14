@@ -105,7 +105,19 @@ describe('AttendanceSection table semantics', () => {
    * sitting in the same keyboard-reachable scroll region as the other tables.
    */
   it('names the attendance matrix and scopes its day columns', () => {
-    render(<AttendanceSection employees={INITIAL_EMPLOYEES} />);
+    render(
+      <AttendanceSection
+        employees={INITIAL_EMPLOYEES}
+        attendance={[]}
+        holidays={[]}
+        leavePlans={[]}
+        onSaveRecord={noop}
+        onDeleteRecord={noop}
+        onReplaceMonth={noop}
+        onSaveHoliday={noop}
+        onDeleteHoliday={noop}
+      />,
+    );
     expectAccessibleTable(/Attendance matrix for/i);
   });
 });

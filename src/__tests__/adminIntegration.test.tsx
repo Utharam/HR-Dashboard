@@ -212,12 +212,63 @@ describe('Admin integration', () => {
     ]);
 
     // And the console followed: the card's counts are the file's counts, including
-    // the planner settings - proof App reloaded all four datasets from the store.
+    // the planner settings - proof App reloaded all six datasets from the store.
     await waitFor(() =>
       expect(within(countBlock('Employees')).getByText('3')).toBeInTheDocument(),
     );
     expect(within(countBlock('Peak threshold')).getByText('4')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/Snapshot imported/i);
+  });
+
+  it('a confirmed import also reloads the attendance ledger and the holiday calendar', async () => {
+    const { store, inner } = makeSpyStore();
+    await renderApp({ initialData: makeSnapshot(), dataStore: store });
+    await openAdmin();
+
+    const imported = makeSnapshot({
+      employees: [ONE_EMPLOYEE],
+      attendance: [
+        {
+          id: 'EMP-SEED-1|2026-11-10',
+          employeeId: 'EMP-SEED-1',
+          date: '2026-11-10',
+          status: 'Present',
+          source: 'excel',
+          updatedAt: '2026-11-10T08:00:00.000Z',
+        },
+        {
+          id: 'EMP-SEED-1|2026-11-11',
+          employeeId: 'EMP-SEED-1',
+          date: '2026-11-11',
+          status: 'Absent',
+          source: 'excel',
+          updatedAt: '2026-11-10T08:00:00.000Z',
+        },
+      ],
+      holidays: [{ id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' }],
+    });
+
+    await userEvent.upload(
+      screen.getByLabelText('Choose snapshot file'),
+      snapshotFile(imported),
+    );
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Replace data' }),
+    );
+
+    // The card's new counts prove App's reload reached the two datasets the
+    // earlier snapshot format did not carry.
+    await waitFor(() =>
+      expect(within(countBlock('Attendance')).getByText('2')).toBeInTheDocument(),
+    );
+    expect(within(countBlock('Holidays')).getByText('1')).toBeInTheDocument();
+
+    // And the store itself holds exactly what the file carried.
+    const stored = await inner.load();
+    expect(stored.snapshot.attendance).toHaveLength(2);
+    expect(stored.snapshot.holidays).toEqual([
+      { id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' },
+    ]);
   });
 
   it('an invalid file is refused with an error and never reaches the store', async () => {
