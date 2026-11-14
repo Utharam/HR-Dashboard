@@ -3493,13 +3493,10 @@ button.attendance-cell:focus-visible {
   .finance-report .kpi-card {
     padding: 8px 10px;
   }
-  .finance-report .kpi-value {
-    font-size: 12pt;
-  }
   .finance-report .kpi-sub {
     font-size: 7.5pt;
   }
-  .finance-report__departments {
+  .finance-report .finance-report__departments {
     break-inside: avoid;
   }
   .finance-report__print-head {
