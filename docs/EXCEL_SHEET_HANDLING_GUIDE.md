@@ -127,6 +127,17 @@ Spreadsheets originate from diverse operating systems (Windows, macOS, Linux) an
     $$\text{LOP Days} = \max(0, 26 - \text{Present Days} - 1)$$
     *(Assuming 1 authorized approved leave day).*
 
+### 5.1 Daily attendance rollup (monthly matrix)
+
+Once a month has daily attendance records (see the matrix in §7), the monthly figures are **derived** from the ledger instead of the ingested `presentDays`/`LOP Days` columns:
+
+- **Present days** = `P` + `W` + 0.5×`HD`. A half-day with a leave type counts 0.5 present + 0.5 leave; without one, 0.5 present + 0.5 unmarked (no LOP).
+- **Leave days** are counted by type (`CL`, `SL`, `EL`, `LOP`, `ML`, `PL`, `CO`, `O`); balances are not deducted automatically.
+- **LOP days** = `A` absences + `LOP` leave days. Half-days without a leave type do not create LOP.
+- **Working days** = days in month − Sundays − holidays (from the company holiday calendar).
+- **Sundays and holidays are derived**, never stored: the matrix displays `WO`/`H` and both the template and the importer ignore those cells.
+- **Payroll/overview fallback:** for the current month, payroll and the overview use the daily rollup only for employees who have at least one record that month; everyone else keeps the legacy `presentDays`/`lopDays` values from the register. Months without daily records (including prior months) keep the legacy values everywhere.
+
 ---
 
 ## 6. Step-by-Step Spreadsheet Ingestion Workflow
@@ -166,7 +177,7 @@ flowchart TD
 
 ## 7. Export Formats & Bank-Ready Registers
 
-OmniHR provides three standardized Excel export capabilities:
+OmniHR provides four standardized Excel export capabilities:
 
 ### 1. Complete Staff Master Roster (`OmniHR_Staff_Roster_YYYY-MM-DD.xlsx`)
 - **Use Case:** Comprehensive backup, annual HR audit, insurance enrollment.
@@ -183,6 +194,16 @@ OmniHR provides three standardized Excel export capabilities:
 - **Use Case:** Distribution to departmental heads or branch managers for new employee data collection.
 - **Contains:** Clean header rows pre-populated with 2 sample employee profiles demonstrating ideal data types.
 
+### 4. Monthly Attendance Matrix (`omnihr-attendance-YYYY-MM.xlsx`)
+- **Use Case:** Collecting daily attendance from HR or department leads, and correcting an existing month.
+- **Where:** Attendance tab toolbar → **Download template** (optionally with "prefill working days as Present").
+- **Sheets:**
+  - `Attendance` — `A1` title, `A2` `Month` / `B2` `YYYY-MM`, `A3` `Generated` / `B3` timestamp, header row 5 (`Employee ID`, `Employee Name`, `Department`, then day numbers `1`..`N`), and one row per employee in roster order.
+  - `Legend` — status code → meaning.
+- **Cell codes:** `P` Present, `A` Absent, `W` WFH, `HD` Half-day (with a leave type: `HD` + leave code), `CL`/`SL`/`EL`/`LOP`/`ML`/`PL`/`CO`/`O` typed leave, `H` holiday, `WO` Sunday, blank unmarked. Sundays are pre-filled `WO`, holidays from the company calendar `H`, approved leave plans with their code, and other working days `P` when prefill-present is on.
+- **Round-trip safe:** a generated template parsed back produces exactly the intended records; `H`/`WO`/blank cells never become records.
+- **Import & replace-month semantics:** upload on the Attendance tab (`.xlsx`/`.xls`/`.csv`). The month is read from `B2`, rows are matched by `Employee ID` (name/department columns are ignored), and the preview reports employees matched, records to create, existing records to replace, and per-cell issues. **Confirmation replaces the whole month's records** — every record dated in that month is removed and the parsed rows take their place — and never touches other months. Unknown employee IDs, invalid codes and day numbers outside the month become preview issues rather than silent skips. A failed import leaves the previous month untouched.
+
 ---
 
 ## 8. Data Validation, Edge Cases & Sanitization
@@ -198,6 +219,10 @@ OmniHR provides three standardized Excel export capabilities:
 | **Attendance Days > 26** | Clamped to maximum 26 business days. |
 | **Performance Rating > 5 or < 1** | Clamped to the valid integer range between 1 and 5. |
 | **Special Characters in Email/Phone** | Names are sanitized (`siddharth.verma@omnixhr.io`), whitespace stripped. |
+| **Unknown Employee ID in the attendance matrix** | Becomes a preview issue; the row is not imported and the existing month is untouched until the preview is confirmed. |
+| **Invalid status code in the attendance matrix** | Becomes a preview issue naming the row and cell; only valid codes (`P`, `A`, `W`, `HD`, typed leave codes) are stored. |
+| **Duplicate dates or duplicate attendance ids** | Refused by the store as a whole, so an import that could produce them collapses repeats by `employee|date` at the boundary instead. |
+| **Holiday dates** | Company-wide and unique by date; the matrix and the rollup treat a holiday like a derived `H` day, and no attendance record is stored for it. |
 
 ---
 
@@ -222,5 +247,12 @@ OmniHR has been verified with export formats from popular HRIS tools:
 - **Cause:** The file has an `.xlsx` extension but contains raw HTML or corrupted binary data.
 - **Resolution:** Open the file in Microsoft Excel or Google Sheets, select **Save As -> Excel Workbook (.xlsx)**, and upload the newly saved file.
 
+### Error: "Missing month or missing header row" (attendance matrix)
+- **Cause:** The workbook is not an OmniHR attendance matrix — `B2` does not hold a `YYYY-MM` month, or the header row does not carry `Employee ID` and the day numbers.
+- **Resolution:** Download a fresh template for the month from the Attendance tab, paste your marks into it, and upload that file.
+
+### Question: "Can I import one month of attendance without touching the others?"
+- **Answer:** Yes. The matrix carries its month in `B2`, and a confirmed import replaces only that month's records. Other months — and every other dataset — are untouched.
+
 ### Question: "How do I revert to the original 200 employee demo state?"
-- **Answer:** Click the **Reset Demo State** button in the lower left of the sidebar. This restores the factory initial dataset (employees, policies, leave plans and planner settings) through the app's data store, replacing what this browser holds.
+- **Answer:** Click the **Reset Demo State** button in the lower left of the sidebar. This restores the factory initial dataset (employees, policies, leave plans, planner settings, the current-month demo attendance ledger and the 2026 holiday calendar) through the app's data store, replacing what this browser holds.

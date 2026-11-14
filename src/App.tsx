@@ -45,6 +45,8 @@ import {
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
 import { createInitialLeavePlans } from './data/initialLeavePlans';
+import { createInitialAttendance } from './data/initialAttendance';
+import { createInitialHolidays } from './data/initialHolidays';
 import { computePayroll, isActive } from './utils/payroll';
 import { rollupMonth } from './utils/attendance';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
@@ -740,13 +742,19 @@ export const App: React.FC<{
 
   // Export Monthly Payroll Advice to Excel
   const handleExportPayroll = () => {
+    // The register exported here must be the register the Payroll tab shows, so it
+    // starts from `payrollEmployees` - the same list the tab receives, where the
+    // current-month daily rollup has already replaced `presentDays`/`lopDays` for
+    // every employee with records - and NOT from `filteredEmployees`, whose legacy
+    // monthly numbers would price a half-day ledger as full attendance.
+    //
     // The payroll run excludes Resigned and Unknown staff, and this register is a
     // statement of money payable - so it must be filtered by the same `isActive` the
     // Payroll tab uses. It was not: an Unknown import still had a Net Salary Payable
     // written into the file, which is how an unresolved import becomes a real payment.
     // The roster export above is deliberately NOT filtered — it is the master list,
     // not a disbursement.
-    const payrollRun = filteredEmployees.filter(isActive);
+    const payrollRun = payrollEmployees.filter(isActive);
     const data = payrollRun.map(e => {
       const p = computePayroll(e);
 
@@ -783,18 +791,23 @@ export const App: React.FC<{
   const handleResetData = () => setIsResetRequested(true);
 
   const handleConfirmResetData = () => {
-    // ALL FOUR business datasets reset, not just the register. A reset that restored
-    // employees but kept a half-edited policy set or a threshold someone had pushed to
-    // 9 would not be the demo state the dialog promises, and the next person demoing
-    // the app inherits the leftovers.
+    // ALL SIX business datasets reset, not just the register. A reset that restored
+    // employees but kept a half-edited policy set, a threshold someone had pushed to
+    // 9, or an attendance ledger still carrying last week's corrections would not be
+    // the demo state the dialog promises, and the next person demoing the app
+    // inherits the leftovers. The ledger seed is the demo roster's current-month
+    // records (D11) and the calendar seed is the fixed 2026 national holidays (D9),
+    // exactly what the stores install on a first visit.
     setEmployees(INITIAL_EMPLOYEES);
     setPolicies(INITIAL_POLICIES);
     setLeavePlans(createInitialLeavePlans());
     setPlannerSettings({ ...DEFAULT_PLANNER_SETTINGS });
+    setAttendance(createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026)));
+    setHolidays(createInitialHolidays(2026));
     setIsResetRequested(false);
     setConfirmation({
       text:
-        'Demo data reset: the register is back to the 200 staff Master Dataset, and HR policies, leave plans and planner settings are back to their defaults.',
+        'Demo data reset: the register is back to the 200 staff Master Dataset, HR policies, leave plans and planner settings are back to their defaults, and the daily attendance ledger and company holiday calendar are back to their demo seed.',
     });
   };
 
@@ -1185,12 +1198,13 @@ export const App: React.FC<{
       {/*
         Asked last, and rendered last, so it stacks above the other modals. The message says
         what is actually lost, which the native prompt it replaced could not: this discards
-        every imported and hand-added record, not merely the current view.
+        every imported and hand-added record, and every attendance mark and holiday edit,
+        not merely the current view.
       */}
       <ConfirmDialog
         isOpen={isResetRequested}
         title="Reset application to the Master Demo state?"
-        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, and HR policies, leave plans and planner settings return to their defaults. This cannot be undone."
+        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, HR policies, leave plans and planner settings return to their defaults, and the daily attendance ledger and company holiday calendar are restored to their demo seed. This cannot be undone."
         confirmLabel="Reset demo data"
         onConfirm={handleConfirmResetData}
         onCancel={() => setIsResetRequested(false)}

@@ -14,7 +14,7 @@ This manual provides an exhaustive operational reference for HR administrators, 
 3. [Module Deep Dives](#3-module-deep-dives)
    - [3.1 Executive Workforce Overview](#31-executive-workforce-overview)
    - [3.2 Employee Master Directory](#32-employee-master-directory)
-   - [3.3 Time, Attendance & Leave Quotas](#33-time-attendance--leave-quotas)
+   - [3.3 Time & Attendance — Daily Ledger, Monthly Matrix & Holiday Calendar](#33-time--attendance--daily-ledger-monthly-matrix--holiday-calendar)
    - [3.4 Payroll & Compensation Engine](#34-payroll--compensation-engine)
    - [3.5 Performance & 9-Box Talent Matrix](#35-performance--9-box-talent-matrix)
    - [3.6 Talent Acquisition & Hiring Pipeline](#36-talent-acquisition--hiring-pipeline)
@@ -52,7 +52,7 @@ The OmniHR interface is divided into two primary zones:
 - **Navigation Tabs (12 Sections):**
   1. `Executive Overview` — C-suite KPI metrics & visual charts.
   2. `Employee Directory` — Master roster with multi-column filtering.
-  3. `Time & Attendance` — 26-day working cycle & leave ledger.
+  3. `Time & Attendance` — daily ledger, monthly matrix, holiday calendar & rollup.
   4. `Leave Planner` — Month coverage calendar of who is away.
   5. `Payroll & Compensation` — Disbursable net pay & payslip viewer.
   6. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
@@ -64,7 +64,7 @@ The OmniHR interface is divided into two primary zones:
   12. `User Guides & Manual` — In-app documentation and Excel handling guide.
 - **Quick Action Buttons:**
   - `Export Roster (Excel)`: Instant download of the current filtered employee roster.
-  - `Reset Demo State`: Resets all four business datasets - the 200-employee register, HR policies, leave plans and planner settings - back to the pristine demo data.
+  - `Reset Demo State`: Resets all six business datasets - the 200-employee register, HR policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar - back to the pristine demo data.
 
 ### 2.2 Global Top Header
 - **Dynamic Context Header:** Displays the title and subtitle of the currently active view.
@@ -97,7 +97,7 @@ Provides high-level decision support for Chief Human Resources Officers (CHRO) a
 - **KPI Summary Cards:**
   - **Total Headcount:** Real-time tally of active and probation staff.
   - **Monthly Payroll CTC:** Consolidated monthly gross remuneration in ₹ Crores, with average annual CTC.
-  - **Workforce Attendance Rate:** Real-time presence percentage based on the standard 26-day working cycle.
+  - **Workforce Attendance Rate:** Real-time presence percentage for the current month, derived from the daily attendance rollup (present ÷ working days, where working days exclude Sundays and holidays) when the month has daily records, and from the employee's stored `presentDays` against the 26-day cycle otherwise.
   - **Annualized Attrition Rate:** Turnover rate benchmarked against tech industry standards (1.4% vs 3.5% benchmark).
   - **Gender Diversity:** Proportion of female, male, and non-binary staff across the organization.
   - **Star Performers:** Count of employees with top-tier 5.0 appraisal ratings.
@@ -123,17 +123,17 @@ The core operational staff ledger:
 
 ---
 
-### 3.3 Time, Attendance & Leave Quotas
-Manages time tracking, leave balances, and wage deductions:
-- **Standard Working Cycle:** 26 business days per calendar month (excluding 4 Sundays/weekly offs).
-- **Leave Categorization:**
-  - **Casual Leave (CL):** 12 days annual quota (for personal emergencies).
-  - **Sick Leave (SL):** 12 days annual quota (for medical recovery).
-  - **Privilege/Earned Leave (EL):** 15 days annual quota (encashable at separation).
-- **Loss of Pay (LOP) Deduction:**
-  - When an employee exhausts paid leave and misses days, LOP is triggered.
-  - Formula: $\text{LOP Deduction} = \left(\frac{\text{Monthly Basic Salary}}{26}\right) \times \text{LOP Days}$
-- **Attendance Percentage:** $\text{Attendance \%} = \left(\frac{\text{Present Days}}{26}\right) \times 100$
+### 3.3 Time & Attendance — Daily Ledger, Monthly Matrix & Holiday Calendar
+Manages daily attendance, leave balances, and wage deductions. Attendance is a **daily record per employee and date** (stored in IndexedDB), not a single monthly number:
+
+- **Daily ledger:** one record per employee/date with a status — `P` Present, `A` Absent, `W` Work from home, `HD` Half-day — plus typed leave codes `CL`, `SL`, `EL`, `LOP`, `ML`, `PL`, `CO`, `O`. Sundays and holidays are **derived**, never stored: the matrix displays `WO` and `H` and the importer ignores those cells.
+- **Monthly matrix:** one row per employee, one column per day, for the selected month. Prev/today/next month navigation plus department, location and employee-search filters. Sunday and holiday columns are muted; approved leave plans appear as ghost cells until a record exists; clicking any cell opens the editor (status, leave type, AM/PM half-day, note, delete record).
+- **Day panel:** the selected date's employee status list, with a **Mark all present** action for the day.
+- **Summary tiles:** working days this month, and present / on leave / absent / WFH / unmarked today, plus holidays this month.
+- **Holiday calendar:** company-wide holidays, unique by date, seeded with the fixed 2026 national list (New Year Jan 1, Republic Day Jan 26, Independence Day Aug 15, Gandhi Jayanti Oct 2, Christmas Dec 25). Add, edit and delete from the holiday card; the calendar drives the matrix, the working-day counts and every rollup.
+- **Monthly rollup:** present = P + W + 0.5×HD (a half-day with a leave type counts 0.5 present + 0.5 leave; without one, 0.5 present + 0.5 unmarked); leave days by type; **LOP = absences + LOP leave**; working days = days in month − Sundays − holidays; Attendance % = present ÷ working days.
+- **Payroll & overview fallback:** the Payroll tab, payslips and overview tiles price `presentDays`/`lopDays` from the current month's daily rollup for every employee who has records that month. Employees or months **without** daily records keep the legacy monthly fields on the employee record, so nothing is lost when a month has not been marked.
+- **Leave quotas & LOP deduction (unchanged):** Casual Leave (CL): 12 days annual quota; Sick Leave (SL): 12 days; Privilege/Earned Leave (EL): 15 days (encashable at separation). Loss of Pay deduction: $\text{LOP Deduction} = \left(\frac{\text{Monthly Basic Salary}}{26}\right) \times \text{LOP Days}$. The Leave Planner remains the source of approved leave; the matrix shows it as ghost cells.
 
 ---
 
@@ -223,8 +223,9 @@ The central data interchange module, now rendered inside the **Admin** page (see
 - **Ingestion:** Drag-and-drop parsing of `.xlsx`, `.xls`, and `.csv` files.
 - **Live Preview:** Displays recognized column mappings, warnings, and table preview before committing.
 - **Export Master Roster:** Downloads the complete 200-employee directory with all 24 columns, including the canonical department ID and reporting line; the workbook can be re-imported without losing either.
-- **Export Payroll Register:** Downloads bank-ready payroll register with earnings and deductions.
+- **Export Payroll Register:** Downloads bank-ready payroll register with earnings and deductions. It is priced from the same register the Payroll tab shows, so current-month LOP reflects the daily attendance rollup.
 - **Download Standard Template:** Generates a pre-formatted template with sample rows.
+- **Attendance matrix (from the Attendance tab):** download `omnihr-attendance-YYYY-MM.xlsx` for any month and import it back after HR fills it in — see the [Excel Sheet Handling Guide](EXCEL_SHEET_HANDLING_GUIDE.md).
 
 ---
 
@@ -303,14 +304,14 @@ A single view of who is away, for HR input and for leadership coverage reviews:
 The former **Excel Data Hub** tab is now the **Admin** page (sidebar and header shortcuts point to **Admin**); the Excel Hub and its guide link are unchanged inside it:
 
 1. **Data Snapshot Card:**
-   - Record counts, the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
+   - Record counts for every business dataset - employees, policies, leave plans, attendance records and holidays - plus the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
 
 2. **Export Snapshot:**
-   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings) in one versioned JSON file.
+   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, daily attendance and holidays) in one versioned JSON file, snapshot format v2.
    - Snapshots are the backup: save each exported file to Google Drive, OneDrive or any shared drive.
 
 3. **Import Snapshot:**
-   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing.
+   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing. A v1 snapshot (made before daily attendance) imports with an empty attendance ledger and holiday calendar.
    - After a confirmed import, the console shows the data from the file.
    - **Imported copies are local:** a snapshot loaded into one browser does not propagate changes back to HR or to any other browser.
 
@@ -363,11 +364,11 @@ OmniHR implements the following Indian statutory regulations:
 ## 6. Offline Architecture & Data Privacy
 
 - **100% Client-Side Processing:** All data parsing, calculations, and Chart.js graphics execute strictly within your local browser runtime.
-- **IndexedDB Primary Store:** Business data — employees, policies, leave plans and planner settings — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `meta`).
+- **IndexedDB Primary Store:** Business data — employees, policies, leave plans, planner settings, the daily attendance ledger and the holiday calendar — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `attendance`, `holidays`, `meta`).
 - **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and the Admin page reports that they exist.
 - **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
-- **Snapshot Backups:** Export the full business-data JSON snapshot from **Admin** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation.
-- **Restoring Default State:** If you wish to restore the factory demo state at any time, click **Reset Demo State** in the sidebar. It resets all four business datasets: the register returns to the 200-employee corporate dataset, and HR policies, leave plans and planner settings return to their defaults.
+- **Snapshot Backups:** Export the full business-data JSON snapshot (format v2, attendance and holidays included) from **Admin** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar.
+- **Restoring Default State:** If you wish to restore the factory demo state at any time, click **Reset Demo State** in the sidebar. It resets all six business datasets: the register returns to the 200-employee corporate dataset, HR policies, leave plans and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed.
 
 ---
 

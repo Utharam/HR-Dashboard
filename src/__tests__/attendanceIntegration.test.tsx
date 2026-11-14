@@ -15,10 +15,12 @@ import { buildAttendanceWorkbook } from '../utils/attendanceExcel';
 import { monthKey, workingDateKeys } from '../utils/attendance';
 import { toDateKey } from '../utils/leavePlanner';
 import { computeAttendancePct } from '../utils/dates';
-import { computeLOP } from '../utils/payroll';
+import { computeLOP, computePayroll } from '../utils/payroll';
 import { formatINR } from '../utils/formatters';
 import { INITIAL_EMPLOYEES } from '../data/initialData';
 import { INITIAL_POLICIES } from '../data/initialPolicies';
+import { createInitialAttendance } from '../data/initialAttendance';
+import { createInitialHolidays } from '../data/initialHolidays';
 import type { AttendanceRecord, Employee, Holiday, LeavePlan } from '../types';
 
 // jsdom has no 2D canvas; the console's charts must be stubbed or their async
@@ -27,6 +29,18 @@ import type { AttendanceRecord, Employee, Holiday, LeavePlan } from '../types';
 vi.mock('react-chartjs-2', () => {
   const Stub = () => <div data-testid="chart-stub" />;
   return { Bar: Stub, Doughnut: Stub, Line: Stub, Pie: Stub, Radar: Stub };
+});
+
+// The payroll-register export ends in `XLSX.writeFile`, which in a browser turns
+// the workbook into a download. jsdom has no download surface, and the module
+// namespace cannot be spied on (its exports are not configurable), so the one
+// function the export calls is replaced for this whole file. Everything else
+// (`utils`, `write`, `read`) stays the real SheetJS, so a captured workbook
+// round-trips exactly like the file a bank would receive. Only the export test
+// touches it; no other test in this file reads `writeFile`.
+vi.mock('xlsx', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('xlsx')>();
+  return { ...actual, writeFile: vi.fn() };
 });
 
 /**
@@ -197,6 +211,14 @@ const mountConsole = async (overrides: Partial<DataSnapshot> = {}) => {
 };
 
 const dayNumber = (dateKey: string): number => Number(dateKey.slice(-2));
+
+/**
+ * The seed stamps `updatedAt` with the moment it was created, so two
+ * `createInitialAttendance` calls never compare equal field-by-field. Identity
+ * (`employee|date` + status) is what the ledger means; the timestamp is noise.
+ */
+const attendanceSignature = (rows: AttendanceRecord[]): string[] =>
+  rows.map((r) => `${r.id}:${r.status}`).sort();
 
 beforeEach(() => {
   localStorage.clear();
@@ -482,5 +504,145 @@ describe('Attendance integration — payroll and overview rollup', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Slip' }));
     const payslip = screen.getByRole('dialog', { name: new RegExp(EMPLOYEE_A.name) });
     expect(within(payslip).queryByText(/Loss of Pay/)).toBeNull();
+  });
+});
+
+describe('Attendance integration — payroll register export', () => {
+  it('the exported register prices LOP from the daily rollup, exactly like the Payroll tab', async () => {
+    // The same ledger the payslip test above pins at 2.5 LOP days: two full
+    // absences and one LOP half-day. The legacy `lopDays` on the record is 0, so a
+    // register that priced LOP from it would write 0 for a ledger that costs money.
+    const workingDays = workingDateKeys(CURRENT.year, CURRENT.monthIndex, []);
+    const records: AttendanceRecord[] = [
+      recordFor(CURRENT, EMPLOYEE_A.id, dayNumber(workingDays[0]), 'Absent'),
+      recordFor(CURRENT, EMPLOYEE_A.id, dayNumber(workingDays[1]), 'Absent'),
+      recordFor(CURRENT, EMPLOYEE_A.id, dayNumber(workingDays[2]), 'HalfDay', {
+        leaveType: 'LOP',
+        halfDay: 'AM',
+      }),
+    ];
+    // A Resigned colleague with a legacy LOP of 5: whatever their old monthly
+    // number was, they are not part of a statement of money payable.
+    const resigned: Employee = {
+      ...INITIAL_EMPLOYEES[0],
+      id: 'EMP-ATT-R',
+      name: 'Raj Settled',
+      status: 'Resigned',
+      lopDays: 5,
+    };
+    await mountConsole({ employees: [EMPLOYEE_A, resigned], attendance: records });
+
+    // `writeFile` is the export's last step, so capturing the workbook reads back
+    // the file a bank would receive without touching a real filesystem.
+    const writeFile = vi.mocked(XLSX.writeFile);
+    writeFile.mockClear();
+    const nav = screen.getByRole('navigation');
+    await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Download Payroll Sheet/i }),
+    );
+
+    expect(writeFile).toHaveBeenCalledTimes(1);
+    const [workbook] = writeFile.mock.calls[0] as [XLSX.WorkBook, string];
+    const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const readBack = XLSX.read(bytes, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+      readBack.Sheets['Payroll_Register'],
+    );
+
+    // One row: the same `isActive` run the Payroll tab shows. The Resigned
+    // colleague stays in the register they came from but not in this disbursement.
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    expect(row['Employee ID']).toBe(EMPLOYEE_A.id);
+
+    // Sanity for the assertions below: the expected figures only prove the fix if
+    // they differ from the legacy ones.
+    expect(EMPLOYEE_A.lopDays).toBe(0);
+    const priced = computePayroll({ ...EMPLOYEE_A, lopDays: 2.5 });
+    expect(priced.lossOfPay).toBe(computeLOP(EMPLOYEE_A.basicSalary, 2.5));
+    expect(priced.lossOfPay).toBeGreaterThan(0);
+
+    // The register carries the rollup's LOP pricing, not the legacy `lopDays: 0`:
+    // the same figure the payslip on the Payroll tab shows for this ledger.
+    expect(row['Loss of Pay (LOP)']).toBe(priced.lossOfPay);
+    expect(row['Total Deductions']).toBe(priced.totalDeductions);
+    expect(row['Net Salary Payable']).toBe(priced.netPayable);
+  });
+});
+
+describe('Attendance integration — demo reset', () => {
+  it('Reset Demo State also restores the attendance ledger and the holiday calendar', async () => {
+    // A ledger and calendar the reset must clear: a custom record and a holiday
+    // the demo seed does not contain.
+    const { saveHolidays } = await mountConsole({
+      attendance: [recordFor(CURRENT, EMPLOYEE_A.id, 10, 'Present')],
+      holidays: [holidayFor(CURRENT, 5, 'Founders Day')],
+    });
+
+    // The reset control lives in the sidebar footer, outside the <nav> element.
+    await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
+
+    // The question says what is lost, attendance and holidays included.
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent(/daily attendance ledger/i);
+    expect(dialog).toHaveTextContent(/company holiday calendar/i);
+    await userEvent.click(within(dialog).getByRole('button', { name: /Reset demo data/i }));
+
+    // The calendar is the fixed 2026 national seed, exactly what the stores
+    // install on a first visit.
+    const seedHolidays = createInitialHolidays(2026);
+    await waitForStore((snapshot) => {
+      expect(snapshot.holidays).toEqual(seedHolidays);
+    });
+
+    // The ledger is the demo roster's current-month seed. Custom records (the
+    // day-10 Present) and the Founders Day holiday are gone with them.
+    const expectedSeed = createInitialAttendance(INITIAL_EMPLOYEES, seedHolidays);
+    expect(expectedSeed.length).toBeGreaterThan(0);
+    await waitForStore((snapshot) => {
+      expect(attendanceSignature(snapshot.attendance)).toEqual(
+        attendanceSignature(expectedSeed),
+      );
+      // Every seeded record is dated in the current month: the demo ledger is a
+      // month, not a history.
+      const prefix = `${monthKey(CURRENT.year, CURRENT.monthIndex)}-`;
+      expect(snapshot.attendance.every((r) => r.date.startsWith(prefix))).toBe(true);
+    });
+
+    // The confirmation says the ledger and the calendar came back too.
+    const confirmation = await screen.findByRole('status');
+    expect(confirmation).toHaveTextContent(/attendance ledger/i);
+    expect(confirmation).toHaveTextContent(/holiday calendar/i);
+
+    // The store's LAST holiday write carried the seed, superseding the mount-time
+    // write of the custom calendar.
+    await waitFor(() => {
+      expect(saveHolidays).toHaveBeenLastCalledWith(seedHolidays);
+    });
+  });
+
+  it('asks before resetting, and keeps the ledger and calendar until the answer', async () => {
+    const seed = recordFor(CURRENT, EMPLOYEE_A.id, 10, 'Present');
+    const holiday = holidayFor(CURRENT, 5, 'Founders Day');
+    await mountConsole({ attendance: [seed], holidays: [holiday] });
+
+    // The reset control lives in the sidebar footer, outside the <nav> element.
+    await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
+
+    // Asked, not answered: the datasets are still exactly what App started with.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await waitForStore((snapshot) => {
+      expect(snapshot.attendance).toEqual([seed]);
+      expect(snapshot.holidays).toEqual([holiday]);
+    });
+
+    // Escape is a refusal: nothing resets.
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitForStore((snapshot) => {
+      expect(snapshot.attendance).toEqual([seed]);
+      expect(snapshot.holidays).toEqual([holiday]);
+    });
   });
 });

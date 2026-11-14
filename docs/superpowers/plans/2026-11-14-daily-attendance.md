@@ -214,10 +214,10 @@ interface AttendanceSectionProps {
 
 **Files:** README, `docs/GENERAL_APP_GUIDE.md`, `docs/EXCEL_SHEET_HANDLING_GUIDE.md`, plan/spec notes.
 
-- [ ] Document the monthly matrix template, import/replace behavior, holiday calendar, rollup and payroll fallback.
+- [x] Document the monthly matrix template, import/replace behavior, holiday calendar, rollup and payroll fallback.
 - [ ] Visual pass at 1440/1024/390 light/dark: matrix, cell editor, day panel, holiday modal, import preview.
-- [ ] Full gate and final whole-branch review; fix Critical/Important findings.
-- [ ] Commit docs.
+- [ ] Full gate and final whole-branch review; fix Critical/Important findings. *(Full gate run by Task 5's implementer — test/lint/build all green; the whole-branch review remains for the controller.)*
+- [x] Commit docs.
 
 ---
 

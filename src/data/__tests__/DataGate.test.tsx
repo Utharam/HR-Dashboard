@@ -15,6 +15,8 @@ import type { LeavePlan } from '../../types'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
+import { createInitialAttendance } from '../initialAttendance'
+import { createInitialHolidays } from '../initialHolidays'
 import { renderApp } from '../../test/renderApp'
 
 // jsdom has no 2D canvas; the console's charts must be stubbed or their async
@@ -322,11 +324,21 @@ describe('App through the data seam', () => {
     expect(store.savePolicies).toHaveBeenCalledTimes(2)
   })
 
-  it('Reset Demo State restores all four datasets in the store, not just the register', async () => {
+  it('Reset Demo State restores every business dataset in the store, not just the register', async () => {
     const store = new MemoryStore({
       employees: [CUSTOM_EMPLOYEE],
       policies: [CUSTOM_POLICY],
       leavePlans: [CUSTOM_PLAN],
+      // Custom ledger and calendar rows a reset must not leave behind either.
+      attendance: [{
+        id: `${CUSTOM_EMPLOYEE.id}|2026-11-03`,
+        employeeId: CUSTOM_EMPLOYEE.id,
+        date: '2026-11-03',
+        status: 'Absent',
+        source: 'manual',
+        updatedAt: '2026-11-03T09:00:00.000Z',
+      }],
+      holidays: [{ id: 'holiday-2026-11-05', date: '2026-11-05', name: 'Custom Holiday' }],
       settings: { maxConcurrentLeave: 8 },
     })
 
@@ -334,6 +346,15 @@ describe('App through the data seam', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /reset demo state/i }))
     await userEvent.click(await screen.findByRole('button', { name: /reset demo data/i }))
+
+    // The attendance seed is recreated for the reset moment, so it carries a fresh
+    // `updatedAt`; identity (`employee|date` + status) is what is compared.
+    const attendanceSignature = (rows: DataSnapshot['attendance']): string[] =>
+      rows.map((record) => `${record.id}:${record.status}`).sort()
+    const expectedSeed = createInitialAttendance(
+      INITIAL_EMPLOYEES,
+      createInitialHolidays(2026),
+    )
 
     await waitFor(async () => {
       const { snapshot } = await store.load()
@@ -343,6 +364,10 @@ describe('App through the data seam', () => {
         leavePlanSignature(createInitialLeavePlans()),
       )
       expect(snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
+      expect(snapshot.holidays).toEqual(createInitialHolidays(2026))
+      expect(attendanceSignature(snapshot.attendance)).toEqual(
+        attendanceSignature(expectedSeed),
+      )
     })
   })
 
