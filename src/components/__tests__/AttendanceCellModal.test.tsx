@@ -245,6 +245,49 @@ describe('AttendanceCellModal', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('starts from an approved full-day plan instead of Present', async () => {
+    const { onSave } = renderModal({ ghost: { type: 'SL', halfDay: null } });
+
+    expect(dialog()).toHaveTextContent(/Approved leave plan on this day: SL/);
+    expect(within(dialog()).getByLabelText('Status')).toHaveValue('Leave');
+    expect(within(dialog()).getByLabelText('Leave type')).toHaveValue('SL');
+
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save attendance' }));
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      status: 'Leave',
+      leaveType: 'SL',
+      source: 'manual',
+    });
+  });
+
+  it('starts from an approved half-day plan with the opposite half worked', async () => {
+    const { onSave } = renderModal({ ghost: { type: 'LOP', halfDay: 'AM' } });
+
+    // Plan semantics: `AM only` means the MORNING is off, so the record works
+    // the afternoon and carries the plan's type as its leave half.
+    expect(dialog()).toHaveTextContent(/Approved leave plan on this day: LOP · AM off/);
+    expect(within(dialog()).getByLabelText('Status')).toHaveValue('HalfDay');
+    expect(within(dialog()).getByLabelText('Part of the day')).toHaveValue('PM');
+    expect(within(dialog()).getByLabelText('Leave for the other half')).toHaveValue('LOP');
+
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save attendance' }));
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      status: 'HalfDay',
+      halfDay: 'PM',
+      leaveType: 'LOP',
+    });
+  });
+
+  it('prefers the existing record over the ghost default', () => {
+    renderModal({
+      ghost: { type: 'SL', halfDay: null },
+      existing: record({ status: 'Present' }),
+    });
+
+    expect(within(dialog()).getByLabelText('Status')).toHaveValue('Present');
+    expect(dialog()).toHaveTextContent(/recorded via/);
+  });
+
   it('does not save when cancelled', async () => {
     const { onClose, onSave } = renderModal();
 

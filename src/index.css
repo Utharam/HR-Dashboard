@@ -2769,6 +2769,11 @@ button.attendance-cell:focus-visible {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* An approved plan still awaiting its record: same data, visibly not a mark. */
+.attendance-daylist__code--planned {
+  font-style: italic;
+  color: var(--text-dim);
+}
 
 .attendance-hint {
   font-size: var(--fs-xs);
@@ -2854,6 +2859,14 @@ button.attendance-cell:focus-visible {
   font-size: var(--fs-sm);
   color: var(--warning-text);
 }
+/* Parser-reported gaps (missing roster rows / missing day columns) are a level
+   above the yellow "skipped rows" note: they make Replace unsafe. */
+.attendance-preview__danger {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+}
 .attendance-preview__issues {
   border: 1px solid var(--warning-edge);
   border-radius: var(--r-md);
@@ -2874,4 +2887,21 @@ button.attendance-cell:focus-visible {
   gap: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--hairline);
+}
+
+/* Monthly register --------------------------------------------------------- */
+.attendance-register {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* Row headers: the generic `.omni-table th` style is a column-header style
+   (uppercase caps); a per-employee row header reads like a name, not a label. */
+.attendance-register__name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-main);
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
 }

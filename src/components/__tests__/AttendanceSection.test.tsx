@@ -3,8 +3,10 @@ import type { ComponentProps } from 'react';
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as XLSX from 'xlsx';
-import { AttendanceSection } from '../AttendanceSection';
+import { AttendanceSection, importBlockers } from '../AttendanceSection';
+import type { AttendanceImportGaps } from '../AttendanceSection';
 import { buildAttendanceWorkbook } from '../../utils/attendanceExcel';
+import type { ParseAttendanceResult } from '../../utils/attendanceExcel';
 import { monthDateKeys, monthKey, workingDateKeys } from '../../utils/attendance';
 import { toDateKey } from '../../utils/leavePlanner';
 import type {
@@ -91,7 +93,30 @@ const recordFor = (
   };
 };
 
+const planFor = (
+  month: RenderedMonth,
+  employeeId: string,
+  startDay: number,
+  endDay: number,
+  type: LeavePlan['type'],
+  halfDay: LeavePlan['halfDay'] = null,
+): LeavePlan => ({
+  id: `plan-${employeeId}-${startDay}`,
+  employeeId,
+  startDate: dayKey(month, startDay),
+  endDate: dayKey(month, endDay),
+  type,
+  status: 'Approved',
+  halfDay,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
+
 type SectionProps = ComponentProps<typeof AttendanceSection>;
+
+/** A working day of the rendered month, so new tests never depend on the calendar. */
+const workingDay = (month: RenderedMonth, index = 0): number =>
+  Number(workingDateKeys(month.year, month.monthIndex, [])[index].slice(-2));
 
 const renderSection = (props: Partial<SectionProps> = {}) => {
   const base: SectionProps = {
@@ -123,15 +148,22 @@ const dayHead = (month: RenderedMonth, day: number) =>
     name: new RegExp(`${MONTH_NAMES[month.monthIndex]} ${day}, ${month.year}.*Open the day editor`),
   });
 
-/** The matrix cell button for one employee's day, matched by accessible name. */
+/** The matrix cell button for one employee's day, matched by accessible name.
+ * Row lookups are scoped to the matrix table: the monthly register has a row
+ * per employee too. */
 const cellButton = (month: RenderedMonth, name: string, day: number) => {
-  const row = screen.getByRole('row', { name: new RegExp(name) });
+  const row = within(
+    screen.getByRole('table', { name: new RegExp(`Attendance matrix for ${monthLabel(month)}`, 'i') }),
+  ).getByRole('row', { name: new RegExp(name) });
   return within(row).getByRole('button', {
     name: new RegExp(`${MONTH_NAMES[month.monthIndex]} ${day}, ${month.year}`),
   });
 };
 
-const rowFor = (name: string) => screen.getByRole('row', { name: new RegExp(name) });
+const rowFor = (name: string) =>
+  within(
+    screen.getByRole('table', { name: /Attendance matrix for/i }),
+  ).getByRole('row', { name: new RegExp(name) });
 
 /** The tile whose `.kpi-label` reads `label`; scoped so the legend cannot collide. */
 const tile = (label: string): HTMLElement =>
@@ -237,6 +269,47 @@ describe('AttendanceSection — month, matrix and tiles', () => {
     expect(within(tile('Unmarked')).getByText('2')).toBeInTheDocument();
   });
 
+  it('counts approved plans in On leave and keeps them out of Unmarked', async () => {
+    const { month, rerenderWith } = renderSection();
+    const day = workingDay(month, 1);
+    rerenderWith({
+      attendance: [recordFor(month, 'EMP-A', day, 'Present')],
+      leavePlans: [planFor(month, 'EMP-B', day, day, 'SL')],
+    });
+
+    await userEvent.click(dayHead(month, day));
+
+    // The planned employee is the day's leave state even without a record,
+    // and the planner keeps them out of the unmarked bucket.
+    expect(within(tile('Present')).getByText('1')).toBeInTheDocument();
+    expect(within(tile('On leave')).getByText('1')).toBeInTheDocument();
+    expect(within(tile('Unmarked')).getByText('2')).toBeInTheDocument();
+    expect(within(tile('On leave')).getByText(/records \+ approved plans/)).toBeInTheDocument();
+  });
+
+  it('summarises an off day as the off day, not as the records on it', async () => {
+    const { month, rerenderWith } = renderSection();
+    const holidays: Holiday[] = [
+      { id: `holiday-${dayKey(month, 5)}`, date: dayKey(month, 5), name: 'Founders Day' },
+    ];
+    rerenderWith({
+      holidays,
+      attendance: [recordFor(month, 'EMP-A', 5, 'Present')],
+    });
+
+    await userEvent.click(dayHead(month, 5));
+
+    // M1: a P record on a holiday counts nothing — the tiles show the derived
+    // off-day state and say the marks are kept but not counted.
+    expect(within(tile('Present')).getByText('0')).toBeInTheDocument();
+    expect(within(tile('On leave')).getByText('0')).toBeInTheDocument();
+    expect(within(tile('Absent')).getByText('0')).toBeInTheDocument();
+    expect(within(tile('Unmarked')).getByText('0')).toBeInTheDocument();
+    expect(
+      within(tile('Present')).getByText(/holiday: Founders Day — marks kept, not counted/),
+    ).toBeInTheDocument();
+  });
+
   it('shows no daily numbers once the viewed month has no selected day', async () => {
     const { month } = renderSection();
     const next =
@@ -300,7 +373,7 @@ describe('AttendanceSection — month, matrix and tiles', () => {
 });
 
 describe('AttendanceSection — matrix cells', () => {
-  it('renders Sundays and holidays as derived, non-editable cells', () => {
+  it('renders Sundays and holidays as derived, uneditable cells while unmarked', () => {
     const { month, rerenderWith } = renderSection();
     const holidays: Holiday[] = [
       { id: `holiday-${dayKey(month, 5)}`, date: dayKey(month, 5), name: 'Founders Day' },
@@ -383,6 +456,49 @@ describe('AttendanceSection — matrix cells', () => {
     expect(rowFor('Ravi Kumar').querySelector('.attendance-cell--ghost')).toBeNull();
     expect(cellButton(month, 'Ravi Kumar', 12)).toHaveTextContent('SL');
   });
+
+  it('keeps the holiday the primary cell over a record, and keeps the record editable', async () => {
+    const { month, rerenderWith } = renderSection();
+    const holidays: Holiday[] = [
+      { id: `holiday-${dayKey(month, 5)}`, date: dayKey(month, 5), name: 'Founders Day' },
+    ];
+    rerenderWith({
+      holidays,
+      attendance: [recordFor(month, 'EMP-A', 5, 'Present')],
+    });
+
+    // The cell SAYS holiday, not P: the calendar fact wins over the record,
+    // because the rollup ignores marks on non-working days.
+    const cell = cellButton(month, 'Ravi Kumar', 5);
+    expect(cell).toHaveTextContent('H');
+    expect(cell).toHaveClass('attendance-cell--holiday');
+    expect(cell.getAttribute('title')).toBe(
+      'Holiday — Founders Day — a record (P) is kept here but not counted',
+    );
+    expect(cell).toHaveAccessibleName(/: H — a record \(P\) is kept but ignored/);
+
+    // Still editable: the editor opens with the record behind the cell.
+    await userEvent.click(cell);
+    expect(within(screen.getByRole('dialog')).getByLabelText('Status')).toHaveValue('Present');
+  });
+
+  it('keeps a Sunday the primary cell over a record, with the record noted', () => {
+    const { month, rerenderWith } = renderSection();
+    const firstSunday = monthDateKeys(month.year, month.monthIndex)
+      .find((key) => new Date(`${key}T00:00:00`).getDay() === 0);
+    expect(firstSunday).toBeDefined();
+    const sundayDay = Number(firstSunday!.slice(-2));
+    rerenderWith({
+      attendance: [recordFor(month, 'EMP-A', sundayDay, 'Absent')],
+    });
+
+    const cell = cellButton(month, 'Ravi Kumar', sundayDay);
+    expect(cell).toHaveTextContent('WO');
+    expect(cell).toHaveClass('attendance-cell--off');
+    expect(cell.getAttribute('title')).toBe(
+      'Weekly off — a record (A) is kept here but not counted',
+    );
+  });
 });
 
 describe('AttendanceSection — cell editor', () => {
@@ -441,8 +557,50 @@ describe('AttendanceSection — cell editor', () => {
     expect(onDeleteRecord).not.toHaveBeenCalled();
 
     await userEvent.click(within(confirm).getByRole('button', { name: 'Delete record' }));
-    expect(onDeleteRecord).toHaveBeenCalledWith(saved.id);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('starts a ghost click from the approved full-day plan', async () => {
+    const onSaveRecord = vi.fn();
+    const { month, rerenderWith } = renderSection({ onSaveRecord });
+    rerenderWith({ leavePlans: [planFor(month, 'EMP-A', 12, 12, 'SL')] });
+
+    // The ghost cell opens the ordinary editor, which starts from the plan.
+    await userEvent.click(cellButton(month, 'Ravi Kumar', 12));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Status')).toHaveValue('Leave');
+    expect(within(dialog).getByLabelText('Leave type')).toHaveValue('SL');
+    expect(dialog).toHaveTextContent(/Approved leave plan on this day: SL/);
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save attendance' }));
+    expect(onSaveRecord.mock.calls[0][0]).toMatchObject({
+      status: 'Leave',
+      leaveType: 'SL',
+      source: 'manual',
+    });
+  });
+
+  it('starts a half-day ghost click from the plan, with the opposite half worked', async () => {
+    const onSaveRecord = vi.fn();
+    const { month, rerenderWith } = renderSection({ onSaveRecord });
+    // Plan: LOP, morning off. The record works the afternoon.
+    rerenderWith({ leavePlans: [planFor(month, 'EMP-A', 12, 12, 'LOP', 'AM')] });
+
+    const ghost = rowFor('Ravi Kumar').querySelector('.attendance-cell--ghost');
+    expect(ghost).toHaveTextContent('HD-LOP');
+    await userEvent.click(ghost as HTMLElement);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Status')).toHaveValue('HalfDay');
+    expect(within(dialog).getByLabelText('Part of the day')).toHaveValue('PM');
+    expect(within(dialog).getByLabelText('Leave for the other half')).toHaveValue('LOP');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save attendance' }));
+    expect(onSaveRecord.mock.calls[0][0]).toMatchObject({
+      status: 'HalfDay',
+      halfDay: 'PM',
+      leaveType: 'LOP',
+    });
   });
 });
 
@@ -489,13 +647,40 @@ describe('AttendanceSection — day editor', () => {
     expect(within(panel).getByText(/no bulk marking is offered/)).toBeInTheDocument();
   });
 
+  it('skips approved leave plans in the bulk mark and shows them in the day list', async () => {
+    const onSaveRecord = vi.fn();
+    const { month, rerenderWith } = renderSection({ onSaveRecord });
+    const day = workingDay(month, 1);
+    rerenderWith({ leavePlans: [planFor(month, 'EMP-B', day, day, 'SL')] });
+
+    await userEvent.click(dayHead(month, day));
+    const panel = screen.getByRole('complementary', { name: 'Day editor' });
+
+    // The day list reports the plan, visibly not a mark.
+    const planned = within(panel).getByText('SL (planned)');
+    expect(planned.getAttribute('title')).toMatch(/Approved leave plan/);
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Mark all present' }));
+
+    // The planned employee is never overwritten by the bulk mark; everyone
+    // else without a record is.
+    const targets = onSaveRecord.mock.calls.map((call) => call[0] as AttendanceRecord);
+    expect(targets.map((record) => record.employeeId).sort()).toEqual([
+      'EMP-A', 'EMP-C', 'EMP-D',
+    ]);
+    expect(within(panel).getByText(/approved leave plan.*skipped by the bulk mark/s)).toBeInTheDocument();
+  });
+
   it('opens the cell editor from the day editor list', async () => {
     const { month } = renderSection();
 
     await userEvent.click(dayHead(month, 10));
     const panel = screen.getByRole('complementary', { name: 'Day editor' });
+    // M5: the Edit buttons name the employee (and the day), not just "Edit".
     await userEvent.click(
-      within(within(panel).getAllByRole('listitem')[1]).getByRole('button', { name: 'Edit' }),
+      within(within(panel).getAllByRole('listitem')[1]).getByRole('button', {
+        name: /Edit attendance for Asha Menon/,
+      }),
     );
 
     const dialog = screen.getByRole('dialog');
@@ -517,7 +702,7 @@ describe('AttendanceSection — holiday card', () => {
     const card = screen.getByText('Holidays', { selector: '.omni-card-title' }).closest('.omni-card') as HTMLElement;
     expect(within(card).getByText('Founders Day')).toBeInTheDocument();
 
-    await userEvent.click(within(card).getByRole('button', { name: 'Delete' }));
+    await userEvent.click(within(card).getByRole('button', { name: 'Delete Founders Day' }));
     const confirm = screen.getByRole('dialog', { name: /Delete this holiday/ });
     expect(confirm).toHaveTextContent(/Founders Day/);
     expect(onDeleteHoliday).not.toHaveBeenCalled();
@@ -556,7 +741,7 @@ describe('AttendanceSection — holiday card', () => {
     };
     rerenderWith({ holidays: [holiday] });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Founders Day' }));
     const dialog = screen.getByRole('dialog', { name: /Edit holiday/ });
     expect(within(dialog).getByLabelText('Date')).toHaveValue(holiday.date);
     await userEvent.clear(within(dialog).getByLabelText('Name'));
@@ -698,6 +883,8 @@ describe('AttendanceSection — import', () => {
       ['EMP-A', 'Ravi', 'Eng', ...cellsFor()],
       ['EMP-GHOST', 'Ghost', 'Eng', ...cellsFor()],
       ['EMP-B', 'Asha', 'Eng', ...cellsFor(badDay, 'X')],
+      ['EMP-C', 'Priya', 'Eng', ...cellsFor()],
+      ['EMP-D', 'Vikram', 'Eng', ...cellsFor()],
     ];
     const sheet = XLSX.utils.aoa_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
@@ -709,7 +896,7 @@ describe('AttendanceSection — import', () => {
     const preview = screen.getByRole('region', { name: 'Import preview' });
     expect(within(preview).getByText(/Unknown employee IDs: EMP-GHOST/)).toBeInTheDocument();
     expect(within(preview).getByText(/Unknown attendance code "X"/)).toBeInTheDocument();
-    expect(previewCount(preview, 'Employees matched')).toBe('2');
+    expect(previewCount(preview, 'Employees matched')).toBe('4');
     expect(previewCount(preview, 'Issues')).toBe('2');
 
     await userEvent.click(
@@ -717,8 +904,66 @@ describe('AttendanceSection — import', () => {
     );
     expect(onReplaceMonth).toHaveBeenCalledTimes(1);
     const [, records] = onReplaceMonth.mock.calls[0] as [string, AttendanceRecord[]];
-    // Only rows that matched an employee and carried a valid code became records.
-    expect(records.every((record) => record.employeeId === 'EMP-A' || record.employeeId === 'EMP-B')).toBe(true);
+    // The unknown row never became a record; every roster row that matched did.
+    const employees = new Set(records.map((record) => record.employeeId));
+    expect(employees.has('EMP-GHOST')).toBe(false);
+    expect(employees).toEqual(new Set(['EMP-A', 'EMP-B', 'EMP-C', 'EMP-D']));
+  });
+
+  it('disables Replace when the sheet omits part of the roster', async () => {
+    const onReplaceMonth = vi.fn();
+    const { month } = renderSection({ onReplaceMonth });
+
+    // Only two of the four roster employees appear in the file: replacing would
+    // wipe the month for the two it left out.
+    const workbook = buildAttendanceWorkbook({
+      employees: [EMPLOYEES[0], EMPLOYEES[1]],
+      holidays: [],
+      leavePlans: [],
+      year: month.year,
+      monthIndex: month.monthIndex,
+      prefillPresent: true,
+    });
+    await chooseFile(
+      new File([XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })], 'partial.xlsx'),
+    );
+
+    const preview = screen.getByRole('region', { name: 'Import preview' });
+    expect(previewCount(preview, 'Employees matched')).toBe('2');
+    const replace = within(preview).getByRole('button', { name: `Replace ${monthLabel(month)}` });
+    expect(replace).toBeDisabled();
+    expect(within(preview).getByRole('alert')).toHaveTextContent(/Only 2 of 4 roster employees matched/);
+
+    await userEvent.click(replace);
+    expect(onReplaceMonth).not.toHaveBeenCalled();
+  });
+
+  it('disables Replace when the file contains no attendance codes at all', async () => {
+    const onReplaceMonth = vi.fn();
+    const { month } = renderSection({ onReplaceMonth });
+
+    // The full roster, but every working day left blank: a replace would only
+    // erase what the ledger already holds.
+    const workbook = buildAttendanceWorkbook({
+      employees: EMPLOYEES,
+      holidays: [],
+      leavePlans: [],
+      year: month.year,
+      monthIndex: month.monthIndex,
+      prefillPresent: false,
+    });
+    await chooseFile(
+      new File([XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })], 'blank.xlsx'),
+    );
+
+    const preview = screen.getByRole('region', { name: 'Import preview' });
+    expect(previewCount(preview, 'Records to import')).toBe('0');
+    const replace = within(preview).getByRole('button', { name: `Replace ${monthLabel(month)}` });
+    expect(replace).toBeDisabled();
+    expect(within(preview).getByRole('alert')).toHaveTextContent(/No attendance codes were parsed/);
+
+    await userEvent.click(replace);
+    expect(onReplaceMonth).not.toHaveBeenCalled();
   });
 
   it('refuses a file that is not an attendance matrix without any callback', async () => {
@@ -730,5 +975,144 @@ describe('AttendanceSection — import', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/not a monthly attendance matrix/i);
     expect(onReplaceMonth).not.toHaveBeenCalled();
     expect(screen.queryByRole('region', { name: 'Import preview' })).toBeNull();
+  });
+});
+
+describe('AttendanceSection — monthly register', () => {
+  const registerTable = () =>
+    screen.getByRole('table', { name: /Monthly attendance register for/i });
+  const rowCells = (table: HTMLElement, name: string): HTMLElement[] => {
+    const row = within(table).getByRole('row', { name: new RegExp(name) });
+    return within(row).getAllByRole('cell');
+  };
+
+  it('follows the selected month, not the current one', async () => {
+    const { month, rerenderWith } = renderSection();
+    const other =
+      month.monthIndex === 11
+        ? { year: month.year + 1, monthIndex: 0 }
+        : { year: month.year, monthIndex: month.monthIndex + 1 };
+    const otherWorkingDays = workingDateKeys(other.year, other.monthIndex, []).length;
+
+    // Two presents this month for A; one present and one absent NEXT month.
+    rerenderWith({
+      attendance: [
+        recordFor(month, 'EMP-A', workingDay(month, 0), 'Present'),
+        recordFor(month, 'EMP-A', workingDay(month, 1), 'Present'),
+        recordFor(other, 'EMP-A', workingDay(other, 0), 'Present'),
+        recordFor(other, 'EMP-A', workingDay(other, 1), 'Absent'),
+      ],
+    });
+
+    // The on-screen register describes the month on screen.
+    let cells = rowCells(registerTable(), 'Ravi Kumar');
+    expect(cells[0].textContent).toBe('2');
+    expect(cells[2].textContent).toBe('0');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next month' }));
+
+    const nextTable = screen.getByRole('table', {
+      name: new RegExp(`Monthly attendance register for ${monthLabel(other)}`, 'i'),
+    });
+    cells = rowCells(nextTable, 'Ravi Kumar');
+    // Present 1, leave —, LOP 1 (the absent), this month's working days, and a
+    // rate against them — the previous month's numbers are gone.
+    expect(cells[0].textContent).toBe('1');
+    expect(cells[1].textContent).toBe('—');
+    expect(cells[2].textContent).toBe('1');
+    expect(cells[3].textContent).toBe(String(otherWorkingDays));
+    expect(cells[4].textContent).toBe(`${(1 / otherWorkingDays * 100).toFixed(1)}%`);
+  });
+
+  it('formats leave by type and counts half-days in fractions', () => {
+    const { month, rerenderWith } = renderSection();
+    const workingDays = workingDateKeys(month.year, month.monthIndex, []).length;
+    rerenderWith({
+      attendance: [
+        recordFor(month, 'EMP-A', workingDay(month, 0), 'Leave', { leaveType: 'CL' }),
+        recordFor(month, 'EMP-A', workingDay(month, 1), 'Leave', { leaveType: 'SL' }),
+        recordFor(month, 'EMP-A', workingDay(month, 2), 'HalfDay', { leaveType: 'LOP' }),
+      ],
+    });
+
+    const cells = rowCells(registerTable(), 'Ravi Kumar');
+    expect(cells[0].textContent).toBe('0.5');
+    expect(cells[1].textContent).toBe('CL 1 · SL 1 · LOP 0.5');
+    expect(cells[2].textContent).toBe('0.5');
+    expect(cells[4].textContent).toBe(`${(0.5 / workingDays * 100).toFixed(1)}%`);
+  });
+
+  it('shows no rate for a month with nothing counted on working days', () => {
+    const { month, rerenderWith } = renderSection();
+    // The only record sits on a Sunday: it is kept but never counted, so the
+    // register reports no data rather than a 0% month.
+    const firstSunday = monthDateKeys(month.year, month.monthIndex)
+      .find((key) => new Date(`${key}T00:00:00`).getDay() === 0);
+    rerenderWith({
+      attendance: [recordFor(month, 'EMP-A', Number(firstSunday!.slice(-2)), 'Present')],
+    });
+
+    const cells = rowCells(registerTable(), 'Ravi Kumar');
+    expect(cells[3].textContent).toBe(
+      String(workingDateKeys(month.year, month.monthIndex, []).length),
+    );
+    expect(cells[4].textContent).toBe('—');
+  });
+});
+
+/*
+ * The parser reports its gaps from Agent A's fix wave; these pin the preview's
+ * replace-gating decision itself, including the gap fields the running parser
+ * does not fill yet (they read as "no gap known" until it does).
+ */
+describe('importBlockers — preview replace gating', () => {
+  type GapPreview = Extract<ParseAttendanceResult, { ok: true }> & AttendanceImportGaps;
+
+  const gapPreview = (overrides: Partial<GapPreview> = {}): GapPreview => ({
+    ok: true,
+    monthKey: '2026-11',
+    records: [recordFor({ year: 2026, monthIndex: 10 }, 'EMP-A', 3, 'Present')],
+    issues: [],
+    matchedEmployees: EMPLOYEES.length,
+    unknownEmployeeIds: [],
+    ...overrides,
+  });
+
+  it('allows Replace for a complete preview', () => {
+    expect(importBlockers(gapPreview(), EMPLOYEES.length)).toEqual([]);
+  });
+
+  it('blocks Replace when nothing was parsed', () => {
+    const reasons = importBlockers(gapPreview({ records: [] }), EMPLOYEES.length);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/No attendance codes were parsed/);
+  });
+
+  it('blocks Replace when the sheet omits roster employees', () => {
+    const reasons = importBlockers(gapPreview({ matchedEmployees: 2 }), EMPLOYEES.length);
+    expect(reasons.join(' ')).toMatch(/Only 2 of 4 roster employees matched/);
+  });
+
+  it('names the missing day columns as a blocker', () => {
+    const reasons = importBlockers(
+      gapPreview({ missingDayNumbers: [2, 7] }),
+      EMPLOYEES.length,
+    );
+    expect(reasons.join(' ')).toMatch(/Day columns missing from the header: 2, 7\./);
+  });
+
+  it('reports several blockers together', () => {
+    const reasons = importBlockers(
+      gapPreview({ records: [], matchedEmployees: 0, missingDayNumbers: [3] }),
+      EMPLOYEES.length,
+    );
+    expect(reasons).toHaveLength(3);
+  });
+
+  it('tolerates a parser that does not report the gap fields yet', () => {
+    const legacy = gapPreview() as unknown as Record<string, unknown>;
+    delete legacy['missingEmployeeIds'];
+    delete legacy['missingDayNumbers'];
+    expect(importBlockers(legacy as unknown as GapPreview, EMPLOYEES.length)).toEqual([]);
   });
 });

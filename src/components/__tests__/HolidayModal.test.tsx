@@ -132,6 +132,49 @@ describe('HolidayModal', () => {
     });
   });
 
+  it('generates an unused id when a re-dated holiday already holds the date key', async () => {
+    // The Republic Day row was EDITED onto a new date and kept its old id
+    // (`holiday-2026-01-26`). Adding a NEW holiday back on 2026-01-26 must not
+    // reuse that id: the parent's save removes by id, so a colliding id would
+    // delete the edited holiday instead of adding the new row.
+    const props = renderModal({
+      holidays: [
+        { id: 'holiday-2026-01-26', date: '2026-10-05', name: 'Republic Day (moved)' },
+      ],
+    });
+
+    fireEvent.change(within(dialog()).getByLabelText('Date'), {
+      target: { value: '2026-01-26' },
+    });
+    await userEvent.type(within(dialog()).getByLabelText('Name'), 'Diwali Break');
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save holiday' }));
+
+    expect(props.onSave).toHaveBeenCalledWith({
+      id: 'holiday-2026-01-26-2',
+      date: '2026-01-26',
+      name: 'Diwali Break',
+    });
+  });
+
+  it('walks the id suffix until one is unused', async () => {
+    const props = renderModal({
+      holidays: [
+        { id: 'holiday-2026-01-26', date: '2026-10-05', name: 'Republic Day (moved)' },
+        { id: 'holiday-2026-01-26-2', date: '2026-10-06', name: 'Another (moved)' },
+      ],
+    });
+
+    fireEvent.change(within(dialog()).getByLabelText('Date'), {
+      target: { value: '2026-01-26' },
+    });
+    await userEvent.type(within(dialog()).getByLabelText('Name'), 'Third One');
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save holiday' }));
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'holiday-2026-01-26-3', date: '2026-01-26' }),
+    );
+  });
+
   it('refuses re-dating an edit onto another holiday', async () => {
     const props = renderModal({
       holidayToEdit: EXISTING_HOLIDAYS[0],

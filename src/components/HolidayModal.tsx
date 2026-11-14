@@ -12,9 +12,14 @@ import { Dialog } from './Dialog';
  * matrix and the rollup, so the duplicate is refused with the existing holiday
  * named. The holiday being edited is excluded from its own check.
  *
- * The id is `holiday-${date}` for a NEW holiday and the original id when
- * editing - an id that followed a re-dated holiday would orphan the stored row
- * it was replacing, so stability wins over the pretty key.
+ * Ids: an EDIT keeps its original id - an id that followed a re-dated holiday
+ * would orphan the stored row it was replacing, so stability wins over the
+ * pretty key. A NEW holiday gets the `holiday-${date}` key, but only when no
+ * existing holiday already holds it: a re-dated holiday keeps its old
+ * `holiday-${oldDate}` id, and reusing that id for a new holiday back on the
+ * old date would make the parent's save treat the two rows as one and delete
+ * the edited holiday. The first unused `holiday-${date}`, `holiday-${date}-2`,
+ * … is taken instead.
  */
 
 export interface HolidayModalProps {
@@ -63,8 +68,29 @@ export const HolidayModal: React.FC<HolidayModalProps> = ({
     }
 
     setErrors([]);
+    if (holidayToEdit) {
+      onSave({
+        id: holidayToEdit.id,
+        date,
+        name: trimmedName,
+      });
+      onClose();
+      return;
+    }
+
+    // M2: a NEW holiday must never reuse an id another holiday already holds -
+    // most importantly the id a re-dated holiday kept from its old date, which
+    // would make the parent's id-based save drop the edited holiday. Walk the
+    // suffixed keys until one is unused.
+    const usedIds = new Set(holidays.map((holiday) => holiday.id));
+    let id = `holiday-${date}`;
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `holiday-${date}-${suffix}`;
+      suffix += 1;
+    }
     onSave({
-      id: holidayToEdit?.id ?? `holiday-${date}`,
+      id,
       date,
       name: trimmedName,
     });

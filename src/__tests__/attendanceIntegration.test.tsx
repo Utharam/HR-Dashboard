@@ -182,15 +182,22 @@ const openAttendance = async () => {
   ).toBeInTheDocument();
 };
 
-/** The matrix cell button for one employee's day, matched by accessible name. */
+/** The matrix cell button for one employee's day, matched by accessible name.
+ * Row lookups are scoped to the matrix table: the monthly register has a row
+ * per employee too. */
 const cellButton = (month: RenderedMonth, name: string, day: number) => {
-  const row = screen.getByRole('row', { name: new RegExp(name) });
+  const row = within(
+    screen.getByRole('table', { name: new RegExp(`Attendance matrix for ${monthLabel(month)}`, 'i') }),
+  ).getByRole('row', { name: new RegExp(name) });
   return within(row).getByRole('button', {
     name: new RegExp(`${MONTH_NAMES[month.monthIndex]} ${day}, ${month.year}`),
   });
 };
 
-const rowFor = (name: string) => screen.getByRole('row', { name: new RegExp(name) });
+const rowFor = (name: string) =>
+  within(
+    screen.getByRole('table', { name: /Attendance matrix for/i }),
+  ).getByRole('row', { name: new RegExp(name) });
 
 /** Waits until a fresh store read satisfies the assertion. */
 const waitForStore = (assert: (snapshot: DataSnapshot) => void) =>
@@ -432,7 +439,7 @@ describe('Attendance integration — state and persistence', () => {
       .closest('.omni-card') as HTMLElement;
     const seededItem = within(card).getByText(seed.name).closest('li');
     if (!(seededItem instanceof HTMLElement)) throw new Error('No list item for the seed');
-    await userEvent.click(within(seededItem).getByRole('button', { name: 'Delete' }));
+    await userEvent.click(within(seededItem).getByRole('button', { name: `Delete ${seed.name}` }));
     const confirm = screen.getByRole('dialog', { name: /Delete this holiday/ });
     expect(confirm).toHaveTextContent(seed.name);
     await userEvent.click(within(confirm).getByRole('button', { name: 'Delete holiday' }));

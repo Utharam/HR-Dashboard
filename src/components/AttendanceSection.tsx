@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Plus, Upload } from 'lucide-react'
 import * as XLSX from 'xlsx';
 import type {
   AttendanceRecord,
+  AttendanceRollup,
   AttendanceStatus,
   Employee,
   Holiday,
@@ -16,26 +17,27 @@ import {
   monthDateKeys,
   monthKey,
   recordToCode,
+  rollupMonth,
   workingDateKeys,
 } from '../utils/attendance';
 import {
-  approvedLeaveByEmployeeDate,
   attendanceTemplateFileName,
   buildAttendanceWorkbook,
   parseAttendanceWorkbook,
 } from '../utils/attendanceExcel';
 import type { ParseAttendanceResult } from '../utils/attendanceExcel';
-import { isValidDateKey, parseDateKey, toDateKey } from '../utils/leavePlanner';
+import { eachDateKey, isValidDateKey, parseDateKey, toDateKey } from '../utils/leavePlanner';
 import { scrollRegionLabel } from '../utils/pagination';
-import { AttendanceCellModal } from './AttendanceCellModal';
+import { AttendanceCellModal, type GhostLeavePlan } from './AttendanceCellModal';
 import { Callout } from './Callout';
 import { ConfirmDialog } from './ConfirmDialog';
 import { HolidayModal } from './HolidayModal';
 
 /**
  * The monthly attendance workspace: a matrix of employees × days, the filters
- * and month navigation around it, a per-day editor, the company holiday card
- * and the Excel template/import pair.
+ * and month navigation around it, a per-day editor, a monthly register (the
+ * rollup payroll reads), the company holiday card and the Excel template/import
+ * pair.
  *
  * This component is deliberately presentational, exactly like the leave
  * planner: the parent owns employees, attendance records, holidays and leave
@@ -43,10 +45,11 @@ import { HolidayModal } from './HolidayModal';
  * this file reads a store, localStorage or the App state.
  *
  * Sundays and holidays are DERIVED, never stored per employee: the matrix
- * renders them as `WO`/`H` facts, the importer ignores those cells, and the
- * working-day tile comes from `workingDateKeys`. Approved leave plans show as
- * ghost cells only where no record exists - the planner stays the source of
- * approved leave, the matrix never invents a record from it.
+ * renders them as `WO`/`H` facts — the primary cell even where a record
+ * exists, since the rollup ignores marks on non-working days — and the
+ * importer ignores those cells. Approved leave plans show as ghost cells only
+ * where no record exists — the planner stays the source of approved leave, the
+ * matrix never invents a record from it, and bulk marking skips the planned.
  */
 
 type ParsedAttendance = Extract<ParseAttendanceResult, { ok: true }>;
@@ -89,11 +92,34 @@ for (const [code, mapping] of Object.entries(ATTENDANCE_CODES)) {
   }
 }
 
+/** Half-day leave codes: `HD-<full code>`, derived the same way from the one
+ * code table so a ghost cell for a half-day plan renders exactly what the
+ * template prefills for the same plan. */
+const HALF_LEAVE_CODE_BY_TYPE = new Map<LeaveType, string>();
+for (const [code, mapping] of Object.entries(ATTENDANCE_CODES)) {
+  if (typeof mapping === 'object' && mapping.status === 'Leave' && mapping.leaveType) {
+    HALF_LEAVE_CODE_BY_TYPE.set(mapping.leaveType, `HD-${code}`);
+  }
+}
+
+/** The ghost code for one approved plan: a half-day plan covers only one half,
+ * so it shows the half-day code, everything else the full-leave code. */
+const ghostCodeFor = (ghost: GhostLeavePlan): string =>
+  ghost.halfDay
+    ? HALF_LEAVE_CODE_BY_TYPE.get(ghost.type) ?? 'HD-O'
+    : LEAVE_CODE_BY_TYPE.get(ghost.type) ?? 'O';
+
+/** Canonical leave-type order for the register's leave column. */
+const LEAVE_TYPE_ORDER: LeaveType[] = [
+  'CL', 'SL', 'EL', 'LOP', 'Maternity', 'Paternity', 'Comp Off', 'Other',
+];
+
 const LEGEND_ITEMS: Array<[string, string]> = [
   ['P', 'Present'],
   ['A', 'Absent'],
   ['W', 'WFH'],
   ['HD', 'Half day'],
+  ['HD-…', 'Half day + leave type'],
   ['CL…O', 'Leave (by type)'],
   ['WO', 'Weekly off'],
   ['H', 'Holiday'],
@@ -105,6 +131,71 @@ const IMPORT_FAILURE_REASON: Record<string, string> = {
   'missing-month': 'the month cell (B2) is missing or unreadable',
   'missing-header': 'no header row with an "Employee ID" column and day numbers was found',
   'no-employees': 'the roster in this workspace is empty',
+};
+
+/**
+ * The gap fields the parser reports on a successful parse: roster employees the
+ * sheet never carried, and day numbers the header never carried. Declared
+ * OPTIONAL here so the preview compiles - and stays honest - against the parser
+ * both before and after the parser starts filling them; every read defaults the
+ * absence to "no gap known".
+ */
+export interface AttendanceImportGaps {
+  missingEmployeeIds?: string[];
+  missingDayNumbers?: number[];
+}
+
+/**
+ * Why a preview must not offer Replace. Confirming a replace wipes the WHOLE
+ * month, so it is only safe when the file described the whole roster and the
+ * whole calendar: with sheet rows or day columns missing, the employees and
+ * days the file left out would silently lose whatever the ledger already holds
+ * for them. Returns the human-readable reasons; an empty list means replaceable.
+ *
+ * These helpers live beside the preview they govern on purpose (the wave keeps
+ * util files out of this agent's scope) and are exported for their tests.
+ */
+// oxlint-disable-next-line react/only-export-components -- pure helper beside its preview, exported for tests
+export const importBlockers = (
+  preview: ParsedAttendance & AttendanceImportGaps,
+  rosterSize: number,
+): string[] => {
+  const reasons: string[] = [];
+  if (preview.records.length === 0) {
+    reasons.push(
+      'No attendance codes were parsed from the file; replacing would only erase what the ledger already holds.',
+    );
+  }
+  if (preview.matchedEmployees < rosterSize) {
+    reasons.push(
+      `Only ${preview.matchedEmployees} of ${rosterSize} roster employees matched; the others would lose this month's records.`,
+    );
+  }
+  const missingDays = preview.missingDayNumbers ?? [];
+  if (missingDays.length > 0) {
+    reasons.push(`Day columns missing from the header: ${missingDays.join(', ')}.`);
+  }
+  return reasons;
+};
+
+/** Attendance rate for one register row: `presentDays / workingDays * 100`,
+ * 0 while the month has no working days to divide by. */
+// oxlint-disable-next-line react/only-export-components -- pure helper beside its register, exported for tests
+export const registerAttendancePct = (presentDays: number, workingDays: number): number =>
+  workingDays > 0 ? (presentDays / workingDays) * 100 : 0;
+
+/** `CL 2 · SL 1` in canonical type order, `null` when the month has no leave.
+ * Half-days contribute 0.5 and render with one decimal. */
+// oxlint-disable-next-line react/only-export-components -- pure helper beside its register, exported for tests
+export const formatLeaveByType = (
+  leaveByType: AttendanceRollup['leaveByType'],
+): string | null => {
+  const parts: string[] = [];
+  for (const type of LEAVE_TYPE_ORDER) {
+    const days = leaveByType[type];
+    if (days) parts.push(`${type} ${Number.isInteger(days) ? days : days.toFixed(1)}`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
 };
 
 // Module scope, like LeavePlanModal: the timestamp is captured at CALL time,
@@ -173,7 +264,25 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const recordsByEmployeeDate = new Map(
     attendance.map((record) => [`${record.employeeId}|${record.date}`, record] as const),
   );
-  const leaveGhost = approvedLeaveByEmployeeDate(leavePlans);
+
+  // Approved leave behind the ghost cells, in PLAN semantics (`halfDay` is the
+  // half ON LEAVE, the planner's `AM only`/`PM only`; `null` a full day). The
+  // first approved plan wins, exactly like the template's own map, so the
+  // screen and the file can never disagree about a planned day.
+  const ghostPlanByEmployeeDate = new Map<string, GhostLeavePlan>();
+  for (const plan of leavePlans) {
+    if (plan.status !== 'Approved') continue;
+    for (const date of eachDateKey(plan.startDate, plan.endDate)) {
+      const key = `${plan.employeeId}|${date}`;
+      if (!ghostPlanByEmployeeDate.has(key)) {
+        ghostPlanByEmployeeDate.set(key, { type: plan.type, halfDay: plan.halfDay });
+      }
+    }
+  }
+
+  // The monthly register reads the same rollup the payroll does, for the month
+  // on screen - not for "today".
+  const rollups = rollupMonth(attendance, employees, holidays, view.year, view.monthIndex);
 
   // The daily tiles describe the SELECTED day, defaulting to today while the
   // viewed month contains it. Navigating to another month therefore shows
@@ -182,6 +291,24 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     selectedDateKey ?? (dates.includes(todayKey) ? todayKey : null);
   const summaryIsToday = summaryDateKey === todayKey;
 
+  // M1: an off day is summarised as the off day it is. Records on it are kept
+  // but never counted, so the tiles show the derived state and say so, instead
+  // of letting a stray Present on a holiday masquerade as attendance.
+  const summaryHolidayName = summaryDateKey
+    ? monthHolidayNames.get(summaryDateKey)
+    : undefined;
+  const summaryOffLabel = summaryDateKey
+    ? isSunday(summaryDateKey)
+      ? 'weekly off'
+      : summaryHolidayName
+        ? `holiday: ${summaryHolidayName}`
+        : null
+    : null;
+  const summaryIsOffDay = summaryOffLabel !== null;
+  const shortSummaryDay = summaryDateKey
+    ? SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))
+    : '';
+
   const countOn = (predicate: (record: AttendanceRecord) => boolean): number | null => {
     if (!summaryDateKey) return null;
     return filteredEmployees.filter((emp) => {
@@ -189,17 +316,34 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
       return record !== undefined && predicate(record);
     }).length;
   };
-  const presentToday = countOn(
-    (record) => record.status === 'Present' || record.status === 'HalfDay',
-  );
-  const leaveToday = countOn((record) => record.status === 'Leave');
-  const absentToday = countOn((record) => record.status === 'Absent');
-  const wfhToday = countOn((record) => record.status === 'WFH');
-  const unmarkedToday = summaryDateKey
-    ? filteredEmployees.filter(
-        (emp) => !recordsByEmployeeDate.has(`${emp.id}|${summaryDateKey}`),
-      ).length
-    : null;
+  const presentToday = summaryIsOffDay
+    ? 0
+    : countOn((record) => record.status === 'Present' || record.status === 'HalfDay');
+  // "On leave" is the day's leave STATE: a recorded leave, or an approved plan
+  // still awaiting its record. A mark is authoritative; the planner only fills
+  // the unmarked rest, so a planned employee is never also counted unmarked.
+  const leaveToday = summaryIsOffDay
+    ? 0
+    : summaryDateKey === null
+      ? null
+      : filteredEmployees.filter((emp) => {
+          const record = recordsByEmployeeDate.get(`${emp.id}|${summaryDateKey}`);
+          return record
+            ? record.status === 'Leave'
+            : ghostPlanByEmployeeDate.has(`${emp.id}|${summaryDateKey}`);
+        }).length;
+  const absentToday = summaryIsOffDay ? 0 : countOn((record) => record.status === 'Absent');
+  const wfhToday = summaryIsOffDay ? 0 : countOn((record) => record.status === 'WFH');
+  const unmarkedToday = summaryIsOffDay
+    ? 0
+    : summaryDateKey === null
+      ? null
+      : filteredEmployees.filter((emp) => {
+          return (
+            !recordsByEmployeeDate.has(`${emp.id}|${summaryDateKey}`) &&
+            !ghostPlanByEmployeeDate.has(`${emp.id}|${summaryDateKey}`)
+          );
+        }).length;
 
   const selectedIsSunday = selectedDateKey !== null && isSunday(selectedDateKey);
   const selectedHolidayName = selectedDateKey
@@ -207,9 +351,20 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     : undefined;
   const selectedIsOffDay = selectedDateKey !== null &&
     (selectedIsSunday || selectedHolidayName !== undefined);
+  // Unmarked means "no record AND no approved plan": a planned employee is
+  // reported separately below, so bulk marking never talks over the planner.
   const unmarkedOnSelectedDay = selectedDateKey
     ? filteredEmployees.filter(
-        (emp) => !recordsByEmployeeDate.has(`${emp.id}|${selectedDateKey}`),
+        (emp) =>
+          !recordsByEmployeeDate.has(`${emp.id}|${selectedDateKey}`) &&
+          !ghostPlanByEmployeeDate.has(`${emp.id}|${selectedDateKey}`),
+      )
+    : [];
+  const plannedOnSelectedDay = selectedDateKey && !selectedIsOffDay
+    ? filteredEmployees.filter(
+        (emp) =>
+          !recordsByEmployeeDate.has(`${emp.id}|${selectedDateKey}`) &&
+          ghostPlanByEmployeeDate.has(`${emp.id}|${selectedDateKey}`),
       )
     : [];
 
@@ -234,7 +389,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     setView({ year: today.getFullYear(), monthIndex: today.getMonth() });
   };
 
-  /** Marks every UNMARKED filtered employee present; an existing mark wins. */
+  /** Marks every UNMARKED filtered employee present; an existing mark wins and
+   * an approved leave plan is never overwritten by the bulk mark. */
   const markAllPresent = () => {
     if (!selectedDateKey) return;
     const timestamp = nowIso();
@@ -254,14 +410,20 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     // The template always carries the FULL roster: the file HR fills in must
     // not depend on whatever filter happens to be left over on screen.
     try {
-      const workbook = buildAttendanceWorkbook({
+      // C1: the ledger rides along so the template reflects existing records
+      // (cell precedence: Sunday -> holiday -> record -> approved leave ->
+      // prefill). Held in a variable rather than an inline literal so the call
+      // compiles both before and after the writer learns to read `attendance`.
+      const templateInput = {
         employees,
         holidays,
         leavePlans,
         year: view.year,
         monthIndex: view.monthIndex,
         prefillPresent,
-      });
+        attendance,
+      };
+      const workbook = buildAttendanceWorkbook(templateInput);
       const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
       const blob = new Blob([bytes], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -326,14 +488,34 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     setImportPreview(null);
   };
 
+  // The parser-reported gaps (Agent A's contract), read defensively so the
+  // preview renders and stays honest both before and after the parser fills
+  // them; an absent field reads as "no gap known".
+  const previewGaps = (importPreview ?? null) as (ParsedAttendance & AttendanceImportGaps) | null;
+  const missingEmployeeIds = previewGaps?.missingEmployeeIds ?? [];
+  const missingDayNumbers = previewGaps?.missingDayNumbers ?? [];
+  const replaceBlockers = previewGaps
+    ? importBlockers(previewGaps, employees.length)
+    : [];
+
   const describeCell = (
     dateKey: string,
     record: AttendanceRecord | undefined,
     ghostCode: string | undefined,
   ): string => {
+    // M1: on a derived non-working day the calendar fact is what the cell SAYS,
+    // even over an existing record - the rollup ignores such marks.
+    if (isSunday(dateKey)) {
+      return record
+        ? `WO — a record (${recordToCode(record)}) is kept but ignored`
+        : 'WO';
+    }
+    if (holidayDates.has(dateKey)) {
+      return record
+        ? `H — a record (${recordToCode(record)}) is kept but ignored`
+        : 'H';
+    }
     if (record) return recordToCode(record);
-    if (isSunday(dateKey)) return 'WO';
-    if (holidayDates.has(dateKey)) return 'H';
     if (ghostCode) return `${ghostCode} (approved leave, unmarked)`;
     return 'unmarked';
   };
@@ -343,30 +525,51 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     const sunday = isSunday(dateKey);
     const holidayName = monthHolidayNames.get(dateKey);
     const off = sunday || holidayName !== undefined;
-    const ghostType = leaveGhost.get(`${employee.id}|${dateKey}`);
-    const ghostCode =
-      !record && !off && ghostType ? LEAVE_CODE_BY_TYPE.get(ghostType) : undefined;
+    const ghost = off || record
+      ? undefined
+      : ghostPlanByEmployeeDate.get(`${employee.id}|${dateKey}`);
+    const ghostCode = ghost ? ghostCodeFor(ghost) : undefined;
 
     const ariaLabel = `${employee.name}, ${FULL_DAY_LABEL.format(parseDateKey(dateKey))}: ${describeCell(dateKey, record, ghostCode)}`;
 
-    if (!record && off) {
+    // M1: the off-day fact is the PRIMARY cell even where a record exists,
+    // because the rollup never counts marks on Sundays or holidays. The cell
+    // stays clickable so the record behind it stays reachable and editable;
+    // its title and aria name say the record is kept but ignored.
+    if (off) {
       const code = sunday ? 'WO' : 'H';
       const tone = sunday ? 'attendance-cell--off' : 'attendance-cell--holiday';
+      const offTitle = sunday ? 'Weekly off' : `Holiday — ${holidayName}`;
+      if (!record) {
+        return (
+          <td key={dateKey} className="attendance-matrix__cell">
+            <span
+              className={`attendance-cell ${tone}`}
+              title={offTitle}
+              aria-label={ariaLabel}
+            >
+              {code}
+            </span>
+          </td>
+        );
+      }
       return (
         <td key={dateKey} className="attendance-matrix__cell">
-          <span
-            className={`attendance-cell ${tone}`}
-            title={sunday ? 'Weekly off' : `Holiday — ${holidayName}`}
+          <button
+            type="button"
+            className={`attendance-cell ${tone} attendance-cell--offday`}
+            title={`${offTitle} — a record (${recordToCode(record)}) is kept here but not counted`}
             aria-label={ariaLabel}
+            onClick={() => setCellModal({ employeeId: employee.id, date: dateKey })}
           >
             {code}
-          </span>
+          </button>
         </td>
       );
     }
 
     const toneClass = record
-      ? `${CELL_TONE[record.status]}${off ? ' attendance-cell--offday' : ''}`
+      ? CELL_TONE[record.status]
       : ghostCode
         ? 'attendance-cell--ghost'
         : '';
@@ -581,6 +784,31 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             </p>
           )}
 
+          {missingEmployeeIds.length > 0 && (
+            <p className="attendance-preview__danger">
+              {missingEmployeeIds.length === 1
+                ? '1 roster employee is'
+                : `${missingEmployeeIds.length} roster employees are`}{' '}
+              not in the file: {missingEmployeeIds.join(', ')}.
+            </p>
+          )}
+          {missingDayNumbers.length > 0 && (
+            <p className="attendance-preview__danger">
+              Day columns missing from the header: {missingDayNumbers.join(', ')}.
+            </p>
+          )}
+
+          {replaceBlockers.length > 0 && (
+            <div className="alert tone-danger" role="alert">
+              <p>Replace is disabled for this file:</p>
+              <ul>
+                {replaceBlockers.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {previewIssues.length > 0 && (
             <div className="attendance-preview__issues">
               <h4 className="attendance-panel__heading">Issues</h4>
@@ -607,6 +835,12 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               type="button"
               className="btn btn-danger"
               onClick={confirmImport}
+              disabled={replaceBlockers.length > 0}
+              title={
+                replaceBlockers.length > 0
+                  ? 'The file does not describe the whole roster and calendar, so replacing would silently lose records.'
+                  : undefined
+              }
             >
               Replace {previewMonthLabel}
             </button>
@@ -628,9 +862,11 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             {presentToday === null ? '—' : presentToday}
           </div>
           <span className="kpi-sub">
-            {summaryDateKey
-              ? `${SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))}${summaryIsToday ? ' (today)' : ''}, half-days included`
-              : 'select a day to summarise'}
+            {summaryIsOffDay
+              ? `${shortSummaryDay} · ${summaryOffLabel} — marks kept, not counted`
+              : summaryDateKey
+                ? `${shortSummaryDay}${summaryIsToday ? ' (today)' : ''}, half-days included`
+                : 'select a day to summarise'}
           </span>
         </div>
 
@@ -640,9 +876,11 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             {leaveToday === null ? '—' : leaveToday}
           </div>
           <span className="kpi-sub">
-            {summaryDateKey
-              ? SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))
-              : 'select a day to summarise'}
+            {summaryIsOffDay
+              ? `${shortSummaryDay} · ${summaryOffLabel}`
+              : summaryDateKey
+                ? `${shortSummaryDay} · records + approved plans`
+                : 'select a day to summarise'}
           </span>
         </div>
 
@@ -652,9 +890,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             {absentToday === null ? '—' : absentToday}
           </div>
           <span className="kpi-sub">
-            {summaryDateKey
-              ? SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))
-              : 'select a day to summarise'}
+            {summaryIsOffDay
+              ? `${shortSummaryDay} · ${summaryOffLabel}`
+              : shortSummaryDay || 'select a day to summarise'}
           </span>
         </div>
 
@@ -664,9 +902,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             {wfhToday === null ? '—' : wfhToday}
           </div>
           <span className="kpi-sub">
-            {summaryDateKey
-              ? SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))
-              : 'select a day to summarise'}
+            {summaryIsOffDay
+              ? `${shortSummaryDay} · ${summaryOffLabel}`
+              : shortSummaryDay || 'select a day to summarise'}
           </span>
         </div>
 
@@ -676,9 +914,11 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             {unmarkedToday === null ? '—' : unmarkedToday}
           </div>
           <span className="kpi-sub">
-            {summaryDateKey
-              ? `of ${filteredEmployees.length} filtered employees on ${SHORT_DAY_LABEL.format(parseDateKey(summaryDateKey))}`
-              : 'select a day to summarise'}
+            {summaryIsOffDay
+              ? `${summaryOffLabel} — nothing to mark`
+              : summaryDateKey
+                ? `of ${filteredEmployees.length} filtered employees on ${shortSummaryDay}`
+                : 'select a day to summarise'}
           </span>
         </div>
 
@@ -826,7 +1066,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 title={
                   selectedIsOffDay
                     ? 'Sundays and holidays are non-working days; the rollup ignores records on them'
-                    : 'Marks every filtered employee without a record as Present'
+                    : 'Marks every filtered employee without a record as Present (approved leave plans are skipped)'
                 }
               >
                 Mark all present
@@ -837,6 +1077,19 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                   {' '}is not a working day, so no bulk marking is offered.
                 </p>
               )}
+              {!selectedIsOffDay && plannedOnSelectedDay.length > 0 && (
+                <p className="attendance-hint">
+                  {plannedOnSelectedDay.length === 1
+                    ? '1 employee has'
+                    : `${plannedOnSelectedDay.length} employees have`}{' '}
+                  an approved leave plan on this day and{' '}
+                  {plannedOnSelectedDay.length === 1 ? 'is' : 'are'} skipped by the bulk
+                  mark; the planner stays their source of truth.
+                  {unmarkedOnSelectedDay.length === 0
+                    ? ' Everyone is covered; nothing to mark.'
+                    : ''}
+                </p>
+              )}
 
               {filteredEmployees.length === 0 ? (
                 <p className="attendance-hint">No employees match the current filters.</p>
@@ -844,20 +1097,33 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 <ul className="attendance-daylist">
                   {filteredEmployees.map((emp) => {
                     const record = recordsByEmployeeDate.get(`${emp.id}|${selectedDateKey}`);
+                    const ghost = !record && !selectedIsOffDay
+                      ? ghostPlanByEmployeeDate.get(`${emp.id}|${selectedDateKey}`)
+                      : undefined;
                     const code = record
                       ? recordToCode(record)
-                      : isSunday(selectedDateKey)
-                        ? 'WO'
-                        : monthHolidayNames.get(selectedDateKey)
-                          ? 'H'
+                      : selectedIsOffDay
+                        ? (selectedIsSunday ? 'WO' : 'H')
+                        : ghost
+                          ? `${ghostCodeFor(ghost)} (planned)`
                           : '—';
                     return (
                       <li key={emp.id} className="attendance-daylist__row">
                         <span className="attendance-daylist__name">{emp.name}</span>
-                        <span className="attendance-daylist__code">{code}</span>
+                        <span
+                          className={`attendance-daylist__code${ghost ? ' attendance-daylist__code--planned' : ''}`}
+                          title={
+                            ghost
+                              ? 'Approved leave plan — no attendance record yet'
+                              : undefined
+                          }
+                        >
+                          {code}
+                        </span>
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
+                          aria-label={`Edit attendance for ${emp.name}, ${FULL_DAY_LABEL.format(parseDateKey(selectedDateKey))}`}
                           onClick={() =>
                             setCellModal({ employeeId: emp.id, date: selectedDateKey })
                           }
@@ -872,6 +1138,77 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             </>
           )}
         </aside>
+      </div>
+
+      {/* I3: the monthly register — the same rollup the payroll reads, for the
+          month on screen, so a whole month's ledger is reviewable at a glance. */}
+      <div className="omni-card attendance-register">
+        <div className="omni-card-header">
+          <div>
+            <h3 className="omni-card-title">Monthly register</h3>
+            <p className="omni-card-sub">
+              Rollup for {monthLabel}: present days, leave by type, LOP and the
+              attendance rate against {workingDayCount} working days. Records on
+              Sundays and holidays are ignored.
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="omni-table-wrap"
+          role="region"
+          aria-label={scrollRegionLabel(`Monthly attendance register, ${monthLabel}`)}
+          tabIndex={0}
+        >
+          <table className="omni-table attendance-register__table">
+            <caption className="sr-only">
+              Monthly attendance register for {monthLabel}: present days, leave by
+              type, LOP, working days and attendance rate per employee.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Employee</th>
+                <th scope="col" className="cell-num">Present</th>
+                <th scope="col">Leave</th>
+                <th scope="col" className="cell-num">LOP</th>
+                <th scope="col" className="cell-num">Working days</th>
+                <th scope="col" className="cell-num">Attendance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEmployees.map((emp) => {
+                const rollup = rollups.get(emp.id);
+                if (!rollup) return null;
+                // No counted working-day records means no rate to show: a month
+                // with nothing on a working day is "no data", not 0%.
+                const countedDays =
+                  rollup.presentDays + rollup.leaveDays + rollup.absentDays;
+                return (
+                  <tr key={emp.id}>
+                    <th scope="row" className="attendance-register__name">
+                      {emp.name}
+                    </th>
+                    <td className="cell-num">{rollup.presentDays}</td>
+                    <td className="cell-muted">
+                      {formatLeaveByType(rollup.leaveByType) ?? '—'}
+                    </td>
+                    <td className="cell-num">{rollup.lopDays}</td>
+                    <td className="cell-num">{rollup.workingDays}</td>
+                    <td className="cell-num">
+                      {countedDays > 0
+                        ? `${registerAttendancePct(rollup.presentDays, rollup.workingDays).toFixed(1)}%`
+                        : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredEmployees.length === 0 && (
+          <p className="attendance-hint">No employees match the current filters.</p>
+        )}
       </div>
 
       {/* Holiday card */}
@@ -912,6 +1249,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
+                    aria-label={`Edit ${holiday.name}`}
                     onClick={() => setHolidayModal({ holiday })}
                   >
                     Edit
@@ -919,6 +1257,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                   <button
                     type="button"
                     className="btn btn-danger btn-sm"
+                    aria-label={`Delete ${holiday.name}`}
                     onClick={() => setPendingHolidayDelete(holiday)}
                   >
                     Delete
@@ -940,6 +1279,13 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
           date={cellModal.date}
           existing={
             recordsByEmployeeDate.get(`${cellModal.employeeId}|${cellModal.date}`) ?? null
+          }
+          // I5: an approved plan covering an unmarked cell starts the form from
+          // the plan (Leave, or HalfDay for a half-day plan) instead of Present.
+          ghost={
+            recordsByEmployeeDate.has(`${cellModal.employeeId}|${cellModal.date}`)
+              ? null
+              : ghostPlanByEmployeeDate.get(`${cellModal.employeeId}|${cellModal.date}`) ?? null
           }
           offDayLabel={
             isSunday(cellModal.date)

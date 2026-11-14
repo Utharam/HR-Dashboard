@@ -21,6 +21,11 @@ import { ConfirmDialog } from './ConfirmDialog';
  * The status is the single source of shape: Leave requires a leave type, a
  * half-day carries an AM/PM part and an optional leave type for the other half,
  * and every other status clears whatever leave fields an earlier record had.
+ * An approved plan passed as `ghost` (an unmarked cell the planner already
+ * covers) starts the form from the plan instead of Present: full-day plans open
+ * as Leave with the plan's type, half-day plans as HalfDay with the OPPOSITE
+ * half worked and the plan's type as the leave half - plan `AM only` means the
+ * morning is off, so the record works the afternoon.
  * Saving always writes `source: 'manual'` - a record last touched by a person
  * through this screen is a manual record, whichever channel brought it in.
  *
@@ -33,6 +38,15 @@ const STATUSES: AttendanceStatus[] = ['Present', 'Absent', 'WFH', 'HalfDay', 'Le
 const LEAVE_TYPES: LeaveType[] = [
   'CL', 'SL', 'EL', 'LOP', 'Maternity', 'Paternity', 'Comp Off', 'Other',
 ];
+
+/**
+ * The approved leave plan behind a ghost cell, in PLAN semantics: `halfDay` is
+ * the half ON LEAVE (the planner's `AM only`/`PM only`), `null` a full day.
+ */
+export interface GhostLeavePlan {
+  type: LeaveType;
+  halfDay: 'AM' | 'PM' | null;
+}
 
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   Present: 'Present',
@@ -64,6 +78,12 @@ export interface AttendanceCellModalProps {
   date: string;
   /** The record already on this cell, or `null` for an unmarked day. */
   existing: AttendanceRecord | null;
+  /**
+   * The approved leave plan covering an unmarked cell, in plan semantics
+   * (`halfDay` is the half ON LEAVE, `null` a full day). A ghost click starts
+   * the form from the plan; an existing record always wins over it.
+   */
+  ghost?: GhostLeavePlan | null;
   /** `Weekly off (Sunday)` / `Holiday — <name>` on a derived non-working day, else `null`. */
   offDayLabel?: string | null;
 }
@@ -76,15 +96,29 @@ export const AttendanceCellModal: React.FC<AttendanceCellModalProps> = ({
   employee,
   date,
   existing,
+  ghost = null,
   offDayLabel = null,
 }) => {
   const titleId = useId();
 
-  const [status, setStatus] = useState<AttendanceStatus>(existing?.status ?? 'Present');
-  const [leaveType, setLeaveType] = useState<LeaveType>(existing?.leaveType ?? 'CL');
-  const [halfDay, setHalfDay] = useState<'AM' | 'PM'>(existing?.halfDay ?? 'AM');
+  // I5: a ghost click starts from the approved plan instead of Present - a full
+  // day plan opens as Leave with the plan's type, a half-day plan as HalfDay
+  // with the OPPOSITE half worked (plan `AM only` = the morning is off, so the
+  // record works the afternoon) and the plan's type as the leave half.
+  const ghostStatus: AttendanceStatus = ghost
+    ? ghost.halfDay
+      ? 'HalfDay'
+      : 'Leave'
+    : 'Present';
+
+  const [status, setStatus] = useState<AttendanceStatus>(existing?.status ?? ghostStatus);
+  const [leaveType, setLeaveType] = useState<LeaveType>(existing?.leaveType ?? ghost?.type ?? 'CL');
+  const [halfDay, setHalfDay] = useState<'AM' | 'PM'>(
+    existing?.halfDay ??
+      (ghost?.halfDay ? (ghost.halfDay === 'AM' ? 'PM' : 'AM') : 'AM'),
+  );
   const [halfLeaveType, setHalfLeaveType] = useState<LeaveType | ''>(
-    existing?.leaveType ?? '',
+    existing?.leaveType ?? (ghost?.halfDay ? ghost.type : ''),
   );
   const [note, setNote] = useState(existing?.note ?? '');
   const [errors, setErrors] = useState<string[]>([]);
@@ -151,6 +185,14 @@ export const AttendanceCellModal: React.FC<AttendanceCellModalProps> = ({
         <p className="alert tone-info" role="status">
           {offDayLabel}. This day is not counted in the working-day rollup; a mark
           here is kept only as a record of what happened.
+        </p>
+      )}
+
+      {ghost && !existing && (
+        <p className="alert tone-info" role="status">
+          Approved leave plan on this day: {ghost.type}
+          {ghost.halfDay ? ` · ${ghost.halfDay} off (half-day plan)` : ''}. The form
+          starts from it; change anything before saving if reality differed.
         </p>
       )}
 
