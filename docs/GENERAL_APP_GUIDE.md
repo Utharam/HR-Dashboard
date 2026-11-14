@@ -22,6 +22,8 @@ This manual provides an exhaustive operational reference for HR administrators, 
    - [3.8 33-Month Financial & Headcount Analytics](#38-33-month-financial--headcount-analytics)
    - [3.9 Excel Data Hub & Synchronization](#39-excel-data-hub--synchronization)
    - [3.10 Corporate HR Policy & Benefits Hub](#310-corporate-hr-policy--benefits-hub)
+   - [3.11 Leave Planner & Coverage Calendar](#311-leave-planner--coverage-calendar)
+   - [3.12 Admin & Data Exchange (Excel Hub)](#312-admin--data-exchange-excel-hub)
 4. [Statutory & Legal Indian HR Compliances](#4-statutory--legal-indian-hr-compliances)
 5. [Operational Workflows](#5-operational-workflows)
 6. [Offline Architecture & Data Privacy](#6-offline-architecture--data-privacy)
@@ -34,7 +36,7 @@ This manual provides an exhaustive operational reference for HR administrators, 
 
 OmniHR is built on four core architectural pillars:
 
-- **Local-First & Zero-Cloud Latency:** All 200 default employee records, financial ledgers, and requisitions are stored client-side in browser `localStorage`. No sensitive corporate payroll records or PII are transmitted to external servers without administrative intent.
+- **Local-First & Zero-Cloud Latency:** All 200 default employee records, financial ledgers, and requisitions are stored client-side in browser **IndexedDB** (migrated once from the legacy `localStorage` keys; a `localStorage` fallback keeps the app running where IndexedDB is blocked). No sensitive corporate payroll records or PII are transmitted to external servers without administrative intent.
 - **Strict Indian Labour Law Compliance:** Exact statutory mathematical formulas are encoded for EPF wage ceilings, Professional Tax (PT), Loss of Pay (LOP) calculations, Payment of Gratuity Act 1972 rounding rules, and Industrial Disputes Act retrenchment compensations.
 - **Bi-Directional Spreadsheet Interoperability:** Deep integration with SheetJS (`xlsx`) ensures frictionless round-trip compatibility between custom Excel files, third-party HRMS exports (Workday, SAP SuccessFactors, BambooHR, Darwinbox), and OmniHR's native schema.
 - **C-Suite Visual Intelligence:** Instantaneous reactive Chart.js visualizations that summarize headcount distribution, payroll burn rate, attrition metrics, and talent bell curves.
@@ -47,17 +49,19 @@ The OmniHR interface is divided into two primary zones:
 
 ### 2.1 Left Navigation Sidebar
 - **OmniHR Brand Badge:** Displays the suite version (`v1.1.0`).
-- **Navigation Tabs (10 Sections):**
+- **Navigation Tabs (12 Sections):**
   1. `Executive Overview` — C-suite KPI metrics & visual charts.
   2. `Employee Directory` — Master roster with multi-column filtering.
   3. `Time & Attendance` — 26-day working cycle & leave ledger.
-  4. `Payroll & Compensation` — Disbursable net pay & payslip viewer.
-  5. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
-  6. `Recruitment Pipeline` — Active requisitions & candidate stages.
-  7. `EOSB & Gratuity Calc` — End-of-service settlement engine.
-  8. `3-Year Headcount Trends` — 33-month historical financial ledger.
-  9. `Excel Data Hub` — Drag-and-drop spreadsheet ingestion & exports.
-  10. `User Guides & Manual` — In-app documentation and Excel handling guide.
+  4. `Leave Planner` — Month coverage calendar of who is away.
+  5. `Payroll & Compensation` — Disbursable net pay & payslip viewer.
+  6. `Performance & 9-Box` — Potential vs performance matrix & bell curve.
+  7. `Recruitment Pipeline` — Active requisitions & candidate stages.
+  8. `EOSB & Gratuity Calc` — End-of-service settlement engine.
+  9. `3-Year Headcount Trends` — 33-month historical financial ledger.
+  10. `Admin` — Business-data snapshots, storage status and the Excel ingestion hub.
+  11. `HR Policy Hub` — Statutory leave policies, benefits and custom rules.
+  12. `User Guides & Manual` — In-app documentation and Excel handling guide.
 - **Quick Action Buttons:**
   - `Export Roster (Excel)`: Instant download of the current filtered employee roster.
   - `Reset Demo State`: Restores the application to the pristine 200-employee master demo data.
@@ -81,7 +85,7 @@ The OmniHR interface is divided into two primary zones:
   - Remote / Hybrid
 - **Header Action Buttons:**
   - `Add Staff`: Opens the interactive new hire registration modal.
-  - `Excel Hub`: Fast jump to spreadsheet ingestion and exports.
+  - `Admin`: Fast jump to the Admin & Data Exchange page (business-data snapshots, storage status and the Excel Hub).
   - `Guides`: Fast jump to the operational manuals.
 
 ---
@@ -215,7 +219,7 @@ Historical macro workforce analytics spanning **January 2024 through September 2
 ---
 
 ### 3.9 Excel Data Hub & Synchronization
-The central data interchange module:
+The central data interchange module, now rendered inside the **Admin** page (see [3.12](#312-admin--data-exchange-excel-hub)):
 - **Ingestion:** Drag-and-drop parsing of `.xlsx`, `.xls`, and `.csv` files.
 - **Live Preview:** Displays recognized column mappings, warnings, and table preview before committing.
 - **Export Master Roster:** Downloads the complete 200-employee directory with all 24 columns, including the canonical department ID and reporting line; the workbook can be re-imported without losing either.
@@ -270,7 +274,45 @@ The centralized policy engine enabling enterprise governance, family welfare pro
 6. **Custom Rules Engine:**
    - HR leaders can configure, edit, toggle, or delete customized enterprise policies.
    - Custom parameters: Title, Category, Days Allowed, Time Unit (Days, Weeks, Months), Paid/Unpaid, Selectable Gift/Perk Presets or write-in custom perk, Eligibility, and Custom rule terms.
-   - Saved directly to `localStorage` (`omnihr_policies`) for instant offline persistence.
+   - Saved through the app's data store (IndexedDB; the `omnihr_policies` `localStorage` key is the fallback) for instant offline persistence.
+
+---
+
+### 3.11 Leave Planner & Coverage Calendar
+A single view of who is away, for HR input and for leadership coverage reviews:
+
+1. **Leave Entries:**
+   - One record per employee per spell: type (`CL`, `SL`, `EL`, `LOP`, `Maternity`, `Paternity`, `Comp Off`, `Other`), status (`Planned`, `Approved`, `Cancelled`), optional AM/PM half-day (single-day entries only), and an optional note.
+   - Validation blocks an end date before the start date, a half-day on a multi-day range, and duplicate identical entries. Overlapping bookings are allowed but flagged live — HR decides.
+   - Add entries via **Add leave**, or click a calendar day to open, edit or delete its entries.
+
+2. **Calendar:**
+   - Monday-first month grid with **prev / today / next** navigation.
+   - Each day shows a count of people away, up to three employee initials, and a `+N` overflow. Sundays are muted.
+   - Days at or above the coverage threshold are highlighted and listed under **Peak days**.
+
+3. **Filters & Summary Tiles:**
+   - Filters: department, office location, employee search, leave type and status.
+   - Tiles: people on leave today, peak day this month, upcoming leave in the next 30 days, and working days booked this month.
+
+4. **Coverage Threshold:**
+   - `maxConcurrentLeave` (default 3) is editable in the planner panel.
+   - Durations count working days, excluding Sundays, matching the app's 26-day working month.
+
+### 3.12 Admin & Data Exchange (Excel Hub)
+The former **Excel Data Hub** tab is now the **Admin** page (sidebar and header shortcuts point to **Admin**); the Excel Hub and its guide link are unchanged inside it:
+
+1. **Data Snapshot Card:**
+   - Record counts, the active storage backend (IndexedDB or the `localStorage` fallback), whether the pre-migration legacy `localStorage` backup exists, and the last export/import timestamps for this browser.
+
+2. **Export Snapshot:**
+   - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings) in one versioned JSON file.
+   - Snapshots are the backup: save each exported file to Google Drive, OneDrive or any shared drive.
+
+3. **Import Snapshot:**
+   - The chosen file is validated (snapshot format version and row schema) and confirmed with record counts before anything is replaced; an invalid or wrong-version file changes nothing.
+   - After a confirmed import, the console shows the data from the file.
+   - **Imported copies are local:** a snapshot loaded into one browser does not propagate changes back to HR or to any other browser.
 
 ---
 
@@ -298,7 +340,7 @@ OmniHR implements the following Indian statutory regulations:
 3. Select their Designation/Title, Office Location Hub, and Date of Joining (DOJ).
 4. Enter their agreed Monthly Gross CTC in INR (e.g., `180000`).
 5. Select Gender and click **Save Staff Profile**.
-6. OmniHR automatically generates a sequential ID (`EMP-xxxx`), derives their Basic (50%), HRA (25%), Special Allowance (25%), assigns standard leave quotas (10 CL, 10 SL, 15 EL), generates a PF UAN, and syncs the record into local storage.
+6. OmniHR automatically generates a sequential ID (`EMP-xxxx`), derives their Basic (50%), HRA (25%), Special Allowance (25%), assigns standard leave quotas (10 CL, 10 SL, 15 EL), generates a PF UAN, and syncs the record into IndexedDB.
 
 ### Workflow 2: Generating and Printing a Monthly Payslip
 1. Navigate to the **Payroll & Compensation** tab (or **Employee Directory**).
@@ -321,7 +363,10 @@ OmniHR implements the following Indian statutory regulations:
 ## 6. Offline Architecture & Data Privacy
 
 - **100% Client-Side Processing:** All data parsing, calculations, and Chart.js graphics execute strictly within your local browser runtime.
-- **LocalStorage Key:** All employee modifications are persisted under the key `omnihr_employees`.
+- **IndexedDB Primary Store:** Business data — employees, policies, leave plans and planner settings — is persisted in the browser's IndexedDB database `omnihr` (stores `employees`, `policies`, `leavePlans`, `meta`).
+- **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and the Admin page reports that they exist.
+- **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
+- **Snapshot Backups:** Export the full business-data JSON snapshot from **Admin** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation.
 - **Restoring Default State:** If you wish to restore the factory 200-employee corporate dataset at any time, click **Reset Demo State** in the sidebar.
 
 ---
@@ -337,10 +382,10 @@ OmniHR implements the following Indian statutory regulations:
 ## 8. Frequently Asked Questions (FAQ)
 
 #### Q1: Can I use OmniHR without an active internet connection?
-**Yes.** Once the application bundle is loaded in your browser, OmniHR is 100% offline-capable. Local storage maintains your state across browser restarts.
+**Yes.** Once the application bundle is loaded in your browser, OmniHR is 100% offline-capable. IndexedDB (with a `localStorage` fallback) maintains your state across browser restarts.
 
 #### Q2: What happens if I import an Excel sheet with custom column names?
 OmniHR includes a flexible column alias matching engine that automatically detects common column titles from Workday, SAP, BambooHR, Darwinbox, and custom sheets. For detailed schema information, consult the [Excel Sheet Handling Guide](EXCEL_SHEET_HANDLING_GUIDE.md).
 
 #### Q3: How do I export employee records for bank disbursement?
-Navigate to the **Excel Data Hub** (or click **Excel Hub** in the header) and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.
+Navigate to the **Admin** page (sidebar **Admin** or the **Admin** header button), find the **Excel Data Hub** card, and click **Download Payroll Sheet (.xlsx)**. This produces a formatted spreadsheet detailing every employee's Net Disbursable Salary and statutory deduction breakdown.

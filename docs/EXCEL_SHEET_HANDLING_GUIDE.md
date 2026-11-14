@@ -133,13 +133,13 @@ Spreadsheets originate from diverse operating systems (Windows, macOS, Linux) an
 
 ```mermaid
 flowchart TD
-    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to Excel Data Hub"]
+    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to Admin > Excel Data Hub"]
     B --> C["Drag & Drop or Click to Select File"]
     C --> D["SheetJS Parses First Sheet into Memory"]
     D --> E["Column Alias Mapping & Type Coercion"]
     E --> F["Pre-Sync Live Preview & Warning Checks"]
     F --> G["Click 'Sync into Live Dashboard'"]
-    G --> H["LocalStorage Updated & View Shifts to Directory"]
+    G --> H["Data Store (IndexedDB) Updated & View Shifts to Directory"]
 ```
 
 ### Step 1: Prepare Your Spreadsheet
@@ -148,7 +148,7 @@ flowchart TD
 - Tip: Download the **Standard Template** from OmniHR to review an ideal pre-formatted structure.
 
 ### Step 2: Upload Workbook
-- Navigate to the **Excel Data Hub** in the sidebar (or click the **Excel Hub** header button).
+- Navigate to the **Admin** page in the sidebar (or click the **Admin** header button) and locate the **Excel Data Hub** card.
 - Drag your spreadsheet file into the upload dropzone, or click the dropzone to browse your local filesystem.
 
 ### Step 3: Review Pre-Sync Preview
@@ -160,7 +160,7 @@ flowchart TD
 
 ### Step 4: Commit Synchronization
 - Click the **Sync into Live Dashboard** button.
-- OmniHR commits the new staff roster into `localStorage` and automatically shifts your view to the **Employee Directory**, where all metrics, charts, and payslips immediately reflect your imported data.
+- OmniHR commits the new staff roster into the app's data store (IndexedDB; `localStorage` is the fallback) and automatically shifts your view to the **Employee Directory**, where all metrics, charts, and payslips immediately reflect your imported data.
 
 ---
 
@@ -222,4 +222,4 @@ OmniHR has been verified with export formats from popular HRIS tools:
 - **Resolution:** Open the file in Microsoft Excel or Google Sheets, select **Save As -> Excel Workbook (.xlsx)**, and upload the newly saved file.
 
 ### Question: "How do I revert to the original 200 employee demo state?"
-- **Answer:** Click the **Reset Demo State** button in the lower left of the sidebar. This removes `omnihr_employees` from `localStorage` and restores the factory initial dataset.
+- **Answer:** Click the **Reset Demo State** button in the lower left of the sidebar. This restores the factory initial dataset (employees, policies, leave plans and planner settings) through the app's data store, replacing what this browser holds.
