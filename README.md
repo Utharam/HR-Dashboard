@@ -26,7 +26,7 @@ This is a front-end demo. Authentication is a local stub: there is no backend, n
 | Work email | `ceo@acme.com` |
 | Password | `demo` |
 
-Any non-empty email/password is accepted by the stub. The **Microsoft**, **Okta** and **SSO by domain** buttons are demonstrable stubs as well.
+Sessions are stored locally and expire after 8 hours. Any non-empty email/password is accepted by the stub. The **Microsoft**, **Okta** and **SSO by domain** buttons are demonstrable stubs as well.
 
 ## Screenshots
 
