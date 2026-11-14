@@ -160,18 +160,24 @@ describe('Admin integration', () => {
     expect(screen.getByRole('button', { name: /Download Payroll Sheet/i })).toBeInTheDocument();
   });
 
-  it('export goes through the store and downloads a dated snapshot file', async () => {
+  it('export downloads a dated snapshot file built from the live datasets', async () => {
     const { store, exportSnapshot } = makeSpyStore();
     await renderApp({ initialData: makeSnapshot(), dataStore: store });
     await openAdmin();
 
     await userEvent.click(screen.getByRole('button', { name: 'Export snapshot' }));
 
-    expect(exportSnapshot).toHaveBeenCalledTimes(1);
+    // The file is serialised from the datasets App passed through - the truth
+    // the screen shows - not by re-reading the store behind the console's back.
+    expect(exportSnapshot).not.toHaveBeenCalled();
     expect(anchorClick).toHaveBeenCalledTimes(1);
     const anchor = anchorClick.mock.instances[0] as HTMLAnchorElement;
     expect(anchor.download).toMatch(/^omnihr-snapshot-\d{4}-\d{2}-\d{2}\.json$/);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+
+    // And the file carries what the console is showing.
+    const parsed = JSON.parse(await (createObjectURL.mock.calls[0][0] as Blob).text());
+    expect(parsed.employees.map((emp: Employee) => emp.id)).toEqual(['EMP-SEED-1']);
   });
 
   it('a confirmed import replaces the store, and App reloads its data from it', async () => {

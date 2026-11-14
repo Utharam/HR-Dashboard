@@ -192,10 +192,24 @@ describe('Admin snapshot card — display', () => {
     expect(screen.getByText('None')).toBeInTheDocument();
     expect(screen.queryByText(/old localStorage copy/i)).toBeNull();
   });
+
+  it('says the legacy copy is the active store when running on the fallback', () => {
+    render(<AdminSection {...baseProps({ backend: 'localstorage', legacyBackup: true })} />);
+
+    expect(screen.getByText('localStorage fallback')).toBeInTheDocument();
+
+    // The legacy copy is what this browser reads and writes on the fallback -
+    // the row must not dress it up as a frozen backup made in an earlier era.
+    const legacyRow = factRow('Legacy copy');
+    expect(legacyRow.textContent).toContain('running on the fallback');
+    expect(legacyRow.textContent).toContain('active store');
+    expect(legacyRow.textContent).not.toMatch(/read-only/i);
+    expect(legacyRow.textContent).not.toMatch(/old localStorage copy/i);
+  });
 });
 
 describe('Admin snapshot card — export', () => {
-  it('exports through the store, downloads the file and records the last export', async () => {
+  it('exports the live datasets, downloads the file and records the last export', async () => {
     const props = baseProps();
     render(<AdminSection {...props} />);
 
@@ -204,17 +218,29 @@ describe('Admin snapshot card — export', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Export snapshot' }));
 
-    expect(props.store?.exportSnapshot).toHaveBeenCalledTimes(1);
+    // The file is built from the live props, never by re-reading the store: the
+    // download must agree with what this session is showing.
+    expect(props.store?.exportSnapshot).not.toHaveBeenCalled();
 
     const anchor = downloadedAnchor();
     expect(anchor.download).toMatch(/^omnihr-snapshot-\d{4}-\d{2}-\d{2}\.json$/);
     expect(anchor.href).toContain('blob:mock-url');
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
 
-    // The file is the store's snapshot, serialised.
+    // The file serialises the datasets the card was given.
     const text = await downloadedBlob().text();
     expect(JSON.parse(text)).toEqual(
-      expect.objectContaining({ v: 1, employees: expect.any(Array) }),
+      expect.objectContaining({
+        v: 1,
+        dataVersion: DATA_SCHEMA_VERSION,
+        employees: expect.arrayContaining([
+          expect.objectContaining({ id: 'EMP-LOCAL-1' }),
+          expect.objectContaining({ id: 'EMP-LOCAL-2' }),
+        ]),
+        policies: [expect.objectContaining({ id: 'POL-LOCAL-1' })],
+        leavePlans: [expect.objectContaining({ id: 'plan-local-1' })],
+        settings: { maxConcurrentLeave: 3 },
+      }),
     );
 
     // The exchange is recorded: persisted for the next visit and shown on the card.
@@ -224,6 +250,37 @@ describe('Admin snapshot card — export', () => {
     expect(factRow('Last imported').textContent).toContain('Never in this browser');
     // A successful export is an info message; it never claims the file is stored anywhere.
     expect(screen.getByRole('alert')).toHaveTextContent(/Snapshot exported/i);
+  });
+
+  it('exports the live datasets even when the store holds different data', async () => {
+    // The mock store holds the IMPORT snapshot's three employees and threshold 4 -
+    // data this session does not render. The file must still carry the live two.
+    const props = baseProps({ store: makeMockStore(IMPORTED_SNAPSHOT) });
+    render(<AdminSection {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export snapshot' }));
+
+    const parsed = JSON.parse(await downloadedBlob().text());
+    expect(
+      parsed.employees.map((emp: Employee) => emp.id),
+    ).toEqual(['EMP-LOCAL-1', 'EMP-LOCAL-2']);
+    expect(parsed.leavePlans).toHaveLength(1);
+    expect(parsed.settings).toEqual({ maxConcurrentLeave: 3 });
+    expect(props.store?.exportSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('shows a danger notice and records nothing when the export fails', async () => {
+    createObjectURL.mockImplementation(() => {
+      throw new Error('download refused');
+    });
+    render(<AdminSection {...baseProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export snapshot' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not be downloaded/i);
+    // A failed export is not an exchange: no timestamp is claimed or stored.
+    expect(localStorage.getItem(SNAPSHOT_META_KEY)).toBeNull();
+    expect(factRow('Last exported').textContent).toContain('Never in this browser');
   });
 
   it('exports the datasets it was given when the session has no store', async () => {

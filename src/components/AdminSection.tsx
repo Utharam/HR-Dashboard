@@ -17,15 +17,18 @@ import { ConfirmDialog } from './ConfirmDialog';
  * This component is deliberately presentational-plus-intents, like every other
  * section: the parent owns the datasets, and the only side effects here are the
  * export download and the `store.importSnapshot` call the user confirmed. The
- * raw file is parsed with `parseSnapshot` BEFORE anything is written, so the
- * store never sees an unvalidated snapshot and a malformed file can never
+ * export serialises the datasets the parent handed over - the live truth this
+ * session renders - rather than re-reading the store, so a lagging store or a
+ * fallback session can never write a file that disagrees with the screen. The
+ * raw import file is parsed with `parseSnapshot` BEFORE anything is written, so
+ * the store never sees an unvalidated snapshot and a malformed file can never
  * half-apply (the store re-validates at its own boundary too; neither half of
  * that contract is trusted by the other).
  *
- * When no `store` is supplied the card still exports - a snapshot of the
- * datasets the parent handed over is exactly as complete - but import is
- * disabled: replacing every dataset has to go through the store's atomic
- * import, and inventing a second write path here would bypass that guarantee.
+ * When no `store` is supplied import is disabled: replacing every dataset has
+ * to go through the store's atomic import, and inventing a second write path
+ * here would bypass that guarantee. Export still works - the datasets in hand
+ * are the whole truth.
  */
 
 const SNAPSHOT_META_KEY = 'omnihr_snapshot_meta';
@@ -139,16 +142,15 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExport = async () => {
-    // With a store, export what the STORE holds - it is the one place the whole
-    // truth is assembled, and `exportSnapshot` may include state App never
-    // touched. Without one, the datasets in hand are the whole truth.
-    const snapshot = store
-      ? await store.exportSnapshot()
-      : createSnapshot({ employees, policies, leavePlans, settings });
-
-    const fileName = snapshotFileName();
+  const handleExport = () => {
+    // The file is built from the LIVE datasets the parent handed over, never by
+    // re-reading the store: the download must agree with what this session is
+    // showing, which a lagging store or a fallback session could not promise.
+    // The whole flow is all-or-nothing - any failure leaves the meta timestamps
+    // untouched and reports itself in a danger notice instead of a success.
     try {
+      const snapshot = createSnapshot({ employees, policies, leavePlans, settings });
+      const fileName = snapshotFileName();
       const blob = new Blob([snapshotToJson(snapshot)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
@@ -158,19 +160,18 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+
+      persistMeta({ lastExportedAt: new Date().toISOString() });
+      setNotice({
+        tone: 'info',
+        text: `Snapshot exported as ${fileName}. Save it to Google Drive, OneDrive or another shared drive - it is your backup.`,
+      });
     } catch {
       setNotice({
         tone: 'danger',
         text: 'The snapshot could not be downloaded in this browser. Try again, or use a different browser.',
       });
-      return;
     }
-
-    persistMeta({ lastExportedAt: new Date().toISOString() });
-    setNotice({
-      tone: 'info',
-      text: `Snapshot exported as ${fileName}. Save it to Google Drive, OneDrive or another shared drive - it is your backup.`,
-    });
   };
 
   const handleFileChosen = async (file: File) => {
@@ -271,11 +272,18 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
             <dd>{BACKEND_LABEL[backend]}</dd>
           </div>
           <div className="admin-fact">
-            <dt>Legacy backup</dt>
+            {/* On the fallback the legacy copy IS the store this browser writes
+                to, not a frozen backup of one - the label and the copy must not
+                pretend otherwise. */}
+            <dt>{backend === 'localstorage' ? 'Legacy copy' : 'Legacy backup'}</dt>
             <dd>
-              {legacyBackup
-                ? 'Kept - the old localStorage copy from before IndexedDB is preserved read-only'
-                : 'None'}
+              {backend === 'localstorage'
+                ? legacyBackup
+                  ? 'Active - this browser is running on the fallback, so the legacy copy is the active store, not a separate frozen backup'
+                  : 'None'
+                : legacyBackup
+                  ? 'Kept - the old localStorage copy from before IndexedDB is preserved read-only'
+                  : 'None'}
             </dd>
           </div>
           <div className="admin-fact">
@@ -292,7 +300,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => void handleExport()}
+            onClick={handleExport}
             disabled={isImporting}
           >
             <Download size={15} aria-hidden="true" /> Export snapshot

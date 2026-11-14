@@ -12,6 +12,7 @@ import {
   plansOnDate,
   toDateKey,
 } from '../utils/leavePlanner';
+import { ConfirmDialog } from './ConfirmDialog';
 import { LeavePlanModal } from './LeavePlanModal';
 
 /**
@@ -22,6 +23,9 @@ import { LeavePlanModal } from './LeavePlanModal';
  * leave plans and settings, and every change here - a saved entry, a deletion,
  * a new coverage threshold - is reported back through a callback. Nothing in
  * this file reads a store, localStorage or the App state.
+ *
+ * A deletion is asked, not assumed: ConfirmDialog names the entry first, and
+ * only its confirm button reports `onDelete` to the parent.
  *
  * Coverage numbers count distinct PEOPLE, not entries: one person with two
  * overlapping bookings is still one desk empty. Cancelled plans are listed in
@@ -64,14 +68,19 @@ const initialsOf = (name: string): string =>
     .map((word) => word.charAt(0).toUpperCase())
     .join('') || '?';
 
+/** True for a local-calendar Sunday: the one weekly non-working day (26-day cycle). */
+const isSundayKey = (dateKey: string): boolean => parseDateKey(dateKey).getDay() === 0;
+
 /** Human description of a plan's paid length; working days exclude Sundays. */
 const describeDuration = (plan: LeavePlan): string => {
   if (!isValidDateKey(plan.startDate) || !isValidDateKey(plan.endDate) || plan.startDate > plan.endDate) {
     return 'invalid dates';
   }
-  if (plan.halfDay && plan.startDate === plan.endDate) {
+  if (plan.halfDay && plan.startDate === plan.endDate && !isSundayKey(plan.startDate)) {
     return `0.5 day (${plan.halfDay})`;
   }
+  // A half-day on the weekly day off is half of nothing: it falls through to
+  // the plain working-day count, which books a Sunday as 0.
   const days = countWorkingDays(plan.startDate, plan.endDate);
   return `${days} working ${days === 1 ? 'day' : 'days'}`;
 };
@@ -115,6 +124,10 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
 
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [modal, setModal] = useState<DayModal | null>(null);
+  // The entry awaiting its deletion confirmation. Holding the whole plan lets
+  // the dialog name what is about to be lost, the way Admin's import dialog
+  // names both sides of the replacement.
+  const [pendingDelete, setPendingDelete] = useState<LeavePlan | null>(null);
 
   // The threshold field keeps a local draft so clearing it (an empty input while
   // the user types a new number) is a visible state, not an instant snap-back to
@@ -156,6 +169,12 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
   const counts = dailyLeaveCounts(activePlans, monthStartKey, monthEndKey);
   const threshold = settings.maxConcurrentLeave;
   const peaks = peakDays(counts, threshold);
+  // The tile names the FULLEST day, not merely the earliest one: `peakDays`
+  // sorts by date, and the strict `>` keeps the earliest day on ties.
+  const topPeak = peaks.reduce<(typeof peaks)[number] | null>(
+    (best, peak) => (best === null || peak.count > best.count ? peak : best),
+    null,
+  );
 
   const employeeById = new Map(employees.map((emp) => [emp.id, emp]));
   const nameOf = (employeeId: string): string =>
@@ -212,10 +231,14 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
     const from = plan.startDate > monthStartKey ? plan.startDate : monthStartKey;
     const to = plan.endDate < monthEndKey ? plan.endDate : monthEndKey;
     if (from > to) continue;
-    bookedWorkingDays +=
-      plan.halfDay && plan.startDate === plan.endDate && from === plan.startDate
-        ? 0.5
-        : countWorkingDays(from, to);
+    // A half-day only halves a WORKING day: on the weekly day off the entry
+    // falls through to `countWorkingDays`, which books a Sunday as 0.
+    const halfOnWorkingDay =
+      plan.halfDay &&
+      plan.startDate === plan.endDate &&
+      from === plan.startDate &&
+      !isSundayKey(plan.startDate);
+    bookedWorkingDays += halfOnWorkingDay ? 0.5 : countWorkingDays(from, to);
   }
   const bookedLabel = Number.isInteger(bookedWorkingDays)
     ? String(bookedWorkingDays)
@@ -364,11 +387,11 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
         <div className="omni-card kpi-card kpi-card--compact">
           <span className="kpi-label">Peak day this month</span>
           <div className="kpi-value text-warning">
-            {peaks.length > 0 ? SHORT_DAY_LABEL.format(parseDateKey(peaks[0].dateKey)) : '—'}
+            {topPeak ? SHORT_DAY_LABEL.format(parseDateKey(topPeak.dateKey)) : '—'}
           </div>
           <span className="kpi-sub">
-            {peaks.length > 0
-              ? `${peaks[0].count} people away`
+            {topPeak
+              ? `${topPeak.count} people away`
               : `below the threshold of ${threshold}`}
           </span>
         </div>
@@ -407,8 +430,12 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                 <tr key={cells[week * 7].dateKey}>
                   {cells.slice(week * 7, week * 7 + 7).map((cell) => {
                     const date = parseDateKey(cell.dateKey);
-                    const count = counts.get(cell.dateKey) ?? 0;
+                    // The badge and the accessible name count the deduplicated
+                    // entries on the ACTUAL day, so a plan spilling over from an
+                    // adjacent month still shows on its leading/trailing cell.
+                    // The month-scoped `counts` map stays reserved for the peaks.
                     const entries = activeEntriesOn(cell.dateKey);
+                    const count = entries.length;
                     const chips = entries.slice(0, 3);
                     const extra = entries.length - chips.length;
                     const isSunday = date.getDay() === 0;
@@ -523,7 +550,7 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                         <button
                           type="button"
                           className="btn btn-danger btn-sm"
-                          onClick={() => onDelete(entry.id)}
+                          onClick={() => setPendingDelete(entry)}
                         >
                           Delete
                         </button>
@@ -565,11 +592,23 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
               max={26}
               value={thresholdState.text}
               onChange={(e) => {
-                setThresholdState((current) => ({ ...current, text: e.target.value }));
-                const next = Number(e.target.value);
-                if (Number.isFinite(next) && next >= 1) {
-                  onSettingsChange({ maxConcurrentLeave: next });
+                const text = e.target.value;
+                setThresholdState((current) => ({ ...current, text }));
+                // Only a whole, positive number is ever reported up: decimals,
+                // blanks and junk stay as a visible draft until fixed or blurred.
+                const parsed = Number(text);
+                if (Number.isInteger(parsed) && parsed >= 1) {
+                  onSettingsChange({ maxConcurrentLeave: parsed });
                 }
+              }}
+              onBlur={() => {
+                // Leaving the field snaps the draft back to the threshold the
+                // parent actually holds, so a half-typed decimal or an empty
+                // field cannot stand in for a real value.
+                setThresholdState((current) => ({
+                  ...current,
+                  text: String(settings.maxConcurrentLeave),
+                }));
               }}
             />
             <span className="planner-hint">
@@ -592,6 +631,23 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
               ? { startDate: modal.anchorDate, endDate: modal.anchorDate }
               : null
           }
+        />
+      )}
+
+      {/* Asked last so it stacks above the calendar panels, the same placement
+          rule the modals and the Admin import dialog follow. The message names
+          the entry it is about to remove. */}
+      {pendingDelete && (
+        <ConfirmDialog
+          isOpen
+          title="Delete this leave entry?"
+          message={`This removes ${nameOf(pendingDelete.employeeId)}'s leave entry (${describeDuration(pendingDelete)}). This cannot be undone.`}
+          confirmLabel="Delete entry"
+          onConfirm={() => {
+            onDelete(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </div>

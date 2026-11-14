@@ -1,7 +1,7 @@
 import React, { useId, useState } from 'react';
 import { X } from 'lucide-react';
 import type { Employee, HalfDay, LeavePlan, LeaveStatus, LeaveType } from '../types';
-import { countWorkingDays, isValidDateKey } from '../utils/leavePlanner';
+import { countWorkingDays, isValidDateKey, parseDateKey } from '../utils/leavePlanner';
 import { Dialog } from './Dialog';
 
 /**
@@ -15,6 +15,10 @@ import { Dialog } from './Dialog';
  * half-day only on a single day, no duplicate identical entry); overlaps are
  * flagged live but allowed, because two people occasionally book the same window
  * and HR decides - the UI should not silently veto what the data permits.
+ *
+ * Changing the dates clears a picked half-day the moment the range stops being a
+ * single day, so the disabled select reads "Full day" instead of still showing a
+ * value that would block the save.
  */
 
 const LEAVE_TYPES: LeaveType[] = [
@@ -88,7 +92,15 @@ export const LeavePlanModal: React.FC<LeavePlanModalProps> = ({
     if (!isValidDateKey(startDate) || !isValidDateKey(endDate) || endDate < startDate) {
       return 'select valid dates';
     }
-    if (startDate === endDate && halfDay) return `0.5 day (${halfDay})`;
+    // A half-day on the weekly day off is half of nothing: it reads as the full
+    // 0-working-day entry the planner and the summary book it at.
+    if (
+      startDate === endDate &&
+      halfDay &&
+      parseDateKey(startDate).getDay() !== 0
+    ) {
+      return `0.5 day (${halfDay})`;
+    }
     const days = countWorkingDays(startDate, endDate);
     return `${days} working ${days === 1 ? 'day' : 'days'}`;
   })();
@@ -204,7 +216,13 @@ export const LeavePlanModal: React.FC<LeavePlanModalProps> = ({
               type="date"
               className="omni-input"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                // A range that stops being a single day cannot keep a half-day:
+                // clear it now so the disabled select reads "Full day" and the
+                // form can still be saved.
+                if (e.target.value !== endDate) setHalfDay(null);
+              }}
             />
           </div>
           <div className="omni-field">
@@ -216,7 +234,10 @@ export const LeavePlanModal: React.FC<LeavePlanModalProps> = ({
               type="date"
               className="omni-input"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                if (e.target.value !== startDate) setHalfDay(null);
+              }}
             />
           </div>
         </div>
