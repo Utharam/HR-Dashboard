@@ -8,6 +8,7 @@ import { OverviewSection } from './components/OverviewSection';
 import { DirectorySection } from './components/DirectorySection';
 import { AttendanceSection } from './components/AttendanceSection';
 import { PayrollSection } from './components/PayrollSection';
+import { PayslipDesignerSection } from './components/PayslipDesignerSection';
 import { PerformanceSection } from './components/PerformanceSection';
 import { RecruitmentSection } from './components/RecruitmentSection';
 import { RetentionSection } from './components/RetentionSection';
@@ -29,6 +30,9 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PayrollEmployee,
   PlannerEvent,
   PlannerSettings,
@@ -51,8 +55,9 @@ import { createInitialLeavePlans } from './data/initialLeavePlans';
 import { createInitialAttendance } from './data/initialAttendance';
 import { createInitialHolidays } from './data/initialHolidays';
 import { createInitialPlannerEvents } from './data/initialPlannerEvents';
-import { computePayroll, isActive } from './utils/payroll';
-import { rollupMonth } from './utils/attendance';
+import { computePayrollWithStructure, createDefaultPayStructure } from './utils/payStructure';
+import { isActive } from './utils/payroll';
+import { monthKey as attendanceMonthKey, rollupMonth } from './utils/attendance';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
 import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
 import {
@@ -60,6 +65,9 @@ import {
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -84,6 +92,13 @@ const PLANNER_EVENTS_KEY = 'omnihr_planner_events';
 // writes, so a browser that switches backend finds the same data either way.
 const ATTENDANCE_KEY = 'omnihr_attendance';
 const HOLIDAYS_KEY = 'omnihr_holidays';
+// The v4 pay datasets follow the same rule on the legacy path: the company pay
+// structure travels as a one-row envelope (like the planner settings it is a
+// single object, not a row list), the overrides and the bonuses as plain row
+// lists. These are the exact keys the store layer reads and writes.
+const PAY_STRUCTURE_KEY = 'omnihr_pay_structure';
+const PAY_OVERRIDES_KEY = 'omnihr_pay_overrides';
+const PAYROLL_BONUSES_KEY = 'omnihr_payroll_bonuses';
 
 /**
  * The tabs whose sections work on the filtered roster (design decision D2): the
@@ -137,12 +152,23 @@ const EMPLOYEES_BACKUP_KEY = 'omnihr_employees_backup';
  * `events` names the Planner's event calendar, which saves separately from the
  * leave plans even though the two share the page. `attendance` and `holidays` name
  * the daily ledger and the company calendar, which are separate datasets with
- * separate saves.
+ * separate saves. `pay-structure`, `pay-overrides` and `bonuses` name the three
+ * v4 pay datasets, which each save on their own because each is saved through its
+ * own store method.
  *
  * A user must never have to guess whether the register they are looking at is the one
  * that will survive a refresh.
  */
-type NoticeScope = 'employees' | 'policies' | 'leave' | 'events' | 'attendance' | 'holidays';
+type NoticeScope =
+  | 'employees'
+  | 'policies'
+  | 'leave'
+  | 'events'
+  | 'attendance'
+  | 'holidays'
+  | 'pay-structure'
+  | 'pay-overrides'
+  | 'bonuses';
 
 type AppNotice =
   | { kind: 'discarded'; scope: NoticeScope }
@@ -181,6 +207,24 @@ const SAVE_NOTICE_COPY: Record<NoticeScope, Record<'quota' | 'unavailable', stri
     unavailable:
       'Your holiday change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
   },
+  'pay-structure': {
+    quota:
+      'Your pay structure change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your pay structure change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
+  'pay-overrides': {
+    quota:
+      'Your pay override change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your pay override change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
+  bonuses: {
+    quota:
+      'Your bonus change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your bonus change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
 };
 
 const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
@@ -196,6 +240,12 @@ const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
     'The attendance records saved in this browser could not be read and have been set aside. The daily ledger is empty in their place - any marks you made or imported earlier are gone. Mark attendance again or re-import the monthly matrix to continue.',
   holidays:
     'The company holidays saved in this browser could not be read and have been set aside. The holiday calendar is empty in their place - any holiday you added is gone. Re-add the holidays to continue.',
+  'pay-structure':
+    'The company pay structure saved in this browser could not be read and has been set aside. The default structure is showing in its place - the components, toggles and bonus rules that were configured are gone. Re-enter them or re-import your snapshot to continue.',
+  'pay-overrides':
+    'The pay overrides saved in this browser could not be read and have been set aside. Every employee follows the company template in their place - the custom structures that were saved are gone. Re-enter them or re-import your snapshot to continue.',
+  bonuses:
+    'The payroll bonuses saved in this browser could not be read and have been set aside. The bonus lists are empty in their place - the bonuses that were recorded are gone. Re-enter them or re-import your snapshot to continue.',
 };
 
 /**
@@ -207,6 +257,20 @@ const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
  */
 const RELOAD_FAILED_NOTICE_COPY =
   'The snapshot import was saved, but reading it back to refresh the screen failed. What you see may still be the data from before the import. Close and reopen OmniHR to load the imported data before making further changes.';
+
+/**
+ * The legacy-path read of the company pay structure: a one-row envelope like the
+ * planner settings, with "no usable row" resolving to the DEFAULT structure.
+ *
+ * `status` rides along so the caller can raise the discarded banner - an empty
+ * envelope is 'empty' (no banner, default structure), an unreadable one is
+ * 'recovered' (banner).
+ */
+function readPersistedStructure(): { value: PayStructure; status: 'loaded' | 'empty' | 'recovered' } {
+  const result = loadPersisted(PAY_STRUCTURE_KEY, isPayStructureRow, [createDefaultPayStructure()]);
+  const value = result.rows[0] ?? createDefaultPayStructure();
+  return { value, status: result.status };
+}
 
 export const App: React.FC<{
   onSignOut?: () => void;
@@ -292,6 +356,20 @@ export const App: React.FC<{
       holidays: initialData
         ? { rows: initialData.holidays, status: 'loaded' as const }
         : loadPersisted(HOLIDAYS_KEY, isHolidayRow, []),
+      // The v4 pay datasets read the same keys the store layer reads. An absent
+      // key means the DEFAULT structure and empty override/bonus lists, never a
+      // half-written dataset; the structure travels as a one-row envelope like
+      // the planner settings, and an unusable payload is `recovered`, which is
+      // what raises the banner below.
+      payStructure: initialData
+        ? { value: initialData.payStructure, status: 'loaded' as const }
+        : readPersistedStructure(),
+      payOverrides: initialData
+        ? { rows: initialData.payOverrides, status: 'loaded' as const }
+        : loadPersisted(PAY_OVERRIDES_KEY, isPayStructureOverrideRow, []),
+      payrollBonuses: initialData
+        ? { rows: initialData.payrollBonuses, status: 'loaded' as const }
+        : loadPersisted(PAYROLL_BONUSES_KEY, isPayrollBonusRow, []),
     }),
     [initialData],
   );
@@ -317,6 +395,19 @@ export const App: React.FC<{
   // save effects below.
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialLoad.attendance.rows);
   const [holidays, setHolidays] = useState<Holiday[]>(initialLoad.holidays.rows);
+
+  // The v4 pay datasets share the same lifecycle once more: the company pay
+  // structure (one object), the per-employee overrides and the monthly bonuses.
+  // The Payslip Designer edits all three through the callbacks below and the
+  // save effects persist them; the Payroll tab, the payslip and the export read
+  // them through `computePayrollWithStructure`.
+  const [payStructure, setPayStructure] = useState<PayStructure>(initialLoad.payStructure.value);
+  const [payOverrides, setPayOverrides] = useState<PayStructureOverride[]>(
+    initialLoad.payOverrides.rows,
+  );
+  const [payrollBonuses, setPayrollBonuses] = useState<PayrollBonus[]>(
+    initialLoad.payrollBonuses.rows,
+  );
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -403,6 +494,15 @@ export const App: React.FC<{
     }
     if (initialLoad.holidays.status === 'recovered') {
       return { kind: 'discarded', scope: 'holidays' };
+    }
+    if (initialLoad.payStructure.status === 'recovered') {
+      return { kind: 'discarded', scope: 'pay-structure' };
+    }
+    if (initialLoad.payOverrides.status === 'recovered') {
+      return { kind: 'discarded', scope: 'pay-overrides' };
+    }
+    if (initialLoad.payrollBonuses.status === 'recovered') {
+      return { kind: 'discarded', scope: 'bonuses' };
     }
     return null;
   });
@@ -517,6 +617,43 @@ export const App: React.FC<{
     setHolidays(prev => prev.filter(h => h.id !== id));
   };
 
+  // ── Pay-structure intents (the Payslip Designer) ─────────────────────────
+  // A company save is a REPLACE of the whole structure: the draft the designer
+  // validates is the complete next template, not a patch of the current one.
+  const handleSavePayStructure = (structure: PayStructure) => {
+    setPayStructure(structure);
+  };
+
+  // An override save is an UPSERT BY EMPLOYEE, like attendance's upsert by id:
+  // overrides are keyed by `employeeId` everywhere downstream (the store refuses
+  // duplicates), so a replace and an add are the same callback and a second
+  // override for one person can never reach a save.
+  const handleSavePayOverride = (override: PayStructureOverride) => {
+    setPayOverrides(prev =>
+      prev.some(o => o.employeeId === override.employeeId)
+        ? prev.map(o => (o.employeeId === override.employeeId ? override : o))
+        : [...prev, override],
+    );
+  };
+
+  const handleRemovePayOverride = (employeeId: string) => {
+    setPayOverrides(prev => prev.filter(o => o.employeeId !== employeeId));
+  };
+
+  // Bonus intents, upsert by id: the bonus modal reuses the id of the bonus it
+  // was opened to edit, so an edit and an add are the same callback.
+  const handleSavePayrollBonus = (bonus: PayrollBonus) => {
+    setPayrollBonuses(prev =>
+      prev.some(b => b.id === bonus.id)
+        ? prev.map(b => (b.id === bonus.id ? bonus : b))
+        : [...prev, bonus],
+    );
+  };
+
+  const handleDeletePayrollBonus = (id: string) => {
+    setPayrollBonuses(prev => prev.filter(b => b.id !== id));
+  };
+
   /**
    * A confirmed snapshot import wrote EVERY dataset straight into the store, so the
    * state App holds is now stale from six directions at once. Reloading from the
@@ -548,6 +685,11 @@ export const App: React.FC<{
         // (v2), so the screen follows the store for them as well.
         setAttendance(loaded.snapshot.attendance);
         setHolidays(loaded.snapshot.holidays);
+        // And so are the v4 pay datasets: the company template, the overrides
+        // and the bonuses the snapshot carried replace what was on screen.
+        setPayStructure(loaded.snapshot.payStructure);
+        setPayOverrides(loaded.snapshot.payOverrides);
+        setPayrollBonuses(loaded.snapshot.payrollBonuses);
         setConfirmation(null);
         clearPersisted(EMPLOYEES_BACKUP_KEY);
       })
@@ -762,6 +904,86 @@ export const App: React.FC<{
     }
   }, [dataStore, holidays]);
 
+  // The three v4 pay datasets persist under the identical contract, each through
+  // its own store method (savePayStructure / savePayOverrides / savePayrollBonuses)
+  // because each is a dataset the store vouches for on its own. On the legacy
+  // path the structure is written as a ONE-ROW envelope - the exact shape the
+  // read helper above and the store layer's fallback both read back.
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.savePayStructure(payStructure).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'pay-structure',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(PAY_STRUCTURE_KEY, [payStructure]);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'pay-structure', reason: result.reason });
+    }
+  }, [dataStore, payStructure]);
+
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.savePayOverrides(payOverrides).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'pay-overrides',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(PAY_OVERRIDES_KEY, payOverrides);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'pay-overrides', reason: result.reason });
+    }
+  }, [dataStore, payOverrides]);
+
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.savePayrollBonuses(payrollBonuses).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'bonuses',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(PAYROLL_BONUSES_KEY, payrollBonuses);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'bonuses', reason: result.reason });
+    }
+  }, [dataStore, payrollBonuses]);
+
   // Global Filtered Employees
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -786,6 +1008,9 @@ export const App: React.FC<{
   const [today] = useState(() => new Date());
   const currentYear = today.getFullYear();
   const currentMonthIndex = today.getMonth();
+  // The payroll month everything reads bonuses for: the same key the daily
+  // rollup covers, so "this month" means one month everywhere on the page.
+  const currentMonthKey = attendanceMonthKey(currentYear, currentMonthIndex);
 
   const currentMonthRollup = useMemo(
     () => rollupMonth(attendance, employees, holidays, currentYear, currentMonthIndex),
@@ -868,9 +1093,19 @@ export const App: React.FC<{
     // written into the file, which is how an unresolved import becomes a real payment.
     // The roster export above is deliberately NOT filtered — it is the master list,
     // not a disbursement.
+    //
+    // Every figure is priced by `computePayrollWithStructure` - the same
+    // calculation the Payroll tab, the payslip and the designer preview use - so
+    // a custom structure or an override is exported as it is actually paid, and
+    // the month's bonuses ride along in their own column.
     const payrollRun = payrollEmployees.filter(isActive);
     const data = payrollRun.map(e => {
-      const p = computePayroll(e);
+      const p = computePayrollWithStructure(e, {
+        structure: payStructure,
+        overrides: payOverrides,
+        bonuses: payrollBonuses,
+        monthKey: currentMonthKey,
+      });
 
       return {
         'Employee ID': e.id,
@@ -878,10 +1113,12 @@ export const App: React.FC<{
         'Department': e.department,
         'Designation': e.role,
         'Location': e.location,
-        'Monthly Gross CTC': p.gross,
-        'Basic (50%)': p.basic,
-        'HRA (25%)': p.hra,
-        'Special Allowance (25%)': p.specialAllowance,
+        'Monthly CTC': e.monthlyCTC,
+        'Gross Earnings': p.gross + p.bonusTotal,
+        'Bonus': p.bonusTotal,
+        'Basic': p.basic,
+        'HRA': p.hra,
+        'Special Allowance': p.specialAllowance,
         'EPF (12% @ ₹15k cap)': p.epf,
         'Professional Tax': p.professionalTax,
         'Loss of Pay (LOP)': p.lossOfPay,
@@ -905,15 +1142,17 @@ export const App: React.FC<{
   const handleResetData = () => setIsResetRequested(true);
 
   const handleConfirmResetData = () => {
-    // ALL SEVEN business datasets reset, not just the register. A reset that restored
+    // ALL TEN business datasets reset, not just the register. A reset that restored
     // employees but kept a half-edited policy set, a threshold someone had pushed to
-    // 9, events someone added for a different demo story, or an attendance ledger
-    // still carrying last week's corrections would not be the demo state the dialog
-    // promises, and the next person demoing the app inherits the leftovers. The
-    // ledger seed is the demo roster's current-month records (D11), the calendar
-    // seed is the fixed 2026 national holidays (D9) and the event calendar seed is
-    // the demo roster's coming-weeks events, exactly what the stores install on a
-    // first visit.
+    // 9, events someone added for a different demo story, an attendance ledger
+    // still carrying last week's corrections, or a pay structure someone had
+    // re-shaped with overrides and bonuses left behind would not be the demo state
+    // the dialog promises, and the next person demoing the app inherits the
+    // leftovers. The ledger seed is the demo roster's current-month records (D11),
+    // the calendar seed is the fixed 2026 national holidays (D9), the event
+    // calendar seed is the demo roster's coming-weeks events, and the pay datasets
+    // return to the default structure with no overrides and no bonuses - exactly
+    // what the stores install on a first visit.
     setEmployees(INITIAL_EMPLOYEES);
     setPolicies(INITIAL_POLICIES);
     setLeavePlans(createInitialLeavePlans());
@@ -921,10 +1160,13 @@ export const App: React.FC<{
     setPlannerEvents(createInitialPlannerEvents());
     setAttendance(createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026)));
     setHolidays(createInitialHolidays(2026));
+    setPayStructure(createDefaultPayStructure());
+    setPayOverrides([]);
+    setPayrollBonuses([]);
     setIsResetRequested(false);
     setConfirmation({
       text:
-        'Demo data reset: the register is back to the 200 staff Master Dataset, HR policies, leave plans, planner events and planner settings are back to their defaults, and the daily attendance ledger and company holiday calendar are back to their demo seed.',
+        'Demo data reset: the register is back to the 200 staff Master Dataset, HR policies, leave plans, planner events and planner settings are back to their defaults, the daily attendance ledger and company holiday calendar are back to their demo seed, and the company pay structure is back to its default with pay overrides and bonuses cleared.',
     });
   };
 
@@ -1217,10 +1459,41 @@ export const App: React.FC<{
           />
         )}
 
+        {/*
+          The payroll register reads the SAME structure-aware calculation the
+          payslip, the designer preview and the payroll export use, with this
+          month's bonuses. The bonus card's add/edit/delete ride the App
+          handlers, which persist the bonuses dataset like every other.
+        */}
         {activeTab === 'payroll' && (
           <PayrollSection 
             employees={payrollEmployees}
+            structure={payStructure}
+            overrides={payOverrides}
+            bonuses={payrollBonuses}
+            monthKey={currentMonthKey}
             onSelectEmployee={setSelectedEmployee}
+            onSaveBonus={handleSavePayrollBonus}
+            onDeleteBonus={handleDeletePayrollBonus}
+          />
+        )}
+
+        {/*
+          The Payslip Designer is its own page (D6): it owns the company
+          template, the per-employee overrides and the performance-bonus rules,
+          and carries no page toolbar - its controls live on the page. It edits
+          DRAFTS; App's handlers persist what the user confirms.
+        */}
+        {activeTab === 'payslip' && (
+          <PayslipDesignerSection
+            employees={employees}
+            payStructure={payStructure}
+            payOverrides={payOverrides}
+            payrollBonuses={payrollBonuses}
+            monthKey={currentMonthKey}
+            onSaveStructure={handleSavePayStructure}
+            onSaveOverride={handleSavePayOverride}
+            onRemoveOverride={handleRemovePayOverride}
           />
         )}
 
@@ -1279,6 +1552,9 @@ export const App: React.FC<{
               plannerEvents={plannerEvents}
               attendance={attendance}
               holidays={holidays}
+              payStructure={payStructure}
+              payOverrides={payOverrides}
+              payrollBonuses={payrollBonuses}
               settings={plannerSettings}
               store={dataStore}
               backend={backend}
@@ -1317,10 +1593,18 @@ export const App: React.FC<{
         )}
       </main>
 
-      {/* Modals */}
+      {/* Modals. The payslip inside is priced by the same structure-aware
+          calculation the Payroll tab uses: the company template, the per-employee
+          overrides and this month's bonuses ride along. */}
       <EmployeeModal 
         employee={selectedEmployee} 
         onClose={() => setSelectedEmployee(null)} 
+        payrollContext={{
+          structure: payStructure,
+          overrides: payOverrides,
+          bonuses: payrollBonuses,
+          monthKey: currentMonthKey,
+        }}
       />
 
       <AddEmployeeModal 
@@ -1341,7 +1625,7 @@ export const App: React.FC<{
       <ConfirmDialog
         isOpen={isResetRequested}
         title="Reset application to the Master Demo state?"
-        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, HR policies, leave plans, planner events and planner settings return to their defaults, and the daily attendance ledger and company holiday calendar are restored to their demo seed. This cannot be undone."
+        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger and company holiday calendar are restored to their demo seed, and the company pay structure returns to its default with pay overrides and bonuses cleared. This cannot be undone."
         confirmLabel="Reset demo data"
         onConfirm={handleConfirmResetData}
         onCancel={() => setIsResetRequested(false)}

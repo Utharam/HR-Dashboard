@@ -3116,3 +3116,254 @@ button.attendance-cell:focus-visible {
   letter-spacing: normal;
   white-space: nowrap;
 }
+
+/* ── Payslip designer ─────────────────────────────────────────────────────
+   The Payslip Designer's two working areas (company template + employee
+   overrides), the component editor they share and the payroll page's bonus
+   card. Same token discipline as the planner/admin/attendance sections above;
+   the only literals are the minmax() track widths and the stacking
+   breakpoint, which are layout measurements. ───────────────────────────── */
+
+/* Employee picker: search + select on one row, stacked on a phone. */
+.designer-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--gap-tight);
+  margin-top: var(--space-3);
+}
+@media (max-width: 640px) {
+  .designer-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Component editor rows. Five aligned columns on a wide screen; the grid
+   re-flows to two columns on a phone with the name full-width, which is why
+   every cell is an `omni-field` with its own label rather than one header
+   row - a stacked grid keeps its names that way. */
+.designer-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.designer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.designer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(72px, auto) minmax(64px, auto);
+  gap: var(--gap-tight);
+  align-items: end;
+  padding: var(--space-2);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.designer-row__basic {
+  align-items: center;
+  text-align: center;
+}
+.designer-row__basic input[type='radio'] {
+  width: var(--space-4);
+  height: var(--space-4);
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.designer-row__basic,
+.designer-row__remove {
+  justify-content: center;
+  justify-items: center;
+}
+.designer-editor__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+@media (max-width: 640px) {
+  .designer-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .designer-row__name {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Statutory toggles and the performance-bonus rules grid. */
+.designer-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.designer-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.designer-rules__title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--text-bright);
+}
+.designer-rules__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gap-tight);
+}
+.designer-rule {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-micro);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.designer-rule__rating {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.designer-rule .omni-input {
+  max-width: 92px;
+  text-align: right;
+  padding: 5px var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+.designer-rule__unit {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Quiet helper text shared across the designer and the bonus card. */
+.designer-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  line-height: var(--lh-snug);
+}
+
+/* Page-level action rows: the draft actions sit right-aligned, next to the
+   errors that disable them. */
+.designer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+
+/* Override status strip: who is being customised and what they currently run
+   on, in one row that wraps on a phone. */
+.designer-override-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+  padding: var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.designer-override-status__who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-micro);
+}
+.designer-override-status__who strong {
+  font-size: var(--fs-base);
+  color: var(--text-bright);
+}
+.designer-override-status__state {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-micro);
+}
+.designer-override-note {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+}
+
+/* Live preview: the payslip lines inside an inset well, headed by the person
+   being priced. */
+.designer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.designer-preview__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.designer-preview__body {
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--space-4);
+}
+
+/* Bonuses this month (Payroll page): one row per bonus, who + kind + label on
+   the left, amount and edit/delete on the right. */
+.bonus-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.bonus-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+  padding: var(--space-3);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.bonus-row__who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-micro);
+  min-width: 0;
+}
+.bonus-row__name {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--text-bright);
+}
+.bonus-row__label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.bonus-row__side {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
+}
+.bonus-row__amount {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  color: var(--success-text);
+  font-variant-numeric: tabular-nums;
+}
+.bonus-row__actions {
+  display: flex;
+  gap: var(--gap-micro);
+}

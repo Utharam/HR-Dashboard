@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CreditCard,
+  ReceiptText,
   TrendingUp,
   Briefcase,
   ShieldCheck,
@@ -41,6 +42,7 @@ const LEADING_ITEMS: NavLeaf[] = [
   { id: 'attendance', label: 'Time & Attendance', icon: <CalendarCheck size={18} /> },
   { id: 'leave', label: 'Planner', icon: <CalendarDays size={18} /> },
   { id: 'payroll', label: 'Payroll & Compensation', icon: <CreditCard size={18} /> },
+  { id: 'payslip', label: 'Payslip Designer', icon: <ReceiptText size={18} /> },
   { id: 'performance', label: 'Performance & 9-Box', icon: <TrendingUp size={18} /> },
 ];
 
