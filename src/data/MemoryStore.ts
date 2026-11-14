@@ -17,6 +17,9 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types'
@@ -24,6 +27,7 @@ import {
   DEFAULT_PLANNER_SETTINGS,
   hasUniqueHolidayDates,
   hasUniqueIds,
+  hasUniqueOverrideEmployeeIds,
   type DataSnapshot,
   type DataStore,
   type LoadedData,
@@ -32,6 +36,7 @@ import {
   validateDataSnapshot,
 } from './DataStore'
 import { DATA_SCHEMA_VERSION } from '../utils/storage'
+import { createDefaultPayStructure } from '../utils/payStructure'
 import { INITIAL_EMPLOYEES } from './initialData'
 import { INITIAL_POLICIES } from './initialPolicies'
 import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
@@ -41,8 +46,28 @@ import { createInitialPlannerEvents } from './initialPlannerEvents'
 import {
   isAttendanceRecordRow,
   isHolidayRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
 } from '../utils/rowValidators'
+
+function clonePayStructure(structure: PayStructure): PayStructure {
+  return {
+    components: structure.components.map((component) => ({ ...component })),
+    epfEnabled: structure.epfEnabled,
+    professionalTaxEnabled: structure.professionalTaxEnabled,
+    performanceBonusRules: structure.performanceBonusRules.map((rule) => ({ ...rule })),
+    updatedAt: structure.updatedAt,
+  }
+}
+
+function clonePayOverride(override: PayStructureOverride): PayStructureOverride {
+  return {
+    ...override,
+    components: override.components.map((component) => ({ ...component })),
+  }
+}
 
 function cloneSnapshot(snapshot: DataSnapshot): DataSnapshot {
   return {
@@ -57,6 +82,9 @@ function cloneSnapshot(snapshot: DataSnapshot): DataSnapshot {
     attendance: snapshot.attendance.map((row) => ({ ...row })),
     holidays: snapshot.holidays.map((row) => ({ ...row })),
     plannerEvents: snapshot.plannerEvents.map((row) => ({ ...row })),
+    payStructure: clonePayStructure(snapshot.payStructure),
+    payOverrides: snapshot.payOverrides.map(clonePayOverride),
+    payrollBonuses: snapshot.payrollBonuses.map((row) => ({ ...row })),
     settings: { ...snapshot.settings },
   }
 }
@@ -81,7 +109,7 @@ export class MemoryStore implements DataStore {
       (isDemoEmployeeSet(employees) ? createInitialPlannerEvents() : [])
 
     this.snapshot = {
-      v: 3,
+      v: 4,
       dataVersion: DATA_SCHEMA_VERSION,
       exportedAt: initial?.exportedAt ?? new Date().toISOString(),
       employees,
@@ -90,6 +118,9 @@ export class MemoryStore implements DataStore {
       attendance,
       holidays,
       plannerEvents,
+      payStructure: initial?.payStructure ?? createDefaultPayStructure(),
+      payOverrides: initial?.payOverrides ?? [],
+      payrollBonuses: initial?.payrollBonuses ?? [],
       settings: initial?.settings ?? DEFAULT_PLANNER_SETTINGS,
     }
     this.snapshot = cloneSnapshot(this.snapshot)
@@ -152,6 +183,37 @@ export class MemoryStore implements DataStore {
     return { ok: true }
   }
 
+  async savePayStructure(structure: PayStructure): Promise<StoreResult> {
+    if (!isPayStructureRow(structure)) return { ok: false, reason: 'invalid' }
+    this.snapshot = { ...this.snapshot, payStructure: clonePayStructure(structure) }
+    return { ok: true }
+  }
+
+  async savePayOverrides(rows: PayStructureOverride[]): Promise<StoreResult> {
+    if (
+      !rows.every(isPayStructureOverrideRow) ||
+      !hasUniqueOverrideEmployeeIds(rows)
+    ) {
+      return { ok: false, reason: 'invalid' }
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      payOverrides: rows.map(clonePayOverride),
+    }
+    return { ok: true }
+  }
+
+  async savePayrollBonuses(rows: PayrollBonus[]): Promise<StoreResult> {
+    if (!rows.every(isPayrollBonusRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      payrollBonuses: rows.map((row) => ({ ...row })),
+    }
+    return { ok: true }
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     this.snapshot = { ...this.snapshot, settings: { ...settings } }
     return { ok: true }
@@ -178,6 +240,9 @@ export class MemoryStore implements DataStore {
       attendance: [],
       holidays: [],
       plannerEvents: [],
+      payStructure: createDefaultPayStructure(),
+      payOverrides: [],
+      payrollBonuses: [],
       settings: { ...DEFAULT_PLANNER_SETTINGS },
     }
     return { ok: true }

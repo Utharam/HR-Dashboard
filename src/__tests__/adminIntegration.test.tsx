@@ -10,6 +10,7 @@ import {
   type StoreResult,
 } from '../data/DataStore';
 import { DATA_SCHEMA_VERSION } from '../utils/storage';
+import { createDefaultPayStructure } from '../utils/payStructure';
 import { snapshotToJson } from '../data/snapshot';
 import { INITIAL_EMPLOYEES } from '../data/initialData';
 import { INITIAL_POLICIES } from '../data/initialPolicies';
@@ -40,7 +41,7 @@ const ONE_POLICY = { ...INITIAL_POLICIES[0], id: 'POL-SEED-1', title: 'Seed poli
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 3,
+    v: 4,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
@@ -49,6 +50,9 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     attendance: [],
     holidays: [],
     plannerEvents: [],
+    payStructure: createDefaultPayStructure(),
+    payOverrides: [],
+    payrollBonuses: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   };
@@ -70,6 +74,9 @@ function makeSpyStore() {
     saveAttendance: (rows) => inner.saveAttendance(rows),
     saveHolidays: (rows) => inner.saveHolidays(rows),
     savePlannerEvents: (rows) => inner.savePlannerEvents(rows),
+    savePayStructure: (structure) => inner.savePayStructure(structure),
+    savePayOverrides: (rows) => inner.savePayOverrides(rows),
+    savePayrollBonuses: (rows) => inner.savePayrollBonuses(rows),
     saveSettings: (settings) => inner.saveSettings(settings),
     exportSnapshot,
     importSnapshot,
@@ -313,7 +320,7 @@ describe('Admin integration', () => {
 
     await userEvent.upload(
       screen.getByLabelText('Choose snapshot file'),
-      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 4 }),
+      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 5 }),
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/different version/i);

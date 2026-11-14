@@ -43,11 +43,19 @@ import type {
   LeavePlan,
   LeaveStatus,
   LeaveType,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types';
 import { isValidDateKey } from './leavePlanner';
 import { isPlannerEventType } from './plannerEvents';
+import {
+  validatePayStructure,
+  validatePayStructureOverride,
+  validatePayrollBonus,
+} from './payStructure';
 
 /** Fields `filteredEmployees` calls a string method on. */
 const EMPLOYEE_STRING_FIELDS = [
@@ -321,4 +329,30 @@ export function isPlannerSettingsRow(row: unknown): row is PlannerSettings {
 
   const threshold = rec.maxConcurrentLeave;
   return typeof threshold === 'number' && Number.isInteger(threshold) && threshold >= 1;
+}
+
+/**
+ * True when `row` is a usable company `PayStructure`.
+ *
+ * The structural rules (one Basic, at most one Remainder, finite values, a complete
+ * rating 1–5 rule set) live in `payStructure.validatePayStructure` so the designer's
+ * draft validation and the persistence gate cannot drift apart. This guard is the
+ * row-shaped face of that same contract. Extra keys are tolerated: the IndexedDB
+ * record wraps the structure as `{ id: 'company', ...structure }`.
+ *
+ * Uniqueness of component ids is part of structure validity, not sibling-row
+ * uniqueness; overrides and bonuses are checked at the store/snapshot boundary.
+ */
+export function isPayStructureRow(row: unknown): row is PayStructure {
+  return validatePayStructure(row).length === 0;
+}
+
+/** True when `row` is a usable per-employee pay-structure override. */
+export function isPayStructureOverrideRow(row: unknown): row is PayStructureOverride {
+  return validatePayStructureOverride(row).length === 0;
+}
+
+/** True when `row` is a usable `PayrollBonus`. */
+export function isPayrollBonusRow(row: unknown): row is PayrollBonus {
+  return validatePayrollBonus(row).length === 0;
 }

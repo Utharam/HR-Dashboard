@@ -11,6 +11,7 @@ import {
   type DataStore,
 } from '../data/DataStore';
 import { DATA_SCHEMA_VERSION } from '../utils/storage';
+import { createDefaultPayStructure } from '../utils/payStructure';
 import { INITIAL_EMPLOYEES } from '../data/initialData';
 import { INITIAL_POLICIES } from '../data/initialPolicies';
 import type { Employee } from '../types';
@@ -38,7 +39,7 @@ const BACKUP_KEY = 'omnihr_employees_backup';
 const ONE_EMPLOYEE: Employee = { ...INITIAL_EMPLOYEES[0], id: 'EMP-SNAP-1', name: 'Nina Snapshot' };
 
 const SNAPSHOT: DataSnapshot = {
-  v: 3,
+  v: 4,
   dataVersion: DATA_SCHEMA_VERSION,
   exportedAt: '2026-11-14T09:30:00.000Z',
   employees: [ONE_EMPLOYEE],
@@ -47,6 +48,9 @@ const SNAPSHOT: DataSnapshot = {
   attendance: [],
   holidays: [],
   plannerEvents: [],
+  payStructure: createDefaultPayStructure(),
+  payOverrides: [],
+  payrollBonuses: [],
   settings: { ...DEFAULT_PLANNER_SETTINGS },
 };
 
@@ -151,6 +155,9 @@ describe('snapshot import clears the stale Excel Undo', () => {
       saveAttendance: (rows) => inner.saveAttendance(rows),
       saveHolidays: (rows) => inner.saveHolidays(rows),
       savePlannerEvents: (rows) => inner.savePlannerEvents(rows),
+      savePayStructure: (structure) => inner.savePayStructure(structure),
+      savePayOverrides: (rows) => inner.savePayOverrides(rows),
+      savePayrollBonuses: (rows) => inner.savePayrollBonuses(rows),
       saveSettings: (settings) => inner.saveSettings(settings),
       exportSnapshot: () => inner.exportSnapshot(),
       importSnapshot: (snapshot) => inner.importSnapshot(snapshot),

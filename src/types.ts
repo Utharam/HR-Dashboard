@@ -259,6 +259,71 @@ export interface Holiday {
 }
 
 /**
+ * Payroll pay-structure domain.
+ *
+ * A structure is an ordered list of earning components plus the statutory toggles.
+ * Exactly one component is Basic; the remainder component (at most one) absorbs
+ * whatever CTC is left after every other earning. Per-employee overrides are full
+ * copies: an overridden employee is deliberately insulated from later company edits.
+ */
+export type PayComponentBasis =
+  | 'PercentOfCTC'
+  | 'PercentOfBasic'
+  | 'Fixed'
+  | 'Remainder';
+
+export interface PayComponent {
+  id: string;
+  name: string;
+  basis: PayComponentBasis;
+  /** Percent (0–100+) for percent bases; rupees for Fixed; ignored for Remainder. */
+  value: number;
+  /** Exactly one earning component in a structure is Basic. */
+  isBasic?: boolean;
+}
+
+export interface PerformanceBonusRule {
+  /** 1–5, matching Employee.performanceRating. */
+  rating: number;
+  /** Percent of the computed Basic. */
+  percentOfBasic: number;
+}
+
+export interface PayStructure {
+  components: PayComponent[];
+  epfEnabled: boolean;
+  professionalTaxEnabled: boolean;
+  performanceBonusRules: PerformanceBonusRule[];
+  updatedAt: string;
+}
+
+export interface PayStructureOverride {
+  employeeId: string;
+  components: PayComponent[];
+  epfEnabled: boolean;
+  professionalTaxEnabled: boolean;
+  note?: string;
+  updatedAt: string;
+}
+
+export type PayrollBonusKind = 'Performance' | 'Custom';
+
+export interface PayrollBonus {
+  id: string;
+  employeeId: string;
+  /** `YYYY-MM`. */
+  monthKey: string;
+  kind: PayrollBonusKind;
+  label: string;
+  amount: number;
+  /** Performance only, for traceability. */
+  rating?: number;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * Per-employee totals for one month. `workingDays` excludes Sundays and holidays;
  * `holidayDays` and `weeklyOffDays` report the calendar facts that produced it.
  */

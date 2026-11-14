@@ -11,6 +11,7 @@ import {
   type StoreResult,
 } from '../DataStore'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
+import { createDefaultPayStructure } from '../../utils/payStructure'
 import type { LeavePlan } from '../../types'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
@@ -50,7 +51,7 @@ const CUSTOM_PLAN: LeavePlan = {
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 3,
+    v: 4,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
@@ -59,6 +60,9 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     attendance: [],
     holidays: [],
     plannerEvents: [],
+    payStructure: createDefaultPayStructure(),
+    payOverrides: [],
+    payrollBonuses: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   }
@@ -92,6 +96,9 @@ function makeFailingStore(): DataStore {
     saveAttendance: async () => ({ ok: true }),
     saveHolidays: async () => ({ ok: true }),
     savePlannerEvents: async () => ({ ok: true }),
+    savePayStructure: async () => ({ ok: true }),
+    savePayOverrides: async () => ({ ok: true }),
+    savePayrollBonuses: async () => ({ ok: true }),
     saveSettings: async () => ({ ok: true }),
     exportSnapshot: () => Promise.reject(failure),
     importSnapshot: async () => ({ ok: true }),
@@ -113,6 +120,9 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveAttendance: vi.fn(okResult),
     saveHolidays: vi.fn(okResult),
     savePlannerEvents: vi.fn(okResult),
+    savePayStructure: vi.fn(okResult),
+    savePayOverrides: vi.fn(okResult),
+    savePayrollBonuses: vi.fn(okResult),
     saveSettings: vi.fn(okResult),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(okResult),
@@ -211,7 +221,7 @@ describe('DataGate', () => {
     )
 
     expect(await screen.findByTestId('dataset-probe')).toHaveTextContent('1:1:1')
-    expect(snapshot.v).toBe(3)
+    expect(snapshot.v).toBe(4)
   })
 
   it('warns that saved data was replaced when the store reports recovery', async () => {

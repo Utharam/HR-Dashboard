@@ -1,20 +1,24 @@
 /**
  * IndexedDB implementation of `DataStore`.
  *
- * Database layout (version 3):
- *   employees     keyPath `id`
- *   policies      keyPath `id`
- *   leavePlans    keyPath `id`
- *   attendance    keyPath `id`
- *   holidays      keyPath `id`
- *   plannerEvents keyPath `id`
- *   meta          keyPath `key`
+ * Database layout (version 4):
+ *   employees       keyPath `id`
+ *   policies        keyPath `id`
+ *   leavePlans      keyPath `id`
+ *   attendance      keyPath `id`
+ *   holidays        keyPath `id`
+ *   plannerEvents   keyPath `id`
+ *   payStructure    keyPath `id` (one record, id `company`)
+ *   payOverrides    keyPath `employeeId`
+ *   payrollBonuses  keyPath `id`
+ *   meta            keyPath `key`
  *
  * Version 2 adds the daily attendance ledger and the holiday calendar. Version 3 adds
- * the Planner's general events. An existing database is upgraded in place: the new
- * stores are created by `onupgradeneeded`, every existing row is preserved, and the
- * first load after the upgrade seeds the new datasets under the same rules as a fresh
- * migration.
+ * the Planner's general events. Version 4 adds the company pay structure, per-employee
+ * overrides and monthly payroll bonuses. An existing database is upgraded in place:
+ * the new stores are created by `onupgradeneeded`, every existing row is preserved, and
+ * the first load after the upgrade seeds the new datasets under the same rules as a
+ * fresh migration.
  *
  * The first `load()` on a fresh database is also the migration point. It reads the
  * legacy localStorage envelopes through `loadPersisted`, which means a valid old
@@ -40,17 +44,22 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
+  dedupeByEmployeeId,
   dedupeById,
   dedupeByDate,
   hasStoredValue,
   hasUniqueHolidayDates,
   hasUniqueIds,
+  hasUniqueOverrideEmployeeIds,
   type DataSnapshot,
   type DataStore,
   type LoadedData,
@@ -65,23 +74,30 @@ import { createInitialHolidays } from './initialHolidays'
 import { createInitialAttendance } from './initialAttendance'
 import { createInitialPlannerEvents } from './initialPlannerEvents'
 import { loadPersisted, DATA_SCHEMA_VERSION } from '../utils/storage'
+import { createDefaultPayStructure } from '../utils/payStructure'
 import {
   isAttendanceRecordRow,
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
 } from '../utils/rowValidators'
 
-const DB_VERSION = 3
+const DB_VERSION = 4
 const EMPLOYEES_STORE = 'employees'
 const POLICIES_STORE = 'policies'
 const LEAVE_PLANS_STORE = 'leavePlans'
 const ATTENDANCE_STORE = 'attendance'
 const HOLIDAYS_STORE = 'holidays'
 const PLANNER_EVENTS_STORE = 'plannerEvents'
+const PAY_STRUCTURE_STORE = 'payStructure'
+const PAY_OVERRIDES_STORE = 'payOverrides'
+const PAYROLL_BONUSES_STORE = 'payrollBonuses'
 const META_STORE = 'meta'
 
 const ALL_STORES = [
@@ -91,8 +107,18 @@ const ALL_STORES = [
   ATTENDANCE_STORE,
   HOLIDAYS_STORE,
   PLANNER_EVENTS_STORE,
+  PAY_STRUCTURE_STORE,
+  PAY_OVERRIDES_STORE,
+  PAYROLL_BONUSES_STORE,
   META_STORE,
 ]
+
+/** The single company-structure record; the payStructure store is keyed by `id`. */
+const COMPANY_STRUCTURE_ID = 'company'
+
+interface PayStructureRecord extends PayStructure {
+  id: string
+}
 
 interface MetaRecord {
   key: string
@@ -142,6 +168,20 @@ function replaceStore(transaction: IDBTransaction, storeName: string, rows: read
   const store = transaction.objectStore(storeName)
   store.clear()
   for (const row of rows) store.put(row)
+}
+
+function toStructureRecord(structure: PayStructure): PayStructureRecord {
+  return { ...structure, id: COMPANY_STRUCTURE_ID }
+}
+
+function fromStructureRecord(record: PayStructureRecord): PayStructure {
+  return {
+    components: record.components.map((component) => ({ ...component })),
+    epfEnabled: record.epfEnabled,
+    professionalTaxEnabled: record.professionalTaxEnabled,
+    performanceBonusRules: record.performanceBonusRules.map((rule) => ({ ...rule })),
+    updatedAt: record.updatedAt,
+  }
 }
 
 function putMeta(transaction: IDBTransaction, key: string, value: unknown): void {
@@ -229,6 +269,31 @@ export class IndexedDbStore implements DataStore {
     return this.replaceRows(PLANNER_EVENTS_STORE, rows)
   }
 
+  async savePayStructure(structure: PayStructure): Promise<StoreResult> {
+    // A structure with no Basic, two Remainders or a self-referential Basic is not
+    // a salary template; rejecting it here keeps a half-edited draft out of storage.
+    if (!isPayStructureRow(structure)) return { ok: false, reason: 'invalid' }
+    return this.replaceRows(PAY_STRUCTURE_STORE, [toStructureRecord(structure)])
+  }
+
+  async savePayOverrides(rows: PayStructureOverride[]): Promise<StoreResult> {
+    // Overrides key on employeeId: a repeated employee would silently keep one row.
+    if (
+      !rows.every(isPayStructureOverrideRow) ||
+      !hasUniqueOverrideEmployeeIds(rows)
+    ) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return this.replaceRows(PAY_OVERRIDES_STORE, rows)
+  }
+
+  async savePayrollBonuses(rows: PayrollBonus[]): Promise<StoreResult> {
+    if (!rows.every(isPayrollBonusRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return this.replaceRows(PAYROLL_BONUSES_STORE, rows)
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     try {
       await this.withDb((db) =>
@@ -264,6 +329,9 @@ export class IndexedDbStore implements DataStore {
           replaceStore(transaction, ATTENDANCE_STORE, valid.attendance)
           replaceStore(transaction, HOLIDAYS_STORE, valid.holidays)
           replaceStore(transaction, PLANNER_EVENTS_STORE, valid.plannerEvents)
+          replaceStore(transaction, PAY_STRUCTURE_STORE, [toStructureRecord(valid.payStructure)])
+          replaceStore(transaction, PAY_OVERRIDES_STORE, valid.payOverrides)
+          replaceStore(transaction, PAYROLL_BONUSES_STORE, valid.payrollBonuses)
           putMeta(transaction, 'settings', { ...valid.settings })
           putMeta(transaction, 'initialized', true)
           // The import is a complete, deliberate state: the new stores must not be
@@ -290,6 +358,13 @@ export class IndexedDbStore implements DataStore {
           transaction.objectStore(ATTENDANCE_STORE).clear()
           transaction.objectStore(HOLIDAYS_STORE).clear()
           transaction.objectStore(PLANNER_EVENTS_STORE).clear()
+          // The pay structure is a required company setting, not demo content: clear
+          // resets it to the documented default rather than leaving an absent value.
+          replaceStore(transaction, PAY_STRUCTURE_STORE, [
+            toStructureRecord(createDefaultPayStructure()),
+          ])
+          transaction.objectStore(PAY_OVERRIDES_STORE).clear()
+          transaction.objectStore(PAYROLL_BONUSES_STORE).clear()
           // Settings are business data too, but the app always needs a threshold.
           // Reset to the documented default rather than leaving an absent value.
           putMeta(transaction, 'settings', { ...DEFAULT_PLANNER_SETTINGS })
@@ -379,6 +454,21 @@ export class IndexedDbStore implements DataStore {
       isPlannerSettingsRow,
       [DEFAULT_PLANNER_SETTINGS],
     )
+    const payStructureResult = loadPersisted(
+      STORAGE_KEYS.payStructure,
+      isPayStructureRow,
+      [createDefaultPayStructure()],
+    )
+    const payOverridesResult = loadPersisted(
+      STORAGE_KEYS.payOverrides,
+      isPayStructureOverrideRow,
+      [],
+    )
+    const payrollBonusesResult = loadPersisted(
+      STORAGE_KEYS.payrollBonuses,
+      isPayrollBonusRow,
+      [],
+    )
 
     const employees = dedupeById(employeesResult.rows)
     const policies = dedupeById(policiesResult.rows)
@@ -387,6 +477,11 @@ export class IndexedDbStore implements DataStore {
     const holidaysById = dedupeById(holidaysResult.rows)
     const holidaysDeduped = dedupeByDate(holidaysById.rows)
     const plannerEventsDeduped = dedupeById(plannerEventsResult.rows)
+    // The pay structure key holds a one-row envelope; a corrupt or absent payload
+    // falls back to the default template, never to a half-written structure.
+    const payStructure = payStructureResult.rows[0] ?? createDefaultPayStructure()
+    const payOverridesDeduped = dedupeByEmployeeId(payOverridesResult.rows)
+    const payrollBonusesDeduped = dedupeById(payrollBonusesResult.rows)
     const leavePlansUnusable =
       !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
     const leavePlans = leavePlansUnusable
@@ -419,13 +514,18 @@ export class IndexedDbStore implements DataStore {
       holidaysResult.status === 'recovered' ||
       plannerEventsResult.status === 'recovered' ||
       settingsResult.status === 'recovered' ||
+      payStructureResult.status === 'recovered' ||
+      payOverridesResult.status === 'recovered' ||
+      payrollBonusesResult.status === 'recovered' ||
       employees.repaired ||
       policies.repaired ||
       leavePlansDeduped.repaired ||
       attendanceDeduped.repaired ||
       holidaysById.repaired ||
       holidaysDeduped.repaired ||
-      plannerEventsDeduped.repaired
+      plannerEventsDeduped.repaired ||
+      payOverridesDeduped.repaired ||
+      payrollBonusesDeduped.repaired
 
     // The read transaction that discovered the missing marker has completed, so this
     // connection can start the one atomic write transaction. `withDb` closes it after
@@ -437,6 +537,9 @@ export class IndexedDbStore implements DataStore {
       replaceStore(transaction, ATTENDANCE_STORE, attendance)
       replaceStore(transaction, HOLIDAYS_STORE, holidays)
       replaceStore(transaction, PLANNER_EVENTS_STORE, plannerEvents)
+      replaceStore(transaction, PAY_STRUCTURE_STORE, [toStructureRecord(payStructure)])
+      replaceStore(transaction, PAY_OVERRIDES_STORE, payOverridesDeduped.rows)
+      replaceStore(transaction, PAYROLL_BONUSES_STORE, payrollBonusesDeduped.rows)
       putMeta(transaction, 'settings', { ...settings })
       putMeta(transaction, 'initialized', true)
       putMeta(transaction, 'attendanceInitialized', true)
@@ -448,7 +551,7 @@ export class IndexedDbStore implements DataStore {
 
     return {
       snapshot: {
-        v: 3,
+        v: 4,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: this.now().toISOString(),
         employees: employees.rows,
@@ -457,6 +560,9 @@ export class IndexedDbStore implements DataStore {
         attendance,
         holidays,
         plannerEvents,
+        payStructure,
+        payOverrides: payOverridesDeduped.rows,
+        payrollBonuses: payrollBonusesDeduped.rows,
         settings,
       },
       legacyBackup,
@@ -493,6 +599,9 @@ export class IndexedDbStore implements DataStore {
       storedAttendance,
       storedHolidays,
       storedPlannerEvents,
+      storedPayStructures,
+      storedPayOverrides,
+      storedPayrollBonuses,
     ] = await Promise.all([
       readAll<Employee>(db, EMPLOYEES_STORE),
       readAll<HRPolicy>(db, POLICIES_STORE),
@@ -500,6 +609,9 @@ export class IndexedDbStore implements DataStore {
       readAll<AttendanceRecord>(db, ATTENDANCE_STORE),
       readAll<Holiday>(db, HOLIDAYS_STORE),
       readAll<PlannerEvent>(db, PLANNER_EVENTS_STORE),
+      readAll<PayStructureRecord>(db, PAY_STRUCTURE_STORE),
+      readAll<PayStructureOverride>(db, PAY_OVERRIDES_STORE),
+      readAll<PayrollBonus>(db, PAYROLL_BONUSES_STORE),
     ])
 
     const employeesAreValid = storedEmployees.every(isEmployeeRow)
@@ -513,6 +625,26 @@ export class IndexedDbStore implements DataStore {
       hasUniqueHolidayDates(storedHolidays)
     const plannerEventsAreValid =
       storedPlannerEvents.every(isPlannerEventRow) && hasUniqueIds(storedPlannerEvents)
+
+    // A v3 database upgraded to v4 has the new stores but no company record yet; that
+    // is an ABSENT setting, not a recovered one. A record that exists but fails the
+    // structure rules is a real loss and is replaced with the default, reported.
+    const storedStructureRecord = storedPayStructures.find(
+      (record) => record.id === COMPANY_STRUCTURE_ID,
+    )
+    const structureIsValid =
+      storedStructureRecord !== undefined && isPayStructureRow(storedStructureRecord)
+    const storedPayStructure =
+      storedStructureRecord !== undefined && structureIsValid
+        ? fromStructureRecord(storedStructureRecord)
+        : createDefaultPayStructure()
+    const payOverridesAreValid =
+      storedPayOverrides.every(isPayStructureOverrideRow) &&
+      hasUniqueOverrideEmployeeIds(storedPayOverrides)
+    const payrollBonusesAreValid =
+      storedPayrollBonuses.every(isPayrollBonusRow) && hasUniqueIds(storedPayrollBonuses)
+    const payOverrides = payOverridesAreValid ? storedPayOverrides : []
+    const payrollBonuses = payrollBonusesAreValid ? storedPayrollBonuses : []
 
     const storedSettings = metaValue(meta, 'settings')
     const settings = isPlannerSettingsRow(storedSettings)
@@ -558,17 +690,32 @@ export class IndexedDbStore implements DataStore {
     }
 
     // Repairing an invalid dataset has to write it back, even when the marker already
-    // exists, or the next load would recover the same rows again.
+    // exists, or the next load would recover the same rows again. A v3 database has
+    // no company structure record at all; writing the default here is the upgrade
+    // completing, not a recovery.
     const replaceAttendance = !attendanceAreValid || !attendanceInitialized
     const replaceHolidays = !holidaysAreValid || !holidaysInitialized
     const replacePlannerEvents = !plannerEventsAreValid || !plannerEventsInitialized
-    if (replaceAttendance || replaceHolidays || replacePlannerEvents) {
+    const replacePayStructure = !structureIsValid
+    const replacePayOverrides = !payOverridesAreValid
+    const replacePayrollBonuses = !payrollBonusesAreValid
+    if (
+      replaceAttendance ||
+      replaceHolidays ||
+      replacePlannerEvents ||
+      replacePayStructure ||
+      replacePayOverrides ||
+      replacePayrollBonuses
+    ) {
       await this.runWriteTransaction(
         db,
         [
           ATTENDANCE_STORE,
           HOLIDAYS_STORE,
           PLANNER_EVENTS_STORE,
+          PAY_STRUCTURE_STORE,
+          PAY_OVERRIDES_STORE,
+          PAYROLL_BONUSES_STORE,
           META_STORE,
         ],
         (transaction) => {
@@ -576,6 +723,17 @@ export class IndexedDbStore implements DataStore {
           if (replaceHolidays) replaceStore(transaction, HOLIDAYS_STORE, holidays)
           if (replacePlannerEvents) {
             replaceStore(transaction, PLANNER_EVENTS_STORE, plannerEvents)
+          }
+          if (replacePayStructure) {
+            replaceStore(transaction, PAY_STRUCTURE_STORE, [
+              toStructureRecord(storedPayStructure),
+            ])
+          }
+          if (replacePayOverrides) {
+            replaceStore(transaction, PAY_OVERRIDES_STORE, payOverrides)
+          }
+          if (replacePayrollBonuses) {
+            replaceStore(transaction, PAYROLL_BONUSES_STORE, payrollBonuses)
           }
           putMeta(transaction, 'attendanceInitialized', true)
           putMeta(transaction, 'holidaysInitialized', true)
@@ -586,7 +744,7 @@ export class IndexedDbStore implements DataStore {
 
     return {
       snapshot: {
-        v: 3,
+        v: 4,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: this.now().toISOString(),
         employees,
@@ -602,6 +760,9 @@ export class IndexedDbStore implements DataStore {
         attendance,
         holidays,
         plannerEvents,
+        payStructure: storedPayStructure,
+        payOverrides,
+        payrollBonuses,
         settings,
       },
       legacyBackup: metaValue(meta, 'legacyBackup') === true,
@@ -611,7 +772,10 @@ export class IndexedDbStore implements DataStore {
         !leavePlansAreValid ||
         !attendanceAreValid ||
         !holidaysAreValid ||
-        !plannerEventsAreValid,
+        !plannerEventsAreValid ||
+        (storedStructureRecord !== undefined && !structureIsValid) ||
+        !payOverridesAreValid ||
+        !payrollBonusesAreValid,
     }
   }
 
@@ -659,6 +823,17 @@ export class IndexedDbStore implements DataStore {
         }
         if (!db.objectStoreNames.contains(PLANNER_EVENTS_STORE)) {
           db.createObjectStore(PLANNER_EVENTS_STORE, { keyPath: 'id' })
+        }
+        // Version 4 stores. An existing v3 database gains exactly these three stores;
+        // the upgrade below never rewrites the datasets it already holds.
+        if (!db.objectStoreNames.contains(PAY_STRUCTURE_STORE)) {
+          db.createObjectStore(PAY_STRUCTURE_STORE, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(PAY_OVERRIDES_STORE)) {
+          db.createObjectStore(PAY_OVERRIDES_STORE, { keyPath: 'employeeId' })
+        }
+        if (!db.objectStoreNames.contains(PAYROLL_BONUSES_STORE)) {
+          db.createObjectStore(PAYROLL_BONUSES_STORE, { keyPath: 'id' })
         }
         if (!db.objectStoreNames.contains(META_STORE)) {
           db.createObjectStore(META_STORE, { keyPath: 'key' })

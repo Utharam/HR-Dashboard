@@ -20,17 +20,22 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
+  dedupeByEmployeeId,
   dedupeById,
   dedupeByDate,
   hasStoredValue,
   hasUniqueHolidayDates,
   hasUniqueIds,
+  hasUniqueOverrideEmployeeIds,
   type DataSnapshot,
   type DataStore,
   type LoadedData,
@@ -39,11 +44,15 @@ import {
   validateDataSnapshot,
 } from './DataStore'
 import { DATA_SCHEMA_VERSION, loadPersisted, savePersisted } from '../utils/storage'
+import { createDefaultPayStructure } from '../utils/payStructure'
 import {
   isAttendanceRecordRow,
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -155,6 +164,23 @@ export class LocalStorageStore implements DataStore {
       [],
     )
     const settingsResult = loadSettings()
+    // The pay structure key holds a one-row envelope; an absent or corrupt payload
+    // falls back to the default template, never to a half-written structure.
+    const payStructureResult = loadPersisted(
+      STORAGE_KEYS.payStructure,
+      isPayStructureRow,
+      [createDefaultPayStructure()],
+    )
+    const payOverridesResult = loadPersisted(
+      STORAGE_KEYS.payOverrides,
+      isPayStructureOverrideRow,
+      [],
+    )
+    const payrollBonusesResult = loadPersisted(
+      STORAGE_KEYS.payrollBonuses,
+      isPayrollBonusRow,
+      [],
+    )
 
     // Shape validation accepts a repeated id; this backend would then load the whole
     // dataset but reject every later save as invalid, which looks like a storage
@@ -168,6 +194,9 @@ export class LocalStorageStore implements DataStore {
     const holidaysById = dedupeById(holidaysResult.rows)
     const holidaysDeduped = dedupeByDate(holidaysById.rows)
     const plannerEventsDeduped = dedupeById(plannerEventsResult.rows)
+    const payStructure = payStructureResult.rows[0] ?? createDefaultPayStructure()
+    const payOverridesDeduped = dedupeByEmployeeId(payOverridesResult.rows)
+    const payrollBonusesDeduped = dedupeById(payrollBonusesResult.rows)
     const leavePlansUnusable =
       !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
     const leavePlans = leavePlansUnusable
@@ -187,7 +216,7 @@ export class LocalStorageStore implements DataStore {
 
     return {
       snapshot: {
-        v: 3,
+        v: 4,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         employees: employees.rows,
@@ -196,6 +225,9 @@ export class LocalStorageStore implements DataStore {
         attendance,
         holidays,
         plannerEvents,
+        payStructure,
+        payOverrides: payOverridesDeduped.rows,
+        payrollBonuses: payrollBonusesDeduped.rows,
         settings: settingsResult.settings,
       },
       // In this backend the legacy keys ARE the live store, so there is no separate
@@ -212,13 +244,18 @@ export class LocalStorageStore implements DataStore {
         holidaysResult.status === 'recovered' ||
         plannerEventsResult.status === 'recovered' ||
         settingsResult.recovered ||
+        payStructureResult.status === 'recovered' ||
+        payOverridesResult.status === 'recovered' ||
+        payrollBonusesResult.status === 'recovered' ||
         employees.repaired ||
         policies.repaired ||
         leavePlansDeduped.repaired ||
         attendanceDeduped.repaired ||
         holidaysById.repaired ||
         holidaysDeduped.repaired ||
-        plannerEventsDeduped.repaired,
+        plannerEventsDeduped.repaired ||
+        payOverridesDeduped.repaired ||
+        payrollBonusesDeduped.repaired,
     }
   }
 
@@ -261,6 +298,28 @@ export class LocalStorageStore implements DataStore {
     return savePersisted(STORAGE_KEYS.plannerEvents, rows)
   }
 
+  async savePayStructure(structure: PayStructure): Promise<StoreResult> {
+    if (!isPayStructureRow(structure)) return { ok: false, reason: 'invalid' }
+    return savePersisted(STORAGE_KEYS.payStructure, [structure])
+  }
+
+  async savePayOverrides(rows: PayStructureOverride[]): Promise<StoreResult> {
+    if (
+      !rows.every(isPayStructureOverrideRow) ||
+      !hasUniqueOverrideEmployeeIds(rows)
+    ) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return savePersisted(STORAGE_KEYS.payOverrides, rows)
+  }
+
+  async savePayrollBonuses(rows: PayrollBonus[]): Promise<StoreResult> {
+    if (!rows.every(isPayrollBonusRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return savePersisted(STORAGE_KEYS.payrollBonuses, rows)
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     return savePersisted(STORAGE_KEYS.settings, [settings])
   }
@@ -284,6 +343,9 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.attendance, readRaw(STORAGE_KEYS.attendance)],
       [STORAGE_KEYS.holidays, readRaw(STORAGE_KEYS.holidays)],
       [STORAGE_KEYS.plannerEvents, readRaw(STORAGE_KEYS.plannerEvents)],
+      [STORAGE_KEYS.payStructure, readRaw(STORAGE_KEYS.payStructure)],
+      [STORAGE_KEYS.payOverrides, readRaw(STORAGE_KEYS.payOverrides)],
+      [STORAGE_KEYS.payrollBonuses, readRaw(STORAGE_KEYS.payrollBonuses)],
       [STORAGE_KEYS.settings, readRaw(STORAGE_KEYS.settings)],
     ])
 
@@ -294,6 +356,9 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.attendance, valid.attendance],
       [STORAGE_KEYS.holidays, valid.holidays],
       [STORAGE_KEYS.plannerEvents, valid.plannerEvents],
+      [STORAGE_KEYS.payStructure, [valid.payStructure]],
+      [STORAGE_KEYS.payOverrides, valid.payOverrides],
+      [STORAGE_KEYS.payrollBonuses, valid.payrollBonuses],
       [STORAGE_KEYS.settings, [valid.settings]],
     ]
 
@@ -321,6 +386,11 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.attendance, []],
       [STORAGE_KEYS.holidays, []],
       [STORAGE_KEYS.plannerEvents, []],
+      // A structure is a required setting, so clear resets it to the default rather
+      // than removing the key and leaving the company without a salary template.
+      [STORAGE_KEYS.payStructure, [createDefaultPayStructure()]],
+      [STORAGE_KEYS.payOverrides, []],
+      [STORAGE_KEYS.payrollBonuses, []],
       [STORAGE_KEYS.settings, [{ ...DEFAULT_PLANNER_SETTINGS }]],
     ]
 

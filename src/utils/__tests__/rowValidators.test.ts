@@ -5,6 +5,9 @@ import {
   isLeavePlanRow,
   isAttendanceRecordRow,
   isHolidayRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
   isPlannerSettingsRow,
 } from '../rowValidators';
@@ -14,12 +17,15 @@ import { createInitialLeavePlans } from '../../data/initialLeavePlans';
 import { createInitialHolidays } from '../../data/initialHolidays';
 import { createInitialAttendance } from '../../data/initialAttendance';
 import { createInitialPlannerEvents } from '../../data/initialPlannerEvents';
+import { createDefaultPayStructure } from '../payStructure';
 import { codeToRecord } from '../attendance';
 import type {
   AttendanceRecord,
   Holiday,
   LeavePlan,
   LeaveType,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
 } from '../../types';
 
@@ -531,4 +537,174 @@ describe('isPlannerSettingsRow', () => {
   it.each([null, 42, 'settings', [], true])('rejects the non-object %s', (row) => {
     expect(isPlannerSettingsRow(row)).toBe(false);
   });
+});
+
+describe('isPayStructureRow', () => {
+  it('accepts the default structure and its IndexedDB company wrapper', () => {
+    expect(isPayStructureRow(createDefaultPayStructure())).toBe(true);
+    expect(isPayStructureRow({ id: 'company', ...createDefaultPayStructure() })).toBe(true);
+  });
+
+  it('rejects a structure with no Basic, two Remainders or a self-referential Basic', () => {
+    const base = createDefaultPayStructure();
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [{ id: 'hra', name: 'HRA', basis: 'PercentOfCTC', value: 50 }],
+      }),
+    ).toBe(false);
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [
+          ...base.components,
+          { id: 'other', name: 'Other', basis: 'Remainder', value: 0 },
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [
+          { id: 'basic', name: 'Basic', basis: 'PercentOfBasic', value: 50, isBasic: true },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects duplicate component ids and invalid values', () => {
+    const base = createDefaultPayStructure();
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [
+          base.components[0],
+          { ...base.components[1], id: base.components[0].id },
+          base.components[2],
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [{ ...base.components[0], value: -1 }, ...base.components.slice(1)],
+      }),
+    ).toBe(false);
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        components: [{ ...base.components[0], value: 1001 }, ...base.components.slice(1)],
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects a missing rating rule, duplicate rule or bad toggle', () => {
+    const base = createDefaultPayStructure();
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        performanceBonusRules: base.performanceBonusRules.slice(0, 4),
+      }),
+    ).toBe(false);
+
+    expect(
+      isPayStructureRow({
+        ...base,
+        performanceBonusRules: [...base.performanceBonusRules, base.performanceBonusRules[0]],
+      }),
+    ).toBe(false);
+
+    expect(isPayStructureRow({ ...base, epfEnabled: 'on' })).toBe(false);
+    expect(isPayStructureRow({ ...base, professionalTaxEnabled: 0 })).toBe(false);
+  });
+
+  it.each([null, undefined, 42, 'structure', [], true])(
+    'rejects the non-object %s',
+    (row) => {
+      expect(isPayStructureRow(row)).toBe(false);
+    },
+  );
+});
+
+describe('isPayStructureOverrideRow', () => {
+  const override = (): PayStructureOverride => ({
+    employeeId: 'EMP-1001',
+    components: [
+      { id: 'basic', name: 'Basic', basis: 'Fixed', value: 60000, isBasic: true },
+      { id: 'special', name: 'Special', basis: 'Remainder', value: 0 },
+    ],
+    epfEnabled: false,
+    professionalTaxEnabled: true,
+    note: 'Retention package',
+    updatedAt: '2026-11-14T09:30:00.000Z',
+  });
+
+  it('accepts a complete override', () => {
+    expect(isPayStructureOverrideRow(override())).toBe(true);
+  });
+
+  it('rejects an empty employee, an invalid structure and a bad timestamp', () => {
+    expect(isPayStructureOverrideRow({ ...override(), employeeId: '' })).toBe(false);
+    expect(isPayStructureOverrideRow({ ...override(), components: [] })).toBe(false);
+    expect(isPayStructureOverrideRow({ ...override(), note: 42 })).toBe(false);
+    expect(isPayStructureOverrideRow({ ...override(), updatedAt: 'nope' })).toBe(false);
+  });
+
+  it.each([null, undefined, 42, 'override', [], true])(
+    'rejects the non-object %s',
+    (row) => {
+      expect(isPayStructureOverrideRow(row)).toBe(false);
+    },
+  );
+});
+
+describe('isPayrollBonusRow', () => {
+  const bonus = (over: Partial<PayrollBonus> = {}): PayrollBonus => ({
+    id: 'bonus-1',
+    employeeId: 'EMP-1001',
+    monthKey: '2026-11',
+    kind: 'Custom',
+    label: 'Festival bonus',
+    amount: 2500,
+    createdAt: '2026-11-14T09:30:00.000Z',
+    updatedAt: '2026-11-14T09:30:00.000Z',
+    ...over,
+  });
+
+  it('accepts a custom bonus and a rated performance bonus', () => {
+    expect(isPayrollBonusRow(bonus())).toBe(true);
+    expect(isPayrollBonusRow(bonus({ kind: 'Performance', rating: 4 }))).toBe(true);
+  });
+
+  it('rejects a malformed month, amount, label, kind and timestamps', () => {
+    expect(isPayrollBonusRow(bonus({ monthKey: '2026-13' }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ monthKey: 'November 2026' }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ amount: 0 }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ amount: -100 }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ amount: NaN }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ label: ' ' }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ kind: 'Bonus' as PayrollBonus['kind'] }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ createdAt: 'nope' }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ updatedAt: 'nope' }))).toBe(false);
+  });
+
+  it('allows a rating only on a performance bonus, within 1–5', () => {
+    expect(isPayrollBonusRow(bonus({ rating: 4 }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ kind: 'Performance', rating: 6 }))).toBe(false);
+    expect(isPayrollBonusRow(bonus({ kind: 'Performance', rating: 2.5 }))).toBe(false);
+  });
+
+  it.each([null, undefined, 42, 'bonus', [], true])(
+    'rejects the non-object %s',
+    (row) => {
+      expect(isPayrollBonusRow(row)).toBe(false);
+    },
+  );
 });

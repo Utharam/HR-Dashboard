@@ -6,10 +6,14 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types';
 import type { DataSnapshot, DataStore, StoreBackend } from '../data/DataStore';
+import { createDefaultPayStructure } from '../utils/payStructure';
 import {
   createSnapshot,
   parseSnapshot,
@@ -110,6 +114,15 @@ interface AdminSectionProps {
   /** The FULL daily attendance ledger and company holiday calendar, same rule. */
   attendance: AttendanceRecord[];
   holidays: Holiday[];
+  /**
+   * The v4 pay datasets. Optional so a caller that predates Phase B (and the tests
+   * that pin the older card) still renders a complete, truthful card: absent means
+   * the default structure and no overrides/bonuses, exactly what a fresh v4 store
+   * would report.
+   */
+  payStructure?: PayStructure;
+  payOverrides?: PayStructureOverride[];
+  payrollBonuses?: PayrollBonus[];
   settings: PlannerSettings;
   /**
    * The store every read and write goes through. Optional only because the
@@ -146,6 +159,9 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
   plannerEvents,
   attendance,
   holidays,
+  payStructure = createDefaultPayStructure(),
+  payOverrides = [],
+  payrollBonuses = [],
   settings,
   store,
   backend,
@@ -185,6 +201,9 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
         plannerEvents,
         attendance,
         holidays,
+        payStructure,
+        payOverrides,
+        payrollBonuses,
         settings,
       });
       const fileName = snapshotFileName();
@@ -310,12 +329,29 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
             <dd>{holidays.length}</dd>
           </div>
           <div className="admin-snapshot__count">
+            <dt>Overrides</dt>
+            <dd>{payOverrides.length}</dd>
+          </div>
+          <div className="admin-snapshot__count">
+            <dt>Bonuses</dt>
+            <dd>{payrollBonuses.length}</dd>
+          </div>
+          <div className="admin-snapshot__count">
             <dt>Peak threshold</dt>
             <dd>{settings.maxConcurrentLeave}</dd>
           </div>
         </dl>
 
         <dl className="admin-snapshot__facts">
+          <div className="admin-fact">
+            <dt>Pay structure</dt>
+            <dd>
+              {payStructure.components.length} component
+              {payStructure.components.length === 1 ? '' : 's'} · EPF{' '}
+              {payStructure.epfEnabled ? 'on' : 'off'} · PT{' '}
+              {payStructure.professionalTaxEnabled ? 'on' : 'off'}
+            </dd>
+          </div>
           <div className="admin-fact">
             <dt>Storage</dt>
             <dd>{BACKEND_LABEL[backend]}</dd>
@@ -456,7 +492,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
         title="Replace the data in this browser with the snapshot?"
         message={
           pending
-            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records, ${pending.leavePlans.length} leave records, ${pending.plannerEvents.length} event records, ${pending.attendance.length} attendance records and ${pending.holidays.length} holiday records. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records, ${leavePlans.length} leave records, ${plannerEvents.length} event records, ${attendance.length} attendance records and ${holidays.length} holiday records - with the file's contents. This cannot be undone.`
+            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records, ${pending.leavePlans.length} leave records, ${pending.plannerEvents.length} event records, ${pending.attendance.length} attendance records and ${pending.holidays.length} holiday records, ${pending.payOverrides.length} pay overrides and ${pending.payrollBonuses.length} payroll bonuses, plus a company pay structure. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records, ${leavePlans.length} leave records, ${plannerEvents.length} event records, ${attendance.length} attendance records and ${holidays.length} holiday records, ${payOverrides.length} pay overrides and ${payrollBonuses.length} payroll bonuses, plus the current pay structure - with the file's contents. This cannot be undone.`
             : ''
         }
         confirmLabel="Replace data"

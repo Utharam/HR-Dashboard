@@ -27,15 +27,22 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructure,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../types'
 import { DATA_SCHEMA_VERSION } from '../utils/storage'
+import { createDefaultPayStructure } from '../utils/payStructure'
 import {
   isAttendanceRecordRow,
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPayStructureOverrideRow,
+  isPayStructureRow,
+  isPayrollBonusRow,
   isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -59,12 +66,13 @@ export interface DataSnapshot {
    * Snapshot format version. Separate from the row schema version below.
    *
    * Version 2 adds the daily attendance ledger and the company holiday calendar.
-   * Version 3 adds the Planner's general events. Older snapshots are still accepted
-   * by `validateDataSnapshot`/`parseSnapshot` and are normalised to v3 with empty
-   * arrays for the datasets their format did not define, so an old backup stays
-   * restorable.
+   * Version 3 adds the Planner's general events. Version 4 adds the company pay
+   * structure, per-employee pay overrides and monthly payroll bonuses. Older
+   * snapshots are still accepted by `validateDataSnapshot`/`parseSnapshot` and are
+   * normalised to v4 with the default structure and empty arrays for the datasets
+   * their format did not define, so an old backup stays restorable.
    */
-  v: 3
+  v: 4
   /** The `DATA_SCHEMA_VERSION` row schema the snapshot was produced against. */
   dataVersion: number
   /** ISO timestamp of when the snapshot was produced. */
@@ -75,6 +83,12 @@ export interface DataSnapshot {
   attendance: AttendanceRecord[]
   holidays: Holiday[]
   plannerEvents: PlannerEvent[]
+  /** The company pay-structure template. */
+  payStructure: PayStructure
+  /** Per-employee structure overrides, keyed by employee. */
+  payOverrides: PayStructureOverride[]
+  /** Monthly performance and custom bonuses, keyed by id. */
+  payrollBonuses: PayrollBonus[]
   settings: PlannerSettings
 }
 
@@ -108,6 +122,9 @@ export interface DataStore {
   saveAttendance(rows: AttendanceRecord[]): Promise<StoreResult>
   saveHolidays(rows: Holiday[]): Promise<StoreResult>
   savePlannerEvents(rows: PlannerEvent[]): Promise<StoreResult>
+  savePayStructure(structure: PayStructure): Promise<StoreResult>
+  savePayOverrides(rows: PayStructureOverride[]): Promise<StoreResult>
+  savePayrollBonuses(rows: PayrollBonus[]): Promise<StoreResult>
   saveSettings(settings: PlannerSettings): Promise<StoreResult>
   exportSnapshot(): Promise<DataSnapshot>
   importSnapshot(snapshot: DataSnapshot): Promise<StoreResult>
@@ -126,6 +143,9 @@ export const STORAGE_KEYS = {
   attendance: 'omnihr_attendance',
   holidays: 'omnihr_holidays',
   plannerEvents: 'omnihr_planner_events',
+  payStructure: 'omnihr_pay_structure',
+  payOverrides: 'omnihr_pay_overrides',
+  payrollBonuses: 'omnihr_payroll_bonuses',
   settings: 'omnihr_planner_settings',
 } as const
 
@@ -188,6 +208,25 @@ export function hasUniqueAttendanceDates(
 }
 
 /**
+ * True when every override belongs to a distinct employee.
+ *
+ * Overrides are keyed by `employeeId`, not by their own id: two overrides for one
+ * person would silently collapse to whichever the keyed store wrote last, leaving
+ * an employee priced by a structure HR did not choose. The whole dataset is
+ * rejected instead.
+ */
+export function hasUniqueOverrideEmployeeIds(
+  rows: { employeeId: string }[],
+): boolean {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (seen.has(row.employeeId)) return false
+    seen.add(row.employeeId)
+  }
+  return true
+}
+
+/**
  * Keeps the first row for each `id`, reporting whether anything was dropped.
  *
  * `loadPersisted` validates the SHAPE of a stored envelope, not the uniqueness of its
@@ -219,6 +258,20 @@ export function dedupeByDate<T extends { date: string }>(
   for (const row of rows) {
     if (seen.has(row.date)) continue
     seen.add(row.date)
+    unique.push(row)
+  }
+  return { rows: unique, repaired: unique.length !== rows.length }
+}
+
+/** Same repair rule as `dedupeById`, for the override employeeId key. */
+export function dedupeByEmployeeId<T extends { employeeId: string }>(
+  rows: readonly T[],
+): { rows: T[]; repaired: boolean } {
+  const seen = new Set<string>()
+  const unique: T[] = []
+  for (const row of rows) {
+    if (seen.has(row.employeeId)) continue
+    seen.add(row.employeeId)
     unique.push(row)
   }
   return { rows: unique, repaired: unique.length !== rows.length }
@@ -269,6 +322,9 @@ export function validateDataSnapshot(
     attendance?: unknown
     holidays?: unknown
     plannerEvents?: unknown
+    payStructure?: unknown
+    payOverrides?: unknown
+    payrollBonuses?: unknown
     settings?: unknown
   }
 
@@ -276,12 +332,13 @@ export function validateDataSnapshot(
   // `dataVersion` is the row schema. A mismatch in either means this file was made
   // against a shape this build does not understand.
   //
-  // Versions 1 and 2 are still accepted: they predate some datasets, so they are
-  // normalised to v3 with empty arrays below instead of being rejected. Restoring an
-  // old backup must not strand the user's existing roster and planner data.
+  // Versions 1–3 are still accepted: they predate some datasets, so they are
+  // normalised to v4 with the default pay structure and empty arrays below instead
+  // of being rejected. Restoring an old backup must not strand the user's existing
+  // roster, planner and attendance data.
   const version = candidate.v
   if (
-    (version !== 1 && version !== 2 && version !== 3) ||
+    (version !== 1 && version !== 2 && version !== 3 && version !== 4) ||
     candidate.dataVersion !== DATA_SCHEMA_VERSION
   ) {
     return { ok: false, reason: 'version' }
@@ -296,10 +353,15 @@ export function validateDataSnapshot(
 
   // A v1 file has no attendance/holidays fields, and a v2 file has no planner events.
   // Any fields that happen to be present on an older payload are ignored rather than
-  // trusted, because that format never defined them.
+  // trusted, because that format never defined them. Likewise the v4 pay datasets:
+  // older snapshots normalise to the default structure and empty override/bonus
+  // arrays, never to a half-written dataset that did not exist when they were made.
   const attendance = version === 1 ? [] : candidate.attendance
   const holidays = version === 1 ? [] : candidate.holidays
-  const plannerEvents = version === 3 ? candidate.plannerEvents : []
+  const plannerEvents = version === 3 || version === 4 ? candidate.plannerEvents : []
+  const payStructure = version === 4 ? candidate.payStructure : createDefaultPayStructure()
+  const payOverrides = version === 4 ? candidate.payOverrides : []
+  const payrollBonuses = version === 4 ? candidate.payrollBonuses : []
 
   if (
     !Array.isArray(candidate.employees) ||
@@ -314,6 +376,11 @@ export function validateDataSnapshot(
     !holidays.every(isHolidayRow) ||
     !Array.isArray(plannerEvents) ||
     !plannerEvents.every(isPlannerEventRow) ||
+    !isPayStructureRow(payStructure) ||
+    !Array.isArray(payOverrides) ||
+    !payOverrides.every(isPayStructureOverrideRow) ||
+    !Array.isArray(payrollBonuses) ||
+    !payrollBonuses.every(isPayrollBonusRow) ||
     !isPlannerSettingsRow(candidate.settings)
   ) {
     return { ok: false, reason: 'invalid' }
@@ -324,8 +391,8 @@ export function validateDataSnapshot(
   // they imported. A duplicate holiday date is the same lossy write in calendar terms.
   // Attendance has a second key - employee+date - so two differently-id'd rows for the
   // same person and day are rejected too: both would persist, and the matrix/rollup
-  // would read an arbitrary one.
-  // Reject the whole file rather than write a lossy or ambiguous one.
+  // would read an arbitrary one. Overrides key on employeeId and bonuses on id, for
+  // the same reason. Reject the whole file rather than write a lossy or ambiguous one.
   if (
     !hasUniqueIds(candidate.employees) ||
     !hasUniqueIds(candidate.policies) ||
@@ -334,7 +401,9 @@ export function validateDataSnapshot(
     !hasUniqueAttendanceDates(attendance) ||
     !hasUniqueIds(holidays) ||
     !hasUniqueHolidayDates(holidays) ||
-    !hasUniqueIds(plannerEvents)
+    !hasUniqueIds(plannerEvents) ||
+    !hasUniqueOverrideEmployeeIds(payOverrides) ||
+    !hasUniqueIds(payrollBonuses)
   ) {
     return { ok: false, reason: 'invalid' }
   }
@@ -342,7 +411,7 @@ export function validateDataSnapshot(
   return {
     ok: true,
     snapshot: {
-      v: 3,
+      v: 4,
       dataVersion: DATA_SCHEMA_VERSION,
       exportedAt: candidate.exportedAt,
       employees: candidate.employees,
@@ -351,6 +420,9 @@ export function validateDataSnapshot(
       attendance: attendance as AttendanceRecord[],
       holidays: holidays as Holiday[],
       plannerEvents: plannerEvents as PlannerEvent[],
+      payStructure: payStructure as PayStructure,
+      payOverrides: payOverrides as PayStructureOverride[],
+      payrollBonuses: payrollBonuses as PayrollBonus[],
       settings: candidate.settings,
     },
   }

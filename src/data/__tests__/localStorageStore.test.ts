@@ -4,11 +4,18 @@ import type {
   AttendanceRecord,
   Holiday,
   LeavePlan,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
-import { DEFAULT_PLANNER_SETTINGS, STORAGE_KEYS, type DataSnapshot } from '../DataStore'
+import { createDefaultPayStructure } from '../../utils/payStructure'
+import {
+  DEFAULT_PLANNER_SETTINGS,
+  STORAGE_KEYS,
+  type DataSnapshot,
+} from '../DataStore'
 import { LocalStorageStore } from '../LocalStorageStore'
 import { createDataStore } from '../createDataStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
@@ -26,6 +33,31 @@ const HOLIDAYS: Holiday[] = createInitialHolidays(2026)
 const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(EMPLOYEES, HOLIDAYS, NOW).slice(0, 4)
 const PLANNER_EVENTS: PlannerEvent[] = createInitialPlannerEvents(NOW)
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 4 }
+const PAY_STRUCTURE = createDefaultPayStructure()
+const PAY_OVERRIDES: PayStructureOverride[] = [
+  {
+    employeeId: EMPLOYEES[0].id,
+    components: [
+      { id: 'basic', name: 'Basic', basis: 'Fixed', value: 60000, isBasic: true },
+      { id: 'special', name: 'Special', basis: 'Remainder', value: 0 },
+    ],
+    epfEnabled: false,
+    professionalTaxEnabled: true,
+    updatedAt: '2026-11-14T09:30:00.000Z',
+  },
+]
+const PAYROLL_BONUSES: PayrollBonus[] = [
+  {
+    id: 'bonus-1',
+    employeeId: EMPLOYEES[0].id,
+    monthKey: '2026-11',
+    kind: 'Custom',
+    label: 'Festival bonus',
+    amount: 2500,
+    createdAt: '2026-11-14T09:30:00.000Z',
+    updatedAt: '2026-11-14T09:30:00.000Z',
+  },
+]
 
 function installLocalStorage(entries: Record<string, string> = {}): Storage {
   const values = new Map(Object.entries(entries))
@@ -63,7 +95,7 @@ function envelope(rows: unknown[]): string {
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 3,
+    v: 4,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: EMPLOYEES,
@@ -72,6 +104,9 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
     plannerEvents: PLANNER_EVENTS,
+    payStructure: PAY_STRUCTURE,
+    payOverrides: PAY_OVERRIDES,
+    payrollBonuses: PAYROLL_BONUSES,
     settings: SETTINGS,
     ...overrides,
   }
@@ -108,10 +143,10 @@ beforeEach(() => {
 })
 
 describe('LocalStorageStore', () => {
-  it('seeds an empty store with the demo datasets, attendance, holidays and events', async () => {
+  it('seeds an empty store with the demo datasets, attendance, holidays, events and default pay structure', async () => {
     const loaded = await new LocalStorageStore().load()
 
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
@@ -124,12 +159,15 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.plannerEvents.map((event) => event.id)).toEqual(
       createInitialPlannerEvents().map((event) => event.id),
     )
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
   })
 
-  it('saves and reloads all seven datasets through the versioned envelopes', async () => {
+  it('saves and reloads every dataset through the versioned envelopes', async () => {
     const store = new LocalStorageStore()
     await store.load()
 
@@ -139,6 +177,9 @@ describe('LocalStorageStore', () => {
     await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({ ok: true })
     await expect(store.saveHolidays(HOLIDAYS)).resolves.toEqual({ ok: true })
     await expect(store.savePlannerEvents(PLANNER_EVENTS)).resolves.toEqual({ ok: true })
+    await expect(store.savePayStructure(PAY_STRUCTURE)).resolves.toEqual({ ok: true })
+    await expect(store.savePayOverrides(PAY_OVERRIDES)).resolves.toEqual({ ok: true })
+    await expect(store.savePayrollBonuses(PAYROLL_BONUSES)).resolves.toEqual({ ok: true })
     await expect(store.saveSettings(SETTINGS)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
@@ -148,7 +189,29 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
     expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+    expect(loaded.snapshot.payStructure).toEqual(PAY_STRUCTURE)
+    expect(loaded.snapshot.payOverrides).toEqual(PAY_OVERRIDES)
+    expect(loaded.snapshot.payrollBonuses).toEqual(PAYROLL_BONUSES)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
+  })
+
+  it('writes the three pay datasets under their own keys', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.savePayStructure(PAY_STRUCTURE)
+    await store.savePayOverrides(PAY_OVERRIDES)
+    await store.savePayrollBonuses(PAYROLL_BONUSES)
+
+    const structureEnvelope = JSON.parse(
+      localStorage.getItem(STORAGE_KEYS.payStructure) ?? 'null',
+    ) as { rows: unknown[] }
+    expect(structureEnvelope.rows).toEqual([PAY_STRUCTURE])
+    expect(
+      JSON.parse(localStorage.getItem(STORAGE_KEYS.payOverrides) ?? 'null').rows,
+    ).toEqual(PAY_OVERRIDES)
+    expect(
+      JSON.parse(localStorage.getItem(STORAGE_KEYS.payrollBonuses) ?? 'null').rows,
+    ).toEqual(PAYROLL_BONUSES)
   })
 
   it('seeds demo leave plans, attendance and events when the roster is exactly the demo set and no key exists', async () => {
@@ -304,6 +367,71 @@ describe('LocalStorageStore', () => {
     expect(loaded.recovered).toBe(true)
   })
 
+  it('falls back to the default pay structure and empty pay datasets for corrupt payloads', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(EMPLOYEES),
+      omnihr_pay_structure: '{not json',
+      omnihr_pay_overrides: '[null]',
+      omnihr_payroll_bonuses: '42',
+    })
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('repairs duplicate override employeeIds and bonus ids and reports it', async () => {
+    localStorage.setItem(STORAGE_KEYS.employees, envelope(EMPLOYEES))
+    localStorage.setItem(
+      STORAGE_KEYS.payOverrides,
+      envelope([
+        PAY_OVERRIDES[0],
+        { ...PAY_OVERRIDES[0], note: 'Later duplicate' },
+      ]),
+    )
+    localStorage.setItem(
+      STORAGE_KEYS.payrollBonuses,
+      envelope([PAYROLL_BONUSES[0], { ...PAYROLL_BONUSES[0], label: 'Later duplicate' }]),
+    )
+
+    const loaded = await new LocalStorageStore().load()
+
+    expect(loaded.snapshot.payOverrides).toEqual([PAY_OVERRIDES[0]])
+    expect(loaded.snapshot.payrollBonuses).toEqual([PAYROLL_BONUSES[0]])
+    expect(loaded.recovered).toBe(true)
+  })
+
+  it('rejects invalid structures, overrides and bonuses without writing them', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.savePayStructure(PAY_STRUCTURE)
+    await store.savePayOverrides(PAY_OVERRIDES)
+    await store.savePayrollBonuses(PAYROLL_BONUSES)
+
+    await expect(
+      store.savePayStructure({
+        ...PAY_STRUCTURE,
+        components: [{ id: 'hra', name: 'HRA', basis: 'PercentOfCTC', value: 50 }],
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.savePayOverrides([PAY_OVERRIDES[0], { ...PAY_OVERRIDES[0], note: 'Duplicate' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.savePayrollBonuses([PAYROLL_BONUSES[0], { ...PAYROLL_BONUSES[0] }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.payStructure).toEqual(PAY_STRUCTURE)
+    expect(loaded.snapshot.payOverrides).toEqual(PAY_OVERRIDES)
+    expect(loaded.snapshot.payrollBonuses).toEqual(PAYROLL_BONUSES)
+  })
+
   it('rejects duplicate employee id without writing the dataset', async () => {
     const store = new LocalStorageStore()
     await store.load()
@@ -388,15 +516,21 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
   })
 
-  it('exports and imports a v3 snapshot', async () => {
+  it('exports and imports a v4 snapshot including the pay datasets', async () => {
     const store = new LocalStorageStore()
     await store.load()
     await store.saveEmployees(EMPLOYEES)
+    await store.savePayStructure(PAY_STRUCTURE)
+    await store.savePayOverrides(PAY_OVERRIDES)
+    await store.savePayrollBonuses(PAYROLL_BONUSES)
     await store.saveSettings(SETTINGS)
 
     const exported = await store.exportSnapshot()
-    expect(exported.v).toBe(3)
+    expect(exported.v).toBe(4)
     expect(exported.employees).toEqual(EMPLOYEES)
+    expect(exported.payStructure).toEqual(PAY_STRUCTURE)
+    expect(exported.payOverrides).toEqual(PAY_OVERRIDES)
+    expect(exported.payrollBonuses).toEqual(PAYROLL_BONUSES)
     expect(exported.settings).toEqual(SETTINGS)
 
     await expect(store.importSnapshot(makeSnapshot())).resolves.toEqual({ ok: true })
@@ -408,10 +542,13 @@ describe('LocalStorageStore', () => {
     expect(imported.snapshot.attendance).toEqual(ATTENDANCE)
     expect(imported.snapshot.holidays).toEqual(HOLIDAYS)
     expect(imported.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+    expect(imported.snapshot.payStructure).toEqual(PAY_STRUCTURE)
+    expect(imported.snapshot.payOverrides).toEqual(PAY_OVERRIDES)
+    expect(imported.snapshot.payrollBonuses).toEqual(PAYROLL_BONUSES)
     expect(imported.snapshot.settings).toEqual(SETTINGS)
   })
 
-  it('imports a v1 snapshot as v3 with empty attendance, holidays and planner events', async () => {
+  it('imports a v1 snapshot as v4 with empty attendance, holidays, planner and pay datasets', async () => {
     const store = new LocalStorageStore()
     await store.load()
 
@@ -428,13 +565,16 @@ describe('LocalStorageStore', () => {
     await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
     expect(loaded.snapshot.plannerEvents).toEqual([])
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
   })
 
-  it('imports a v2 snapshot as v3 with empty planner events', async () => {
+  it('imports a v2 snapshot as v4 with empty planner and pay datasets', async () => {
     const store = new LocalStorageStore()
     await store.load()
 
@@ -442,15 +582,41 @@ describe('LocalStorageStore', () => {
       ...makeSnapshot(),
       v: 2,
       plannerEvents: undefined,
+      payStructure: undefined,
+      payOverrides: undefined,
+      payrollBonuses: undefined,
     } as unknown as DataSnapshot
 
     await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
     expect(loaded.snapshot.plannerEvents).toEqual([])
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+  })
+
+  it('imports a v3 snapshot as v4 with the default pay datasets', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+
+    const legacy = {
+      ...makeSnapshot(),
+      v: 3,
+      payStructure: undefined,
+      payOverrides: undefined,
+      payrollBonuses: undefined,
+    } as unknown as DataSnapshot
+
+    await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.v).toBe(4)
+    expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
   })
 
   it('leaves existing data untouched when an import is invalid', async () => {
@@ -464,7 +630,7 @@ describe('LocalStorageStore', () => {
       reason: 'invalid',
     })
 
-    const wrongVersion = { ...makeSnapshot(), v: 4 } as unknown as DataSnapshot
+    const wrongVersion = { ...makeSnapshot(), v: 5 } as unknown as DataSnapshot
     await expect(store.importSnapshot(wrongVersion)).resolves.toEqual({
       ok: false,
       reason: 'version',
@@ -489,6 +655,9 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
     expect(loaded.snapshot.plannerEvents).toEqual([])
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
   })
 

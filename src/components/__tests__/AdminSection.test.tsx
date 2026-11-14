@@ -6,6 +6,7 @@ import { AdminSection } from '../AdminSection';
 import type { DataSnapshot, DataStore, StoreBackend, StoreResult } from '../../data/DataStore';
 import { snapshotToJson } from '../../data/snapshot';
 import { DATA_SCHEMA_VERSION } from '../../utils/storage';
+import { createDefaultPayStructure } from '../../utils/payStructure';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 import { INITIAL_POLICIES } from '../../data/initialPolicies';
 import type {
@@ -14,6 +15,8 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
 } from '../../types';
 
@@ -95,6 +98,32 @@ const HOLIDAYS: Holiday[] = [
   { id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' },
 ];
 
+const PAY_STRUCTURE = createDefaultPayStructure();
+const PAY_OVERRIDES: PayStructureOverride[] = [
+  {
+    employeeId: 'EMP-LOCAL-1',
+    components: [
+      { id: 'basic', name: 'Basic', basis: 'Fixed', value: 60000, isBasic: true },
+      { id: 'special', name: 'Special', basis: 'Remainder', value: 0 },
+    ],
+    epfEnabled: false,
+    professionalTaxEnabled: true,
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  },
+];
+const PAYROLL_BONUSES: PayrollBonus[] = [
+  {
+    id: 'bonus-local-1',
+    employeeId: 'EMP-LOCAL-1',
+    monthKey: '2026-11',
+    kind: 'Custom',
+    label: 'Festival bonus',
+    amount: 2500,
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  },
+];
+
 const SNAPSHOT_META_KEY = 'omnihr_snapshot_meta';
 
 /** A mock store that records every call while behaving like a real one. */
@@ -108,6 +137,9 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveAttendance: vi.fn(async () => OK),
     saveHolidays: vi.fn(async () => OK),
     savePlannerEvents: vi.fn(async () => OK),
+    savePayStructure: vi.fn(async () => OK),
+    savePayOverrides: vi.fn(async () => OK),
+    savePayrollBonuses: vi.fn(async () => OK),
     saveSettings: vi.fn(async () => OK),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(async () => OK),
@@ -125,9 +157,12 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   plannerEvents: PLANNER_EVENTS,
   attendance: ATTENDANCE,
   holidays: HOLIDAYS,
+  payStructure: PAY_STRUCTURE,
+  payOverrides: PAY_OVERRIDES,
+  payrollBonuses: PAYROLL_BONUSES,
   settings: { maxConcurrentLeave: 3 },
   store: makeMockStore({
-    v: 3,
+    v: 4,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: EMPLOYEES,
@@ -136,6 +171,9 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
     plannerEvents: [],
+    payStructure: PAY_STRUCTURE,
+    payOverrides: PAY_OVERRIDES,
+    payrollBonuses: PAYROLL_BONUSES,
     settings: { maxConcurrentLeave: 3 },
   }),
   backend: 'indexeddb',
@@ -148,7 +186,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
 
 /** The snapshot a "good" import file holds: three employees replace the local two. */
 const IMPORTED_SNAPSHOT: DataSnapshot = {
-  v: 3,
+  v: 4,
   dataVersion: DATA_SCHEMA_VERSION,
   exportedAt: '2026-11-14T09:30:00.000Z',
   employees: [
@@ -163,6 +201,15 @@ const IMPORTED_SNAPSHOT: DataSnapshot = {
   ],
   holidays: [{ id: 'holiday-2026-12-24', date: '2026-12-24', name: 'Foundation Day' }],
   plannerEvents: [],
+  payStructure: PAY_STRUCTURE,
+  payOverrides: [],
+  payrollBonuses: [
+    {
+      ...PAYROLL_BONUSES[0],
+      id: 'bonus-import-1',
+      employeeId: 'EMP-IMPORT-1',
+    },
+  ],
   settings: { maxConcurrentLeave: 4 },
 };
 
@@ -253,6 +300,13 @@ describe('Admin snapshot card — display', () => {
     // So did the Planner's event calendar (v3).
     expect(within(countBlock('Events')).getByText('2')).toBeInTheDocument();
 
+    // The v4 pay datasets are counted; the structure is reported as a fact.
+    expect(within(countBlock('Overrides')).getByText('1')).toBeInTheDocument();
+    expect(within(countBlock('Bonuses')).getByText('1')).toBeInTheDocument();
+    expect(factRow('Pay structure').textContent).toContain('3 components');
+    expect(factRow('Pay structure').textContent).toContain('EPF on');
+    expect(factRow('Pay structure').textContent).toContain('PT on');
+
     expect(within(card).getByText('IndexedDB (this browser)')).toBeInTheDocument();
     expect(
       within(card).getByText(/old localStorage copy/i),
@@ -312,7 +366,7 @@ describe('Admin snapshot card — export', () => {
     const text = await downloadedBlob().text();
     expect(JSON.parse(text)).toEqual(
       expect.objectContaining({
-        v: 3,
+        v: 4,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -331,6 +385,9 @@ describe('Admin snapshot card — export', () => {
           expect.objectContaining({ id: 'event-local-1' }),
           expect.objectContaining({ id: 'event-local-2' }),
         ],
+        payStructure: PAY_STRUCTURE,
+        payOverrides: PAY_OVERRIDES,
+        payrollBonuses: PAYROLL_BONUSES,
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -385,7 +442,7 @@ describe('Admin snapshot card — export', () => {
     const parsed = JSON.parse(text);
     expect(parsed).toEqual(
       expect.objectContaining({
-        v: 3,
+        v: 4,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -397,6 +454,9 @@ describe('Admin snapshot card — export', () => {
           expect.objectContaining({ id: 'event-local-1' }),
           expect.objectContaining({ id: 'event-local-2' }),
         ]),
+        payStructure: PAY_STRUCTURE,
+        payOverrides: PAY_OVERRIDES,
+        payrollBonuses: PAYROLL_BONUSES,
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -418,6 +478,9 @@ describe('Admin snapshot card — import', () => {
     // in full rather than hiding the attendance ledger it also deletes.
     expect(dialog).toHaveTextContent(/1 attendance records and 1 holiday records/);
     expect(dialog).toHaveTextContent(/4 attendance records and 1 holiday records/);
+    expect(dialog).toHaveTextContent(/0 pay overrides and 1 payroll bonuses/);
+    expect(dialog).toHaveTextContent(/1 pay overrides and 1 payroll bonuses/);
+    expect(dialog).toHaveTextContent(/company pay structure/i);
     // Asked, not answered: the store is untouched while the question is open.
     expect(props.store?.importSnapshot).not.toHaveBeenCalled();
     expect(props.onImported).not.toHaveBeenCalled();
@@ -427,9 +490,12 @@ describe('Admin snapshot card — import', () => {
     await waitFor(() => expect(props.store?.importSnapshot).toHaveBeenCalledTimes(1));
     expect(props.store?.importSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        v: 3,
+        v: 4,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-IMPORT-1' }),
+        ]),
+        payrollBonuses: expect.arrayContaining([
+          expect.objectContaining({ id: 'bonus-import-1' }),
         ]),
       }),
     );
@@ -475,7 +541,7 @@ describe('Admin snapshot card — import', () => {
     render(<AdminSection {...props} />);
 
     await chooseFile(
-      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 4 }),
+      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 5 }),
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/different version/i);

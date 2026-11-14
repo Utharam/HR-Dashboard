@@ -6,10 +6,14 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayStructureOverride,
+  PayrollBonus,
+  PlannerEvent,
   PlannerSettings,
 } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
-import { DEFAULT_PLANNER_SETTINGS } from '../DataStore'
+import { createDefaultPayStructure } from '../../utils/payStructure'
+import { DEFAULT_PLANNER_SETTINGS, STORAGE_KEYS } from '../DataStore'
 import { IndexedDbStore } from '../IndexedDbStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
@@ -28,6 +32,30 @@ const LEGACY_HOLIDAYS = createInitialHolidays(2026)
 const LEGACY_ATTENDANCE = createInitialAttendance(LEGACY_EMPLOYEES, LEGACY_HOLIDAYS, NOW).slice(0, 3)
 const LEGACY_PLANNER_EVENTS = createInitialPlannerEvents(NOW)
 const LEGACY_SETTINGS: PlannerSettings = { maxConcurrentLeave: 7 }
+const LEGACY_PAY_OVERRIDES: PayStructureOverride[] = [
+  {
+    employeeId: LEGACY_EMPLOYEES[0].id,
+    components: [
+      { id: 'basic', name: 'Basic', basis: 'Fixed', value: 60000, isBasic: true },
+      { id: 'special', name: 'Special', basis: 'Remainder', value: 0 },
+    ],
+    epfEnabled: false,
+    professionalTaxEnabled: true,
+    updatedAt: NOW.toISOString(),
+  },
+]
+const LEGACY_PAYROLL_BONUSES: PayrollBonus[] = [
+  {
+    id: 'bonus-legacy-1',
+    employeeId: LEGACY_EMPLOYEES[0].id,
+    monthKey: '2026-11',
+    kind: 'Custom',
+    label: 'Legacy bonus',
+    amount: 1500,
+    createdAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+  },
+]
 
 function envelope(rows: unknown[]): string {
   return JSON.stringify({ v: DATA_SCHEMA_VERSION, rows })
@@ -185,6 +213,82 @@ async function createV2Database(options: {
   })
 }
 
+/**
+ * Builds a real version-3 database with every store that version shipped, so the
+ * v3 -> v4 upgrade is exercised through the browser's own `onupgradeneeded` path.
+ */
+async function createV3Database(options: {
+  employees: Employee[]
+  policies?: HRPolicy[]
+  leavePlans?: LeavePlan[]
+  attendance?: AttendanceRecord[]
+  holidays?: Holiday[]
+  plannerEvents?: PlannerEvent[]
+  settings?: PlannerSettings
+}): Promise<void> {
+  const factory = new FakeIDBFactory()
+  Object.defineProperty(globalThis, 'indexedDB', {
+    configurable: true,
+    value: factory,
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.open('omnihr', 3)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      db.createObjectStore('employees', { keyPath: 'id' })
+      db.createObjectStore('policies', { keyPath: 'id' })
+      db.createObjectStore('leavePlans', { keyPath: 'id' })
+      db.createObjectStore('attendance', { keyPath: 'id' })
+      db.createObjectStore('holidays', { keyPath: 'id' })
+      db.createObjectStore('plannerEvents', { keyPath: 'id' })
+      db.createObjectStore('meta', { keyPath: 'key' })
+    }
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const transaction = db.transaction(
+        [
+          'employees',
+          'policies',
+          'leavePlans',
+          'attendance',
+          'holidays',
+          'plannerEvents',
+          'meta',
+        ],
+        'readwrite',
+      )
+      for (const row of options.employees) transaction.objectStore('employees').put(row)
+      for (const row of options.policies ?? []) transaction.objectStore('policies').put(row)
+      for (const row of options.leavePlans ?? []) transaction.objectStore('leavePlans').put(row)
+      for (const row of options.attendance ?? []) transaction.objectStore('attendance').put(row)
+      for (const row of options.holidays ?? []) transaction.objectStore('holidays').put(row)
+      for (const row of options.plannerEvents ?? []) {
+        transaction.objectStore('plannerEvents').put(row)
+      }
+      const meta = transaction.objectStore('meta')
+      meta.put({ key: 'initialized', value: true })
+      meta.put({ key: 'attendanceInitialized', value: true })
+      meta.put({ key: 'holidaysInitialized', value: true })
+      meta.put({ key: 'plannerEventsInitialized', value: true })
+      meta.put({ key: 'settings', value: options.settings ?? DEFAULT_PLANNER_SETTINGS })
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => {
+        db.close()
+        reject(transaction.error)
+      }
+      transaction.onabort = () => {
+        db.close()
+        reject(transaction.error)
+      }
+    }
+  })
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'indexedDB', {
     configurable: true,
@@ -201,7 +305,7 @@ describe('IndexedDB migration from localStorage', () => {
   it('seeds every dataset when there is no legacy data', async () => {
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
@@ -210,6 +314,9 @@ describe('IndexedDB migration from localStorage', () => {
       createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
     )
     expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
@@ -276,6 +383,38 @@ describe('IndexedDB migration from localStorage', () => {
       envelope(LEGACY_PLANNER_EVENTS),
     )
     expect(storage.getItem('omnihr_planner_settings')).toBe(envelope([LEGACY_SETTINGS]))
+  })
+
+  it('migrates legacy pay-structure, override and bonus envelopes', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(LEGACY_EMPLOYEES),
+      omnihr_pay_structure: envelope([createDefaultPayStructure()]),
+      omnihr_pay_overrides: envelope(LEGACY_PAY_OVERRIDES),
+      omnihr_payroll_bonuses: envelope(LEGACY_PAYROLL_BONUSES),
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual(LEGACY_PAY_OVERRIDES)
+    expect(loaded.snapshot.payrollBonuses).toEqual(LEGACY_PAYROLL_BONUSES)
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('falls back to the default structure and empty pay datasets for corrupt pay envelopes', async () => {
+    installLocalStorage({
+      omnihr_employees: envelope(LEGACY_EMPLOYEES),
+      [STORAGE_KEYS.payStructure]: '{not json',
+      [STORAGE_KEYS.payOverrides]: '[null]',
+      [STORAGE_KEYS.payrollBonuses]: '42',
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
+    expect(loaded.recovered).toBe(true)
   })
 
   it('migrates only once, even when the legacy keys keep changing', async () => {
@@ -472,7 +611,7 @@ describe('IndexedDB v1 database upgrade', () => {
 
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
@@ -482,6 +621,9 @@ describe('IndexedDB v1 database upgrade', () => {
       createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
     )
     expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
     expect(loaded.recovered).toBe(false)
   })
 
@@ -554,13 +696,14 @@ describe('IndexedDB v2 database upgrade', () => {
 
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.v).toBe(4)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
     expect(loaded.snapshot.attendance).toEqual(LEGACY_ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(LEGACY_HOLIDAYS)
     expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
     expect(loaded.snapshot.settings).toEqual(LEGACY_SETTINGS)
     expect(loaded.recovered).toBe(false)
   })
@@ -616,5 +759,59 @@ describe('IndexedDB v2 database upgrade', () => {
 
     const loaded = await createStore().load()
     expect(loaded.snapshot.plannerEvents).toEqual([])
+  })
+})
+
+describe('IndexedDB v3 database upgrade', () => {
+  it('upgrades in place, preserves every v3 dataset and adds the default pay structure', async () => {
+    await createV3Database({
+      employees: INITIAL_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      attendance: LEGACY_ATTENDANCE,
+      holidays: LEGACY_HOLIDAYS,
+      plannerEvents: LEGACY_PLANNER_EVENTS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.v).toBe(4)
+    expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
+    expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
+    expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
+    expect(loaded.snapshot.attendance).toEqual(LEGACY_ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(LEGACY_HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual(LEGACY_PLANNER_EVENTS)
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual([])
+    expect(loaded.snapshot.payrollBonuses).toEqual([])
+    expect(loaded.snapshot.settings).toEqual(LEGACY_SETTINGS)
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('keeps pay datasets saved after the upgrade across a reload', async () => {
+    await createV3Database({
+      employees: LEGACY_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      attendance: LEGACY_ATTENDANCE,
+      holidays: LEGACY_HOLIDAYS,
+      plannerEvents: LEGACY_PLANNER_EVENTS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const store = createStore()
+    await store.load()
+    await expect(store.savePayOverrides(LEGACY_PAY_OVERRIDES)).resolves.toEqual({ ok: true })
+    await expect(store.savePayrollBonuses(LEGACY_PAYROLL_BONUSES)).resolves.toEqual({
+      ok: true,
+    })
+
+    const loaded = await createStore().load()
+    expect(loaded.snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(loaded.snapshot.payOverrides).toEqual(LEGACY_PAY_OVERRIDES)
+    expect(loaded.snapshot.payrollBonuses).toEqual(LEGACY_PAYROLL_BONUSES)
+    expect(loaded.recovered).toBe(false)
   })
 })

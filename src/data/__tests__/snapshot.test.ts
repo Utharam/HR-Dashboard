@@ -3,10 +3,13 @@ import type {
   AttendanceRecord,
   Holiday,
   LeavePlan,
+  PayStructureOverride,
+  PayrollBonus,
   PlannerEvent,
   PlannerSettings,
 } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
+import { createDefaultPayStructure } from '../../utils/payStructure'
 import {
   hasUniqueAttendanceDates,
   hasUniqueHolidayDates,
@@ -40,10 +43,37 @@ const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(
 ).slice(0, 6)
 const PLANNER_EVENTS: PlannerEvent[] = createInitialPlannerEvents(new Date(EXPORTED_AT))
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 6 }
+const PAY_STRUCTURE = createDefaultPayStructure()
+const PAY_OVERRIDES: PayStructureOverride[] = [
+  {
+    employeeId: EMPLOYEES[0].id,
+    components: [
+      { id: 'basic', name: 'Basic', basis: 'Fixed', value: 60000, isBasic: true },
+      { id: 'special', name: 'Special', basis: 'Remainder', value: 0 },
+    ],
+    epfEnabled: false,
+    professionalTaxEnabled: true,
+    note: 'Retention package',
+    updatedAt: EXPORTED_AT,
+  },
+]
+const PAYROLL_BONUSES: PayrollBonus[] = [
+  {
+    id: 'bonus-1',
+    employeeId: EMPLOYEES[0].id,
+    monthKey: '2026-11',
+    kind: 'Performance',
+    label: 'Performance bonus',
+    amount: 5000,
+    rating: 4,
+    createdAt: EXPORTED_AT,
+    updatedAt: EXPORTED_AT,
+  },
+]
 
 function baseSnapshot(): DataSnapshot {
   return {
-    v: 3,
+    v: 4,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: EXPORTED_AT,
     employees: EMPLOYEES,
@@ -52,6 +82,9 @@ function baseSnapshot(): DataSnapshot {
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
     plannerEvents: PLANNER_EVENTS,
+    payStructure: PAY_STRUCTURE,
+    payOverrides: PAY_OVERRIDES,
+    payrollBonuses: PAYROLL_BONUSES,
     settings: SETTINGS,
   }
 }
@@ -84,6 +117,22 @@ function legacyV2Snapshot(): Record<string, unknown> {
   }
 }
 
+/** A pre-pay snapshot: v3 carried events but no structure, overrides or bonuses. */
+function legacyV3Snapshot(): Record<string, unknown> {
+  return {
+    v: 3,
+    dataVersion: DATA_SCHEMA_VERSION,
+    exportedAt: EXPORTED_AT,
+    employees: EMPLOYEES,
+    policies: POLICIES,
+    leavePlans: LEAVE_PLANS,
+    attendance: ATTENDANCE,
+    holidays: HOLIDAYS,
+    plannerEvents: PLANNER_EVENTS,
+    settings: SETTINGS,
+  }
+}
+
 function rawWithout(
   field:
     | 'employees'
@@ -92,6 +141,9 @@ function rawWithout(
     | 'attendance'
     | 'holidays'
     | 'plannerEvents'
+    | 'payStructure'
+    | 'payOverrides'
+    | 'payrollBonuses'
     | 'settings',
 ): Record<string, unknown> {
   const raw = { ...baseSnapshot() } as unknown as Record<string, unknown>
@@ -149,7 +201,7 @@ describe('hasUniqueAttendanceDates', () => {
 })
 
 describe('createSnapshot', () => {
-  it('stamps the v3 snapshot format and the data schema version', () => {
+  it('stamps the v4 snapshot format and the data schema version', () => {
     const snapshot = createSnapshot({
       employees: EMPLOYEES,
       policies: POLICIES,
@@ -157,11 +209,14 @@ describe('createSnapshot', () => {
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
       plannerEvents: PLANNER_EVENTS,
+      payStructure: PAY_STRUCTURE,
+      payOverrides: PAY_OVERRIDES,
+      payrollBonuses: PAYROLL_BONUSES,
       settings: SETTINGS,
       exportedAt: EXPORTED_AT,
     })
 
-    expect(SNAPSHOT_VERSION).toBe(3)
+    expect(SNAPSHOT_VERSION).toBe(4)
     expect(snapshot).toEqual({
       v: SNAPSHOT_VERSION,
       dataVersion: DATA_SCHEMA_VERSION,
@@ -172,11 +227,14 @@ describe('createSnapshot', () => {
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
       plannerEvents: PLANNER_EVENTS,
+      payStructure: PAY_STRUCTURE,
+      payOverrides: PAY_OVERRIDES,
+      payrollBonuses: PAYROLL_BONUSES,
       settings: SETTINGS,
     })
   })
 
-  it('defaults an omitted attendance, holiday or planner-event dataset to an empty array, never a missing key', () => {
+  it('defaults omitted datasets to empty arrays or the default structure, never a missing key', () => {
     const snapshot = createSnapshot({
       employees: EMPLOYEES,
       policies: POLICIES,
@@ -185,10 +243,13 @@ describe('createSnapshot', () => {
       exportedAt: EXPORTED_AT,
     })
 
-    expect(snapshot.v).toBe(3)
+    expect(snapshot.v).toBe(4)
     expect(snapshot.attendance).toEqual([])
     expect(snapshot.holidays).toEqual([])
     expect(snapshot.plannerEvents).toEqual([])
+    expect(snapshot.payStructure).toEqual(createDefaultPayStructure())
+    expect(snapshot.payOverrides).toEqual([])
+    expect(snapshot.payrollBonuses).toEqual([])
     expect(parseSnapshot(snapshot)).toEqual({ ok: true, snapshot })
   })
 
@@ -218,6 +279,9 @@ describe('snapshot round-trip', () => {
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
       plannerEvents: PLANNER_EVENTS,
+      payStructure: PAY_STRUCTURE,
+      payOverrides: PAY_OVERRIDES,
+      payrollBonuses: PAYROLL_BONUSES,
       settings: SETTINGS,
       exportedAt: EXPORTED_AT,
     })
@@ -235,6 +299,9 @@ describe('snapshot round-trip', () => {
     expect(result.snapshot.attendance).toEqual(ATTENDANCE)
     expect(result.snapshot.holidays).toEqual(HOLIDAYS)
     expect(result.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+    expect(result.snapshot.payStructure).toEqual(PAY_STRUCTURE)
+    expect(result.snapshot.payOverrides).toEqual(PAY_OVERRIDES)
+    expect(result.snapshot.payrollBonuses).toEqual(PAYROLL_BONUSES)
     expect(result.snapshot.settings).toEqual(SETTINGS)
   })
 
@@ -246,6 +313,8 @@ describe('snapshot round-trip', () => {
       attendance: [],
       holidays: [],
       plannerEvents: [],
+      payOverrides: [],
+      payrollBonuses: [],
       settings: { maxConcurrentLeave: 1 },
       exportedAt: EXPORTED_AT,
     })
@@ -271,31 +340,53 @@ describe('parseSnapshot', () => {
     'attendance',
     'holidays',
     'plannerEvents',
+    'payStructure',
+    'payOverrides',
+    'payrollBonuses',
     'settings',
-  ] as const)('rejects a v3 snapshot without %s', (field) => {
+  ] as const)('rejects a v4 snapshot without %s', (field) => {
     expect(parseSnapshot(rawWithout(field))).toEqual({ ok: false, reason: 'invalid' })
   })
 
-  it('accepts a v1 snapshot and returns v3 with empty attendance, holidays and planner events', () => {
+  it('accepts a v1 snapshot and returns v4 with the default pay datasets', () => {
     expect(parseSnapshot(legacySnapshot())).toEqual({
       ok: true,
       snapshot: {
         ...legacySnapshot(),
-        v: 3,
+        v: 4,
         attendance: [],
         holidays: [],
         plannerEvents: [],
+        payStructure: createDefaultPayStructure(),
+        payOverrides: [],
+        payrollBonuses: [],
       },
     })
   })
 
-  it('accepts a v2 snapshot and returns v3 with empty planner events', () => {
+  it('accepts a v2 snapshot and returns v4 with empty planner and pay datasets', () => {
     expect(parseSnapshot(legacyV2Snapshot())).toEqual({
       ok: true,
       snapshot: {
         ...legacyV2Snapshot(),
-        v: 3,
+        v: 4,
         plannerEvents: [],
+        payStructure: createDefaultPayStructure(),
+        payOverrides: [],
+        payrollBonuses: [],
+      },
+    })
+  })
+
+  it('accepts a v3 snapshot and returns v4 with the default pay datasets', () => {
+    expect(parseSnapshot(legacyV3Snapshot())).toEqual({
+      ok: true,
+      snapshot: {
+        ...legacyV3Snapshot(),
+        v: 4,
+        payStructure: createDefaultPayStructure(),
+        payOverrides: [],
+        payrollBonuses: [],
       },
     })
   })
@@ -480,6 +571,78 @@ describe('parseSnapshot', () => {
     ).toEqual({ ok: false, reason: 'invalid' })
   })
 
+  it('rejects invalid pay-structure, override and bonus rows', () => {
+    const base = baseSnapshot()
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payStructure: {
+          ...PAY_STRUCTURE,
+          components: [
+            { id: 'hra', name: 'HRA', basis: 'PercentOfCTC', value: 50 },
+          ],
+        },
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payOverrides: [{ ...PAY_OVERRIDES[0], employeeId: '' }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payrollBonuses: [{ ...PAYROLL_BONUSES[0], monthKey: '2026-13' }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payrollBonuses: [{ ...PAYROLL_BONUSES[0], amount: 0 }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+  })
+
+  it('rejects duplicate pay component ids, override employeeIds and bonus ids', () => {
+    const base = baseSnapshot()
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payStructure: {
+          ...PAY_STRUCTURE,
+          components: [
+            PAY_STRUCTURE.components[0],
+            { ...PAY_STRUCTURE.components[1], id: PAY_STRUCTURE.components[0].id },
+            PAY_STRUCTURE.components[2],
+          ],
+        },
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payOverrides: [PAY_OVERRIDES[0], { ...PAY_OVERRIDES[0], note: 'Duplicate' }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        payrollBonuses: [
+          PAYROLL_BONUSES[0],
+          { ...PAYROLL_BONUSES[0], label: 'Duplicate' },
+        ],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+  })
+
   it('accepts an empty dataset with valid settings', () => {
     const snapshot = createSnapshot({
       employees: [],
@@ -488,6 +651,8 @@ describe('parseSnapshot', () => {
       attendance: [],
       holidays: [],
       plannerEvents: [],
+      payOverrides: [],
+      payrollBonuses: [],
       settings: { maxConcurrentLeave: 2 },
       exportedAt: EXPORTED_AT,
     })
