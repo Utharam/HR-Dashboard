@@ -28,6 +28,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PayrollEmployee,
   PlannerSettings,
 } from './types';
 import {
@@ -465,7 +466,7 @@ export const App: React.FC<{
    * Once the reload succeeds, the Excel import's Undo is destroyed along with its
    * backup: it restores only the pre-import EMPLOYEES, and pressing it after a
    * snapshot import would write that stale roster over a store the snapshot has
-   * since replaced in all four datasets. A rejected load is caught and reported -
+   * since replaced in all six datasets. A rejected load is caught and reported -
    * an unhandled rejection leaves the stale screen AND the stale Undo banner in
    * place, which is the worse half of the same bug.
    */
@@ -709,16 +710,32 @@ export const App: React.FC<{
    * fractional days honestly - so a payroll figure never disagrees with the
    * ledger it was derived from.
    *
+   * The month's true working-day figures ride along as the optional
+   * `PayrollEmployee` seam: `workingDays` is the calendar count (days minus
+   * Sundays and holidays) and `attendancePct` is `present / workingDays * 100`
+   * (0 when a month has no working days at all), so the overview can rate
+   * attendance against the real month instead of a fixed 26-day baseline. The
+   * payroll MATH is deliberately NOT touched by these fields: the LOP wage cut
+   * stays `(Basic / 26) * LOP Days`, a statutory/company constant, and
+   * `computeLOP` semantics are unchanged by design.
+   *
    * This starts from `filteredEmployees`, the register the sections already
    * receive, so the header's filters keep narrowing these tabs and only the
    * day-level figures change.
    */
-  const payrollEmployees = useMemo(
+  const payrollEmployees = useMemo<PayrollEmployee[]>(
     () =>
       filteredEmployees.map((emp) => {
         const rollup = currentMonthRollup.get(emp.id);
         if (!rollup || !rollup.hasRecords) return emp;
-        return { ...emp, presentDays: rollup.presentDays, lopDays: rollup.lopDays };
+        return {
+          ...emp,
+          presentDays: rollup.presentDays,
+          lopDays: rollup.lopDays,
+          attendancePct:
+            rollup.workingDays > 0 ? (rollup.presentDays / rollup.workingDays) * 100 : 0,
+          workingDays: rollup.workingDays,
+        };
       }),
     [filteredEmployees, currentMonthRollup],
   );

@@ -2,14 +2,19 @@ import React, { useMemo } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import 'chart.js/auto';
 import { Users, CreditCard, Award, CalendarCheck, TrendingDown, Sparkles } from 'lucide-react';
-import type { Employee, Department } from '../types';
+import type { Department, Employee, PayrollEmployee } from '../types';
 import { formatINR, formatCrores, formatLakhs } from '../utils/formatters';
 import { computeAttendancePct } from '../utils/dates';
 import { isActive } from '../utils/payroll';
 import { useChartTokens } from '../theme/chartTokens';
 
 interface OverviewSectionProps {
-  employees: Employee[];
+  /**
+   * The register as App derived it for payroll and the overview: employees with
+   * daily records in the current month carry the rollup's `attendancePct` and
+   * `workingDays`, everyone else the legacy monthly fields.
+   */
+  employees: PayrollEmployee[];
   departments: Department[];
   onSelectEmployee: (emp: Employee) => void;
   /**
@@ -59,8 +64,19 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   // '95.2', which is a plausible-looking workforce statistic for a dataset that does
   // not exist. 0.0 is the honest reading and matches the empty-roster ratio fallback
   // below; no number is invented here.
-  const avgAttendance = totalHeadcount 
-    ? (employees.reduce((acc, e) => acc + computeAttendancePct(e.presentDays), 0) / totalHeadcount).toFixed(1)
+  //
+  // Two baselines, stated in the tile's sub-label:
+  // - an employee with daily records carries `attendancePct` from the current-month
+  //   rollup — `present ÷ workingDays`, the real month's calendar — so a fully
+  //   present November (25 working days) reads 100%, not the 96.2% a fixed
+  //   26-day denominator would report;
+  // - everyone else keeps the legacy `presentDays`-over-26 monthly figure via
+  //   `computeAttendancePct`, which stays the fallback for rosters without a ledger.
+  const ledgerCount = employees.filter(e => typeof e.attendancePct === 'number').length;
+  const avgAttendance = totalHeadcount
+    ? (employees.reduce((acc, e) => acc + (typeof e.attendancePct === 'number'
+        ? e.attendancePct
+        : computeAttendancePct(e.presentDays)), 0) / totalHeadcount).toFixed(1)
     : '0.0';
 
   // Diversity
@@ -296,7 +312,10 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           </div>
           <div className="kpi-value text-info">{avgAttendance}%</div>
           <div className="kpi-sub">
-            Standard 26-Day Cycle
+            {ledgerCount > 0
+              ? `${ledgerCount} of ${totalHeadcount} from the daily ledger • present ÷ working days`
+              : 'Legacy monthly totals (26-day baseline)'}
+            {' • LOP priced at Basic/26'}
           </div>
         </div>
 

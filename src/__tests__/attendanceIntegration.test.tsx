@@ -482,12 +482,15 @@ describe('Attendance integration — payroll and overview rollup', () => {
     // The overview attendance rate reads the same rollup - and the legacy
     // presentDays (10) would have produced a very different percentage. Present
     // counts only P/W and half-days: the two absences add nothing, so the
-    // rollup's present figure is the half-day's 0.5.
+    // rollup's present figure is the half-day's 0.5. The rate is
+    // `present / workingDays`, the month's real working-day count, not the
+    // fixed 26-day baseline `computeAttendancePct` applies to legacy values.
     await userEvent.click(screen.getByRole('button', { name: 'Executive Overview' }));
     const tile = screen
       .getByText('Attendance Rate', { selector: '.kpi-label' })
       .closest('.kpi-card') as HTMLElement;
-    expect(within(tile).getByText(`${computeAttendancePct(0.5).toFixed(1)}%`)).toBeInTheDocument();
+    const expectedPct = ((0.5 / workingDays.length) * 100).toFixed(1);
+    expect(within(tile).getByText(`${expectedPct}%`)).toBeInTheDocument();
   });
 
   it('falls back to the legacy monthly values when the month has no records', async () => {
@@ -511,6 +514,39 @@ describe('Attendance integration — payroll and overview rollup', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Slip' }));
     const payslip = screen.getByRole('dialog', { name: new RegExp(EMPLOYEE_A.name) });
     expect(within(payslip).queryByText(/Loss of Pay/)).toBeNull();
+  });
+
+  it('rates a fully present November 2026 at 100%, not the legacy 96.2%', async () => {
+    // November 2026 has 30 days and five Sundays (no holidays in the seed used
+    // here), so its working-day count is 25. A ledger of Present on every one of
+    // them must read 100% - the legacy 26-day baseline would price the same
+    // month at 25/26 = 96.2%, which is exactly the mislabel this rate exists to
+    // remove. The clock is pinned so the month is deterministic: App reads
+    // `new Date()` once at mount for its rollup month.
+    vi.useFakeTimers({ now: new Date(2026, 10, 15), toFake: ['Date'] });
+    try {
+      const NOVEMBER: RenderedMonth = { year: 2026, monthIndex: 10 };
+      const working = workingDateKeys(NOVEMBER.year, NOVEMBER.monthIndex, []);
+      expect(working).toHaveLength(25);
+      await mountConsole({
+        employees: [EMPLOYEE_A],
+        attendance: working.map((date) =>
+          recordFor(NOVEMBER, EMPLOYEE_A.id, dayNumber(date), 'Present'),
+        ),
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Executive Overview' }));
+      const tile = screen
+        .getByText('Attendance Rate', { selector: '.kpi-label' })
+        .closest('.kpi-card') as HTMLElement;
+      expect(within(tile).getByText('100.0%')).toBeInTheDocument();
+      // The legacy 26-day rate for the same fully-present ledger.
+      expect(within(tile).queryByText('96.2%')).toBeNull();
+      // The sub-label names the basis the figure was computed on.
+      expect(tile.textContent).toMatch(/present ÷ working days/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

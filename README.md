@@ -84,13 +84,13 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - Profile drawer with personal details, reporting line, and statutory ID records.
 
 3. **Time & Attendance — Daily Ledger, Monthly Matrix & Holiday Calendar:**
-   - One daily record per employee and date, stored in IndexedDB: `P` Present, `A` Absent, `W` WFH, `HD` Half-day, plus typed leave codes (`CL`, `SL`, `EL`, `LOP`, `ML`, `PL`, `CO`, `O`). Sundays and holidays are derived — the matrix shows `WO`/`H` and stores no record for them.
+   - One daily record per employee and date, stored in IndexedDB: `P` Present, `A` Absent, `W` WFH, `HD` Half-day, plus typed leave codes (`CL`, `SL`, `EL`, `LOP`, `ML`, `PL`, `CO`, `O`) and half-day leave codes (`HD-CL`, `HD-SL`, `HD-EL`, `HD-LOP`, `HD-ML`, `HD-PL`, `HD-CO`, `HD-O`). Sundays and holidays are derived — the matrix shows `WO`/`H` and stores no record for them.
    - Monthly matrix (employees × days) with month navigation, department/location/search filters, summary tiles, a per-day editor with "Mark all present", and click-to-edit cells.
    - Company holiday calendar seeded with the fixed 2026 national holidays (New Year, Republic Day, Independence Day, Gandhi Jayanti, Christmas); HR can add, edit and remove holidays.
-   - Monthly rollup: present = P + W + 0.5×HD; LOP = absences + LOP leave; working days exclude Sundays and holidays; attendance % = present ÷ working days.
-   - Current-month payroll and overview figures come from the daily rollup for every employee with records this month; employees or months without daily records keep the legacy `presentDays`/`lopDays` fields.
+   - Monthly rollup: present = P + W + 0.5×HD; LOP = absences + LOP leave; working days exclude Sundays and holidays; attendance % = present ÷ working days of the month in view.
+   - Current-month payroll and overview figures come from the daily rollup for every employee with records this month; the Overview attendance rate then rates them against the month's real working days (`present ÷ working days`, so a fully present November is 100%, not the 96.2% a fixed 26-day baseline would report). Employees or months without daily records keep the legacy `presentDays`/`lopDays` fields and the 26-day baseline.
    - Leave quotas tracking: Casual Leave (CL), Sick Leave (SL), Privilege/Earned Leave (EL), and Loss of Pay (LOP) days.
-   - Automatic Loss of Pay (LOP) wage deductions: `(Basic / 26) * LOP Days`.
+   - Automatic Loss of Pay (LOP) wage deductions: `(Basic / 26) * LOP Days`. The fixed 26-day LOP denominator (and the wage-cap rules around it) stay company/statutory policy, deliberately independent of a month's actual working-day count.
 
 4. **Leave Planner & Coverage Calendar:**
    - HR records future leave per employee: type (CL, SL, EL, LOP, Maternity, Paternity, Comp Off, Other), status (Planned, Approved, Cancelled) and an AM/PM half-day on single-day entries.
@@ -132,8 +132,8 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - **Download Standard Template:** Generates a pre-formatted Excel template with recognized column headers.
    - **Export Master Roster:** Downloads the complete 200 employee directory as an Excel file with all 24 columns, including the canonical department ID, the reporting line, PF UANs and leave balances. The file round-trips: importing it reproduces the register it came from.
    - **Export Payroll Register:** Generates a bank-ready payroll register spreadsheet with line-by-line deduction breakdowns. It is priced from the same register the Payroll tab shows, so current-month LOP reflects the daily attendance rollup.
-   - **Attendance matrix template:** generates `omnihr-attendance-YYYY-MM.xlsx` for the selected month from the live roster, the holiday calendar and approved leave plans — Sundays pre-filled `WO`, holidays `H`, approved leave pre-filled with its code, other working days pre-filled `P` (optional), plus a legend sheet.
-   - **Attendance matrix import:** upload the filled matrix from the Attendance tab; it is validated, previewed (matched employees, records to create/replace, per-cell issues) and only written after confirmation. Importing replaces that month's records only.
+   - **Attendance matrix template:** generates `omnihr-attendance-YYYY-MM.xlsx` for the selected month from the live roster, the holiday calendar and approved leave plans — Sundays pre-filled `WO`, holidays `H`, the month's existing records carried over as their own codes, approved leave pre-filled with its code (approved half-day leave as `HD-<code>`), other working days pre-filled `P` (optional), plus a legend sheet.
+   - **Attendance matrix import:** upload the filled matrix from the Attendance tab; it is validated, previewed (matched employees, records to create/replace, per-cell issues, and roster gaps — employee IDs missing from the sheet and working-day columns with no marks) and only written after confirmation. Importing replaces that month's records only.
 
 11. **Admin & Data Exchange:**
     - **Data snapshot card:** record counts (employees, policies, leave plans, attendance records, holidays), the active storage backend (IndexedDB or the localStorage fallback), whether the pre-migration legacy `localStorage` backup exists, and the last exported/imported timestamps for this browser.

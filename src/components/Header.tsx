@@ -47,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
     switch (tab) {
       case 'overview': return { title: 'Executive Workforce Overview', sub: 'High-level headcount, payroll allocation, diversity & attrition health' };
       case 'directory': return { title: 'Employee Master Directory', sub: '200 active corporate profiles with role hierarchy and salary structures' };
-      case 'attendance': return { title: 'Time, Attendance & Leave Quotas', sub: 'Standard 26-day working cycle, leave balances and LOP impact' };
+      case 'attendance': return { title: 'Time & Attendance', sub: 'Daily ledger, monthly matrix, company holidays and LOP impact' };
       case 'leave': return { title: 'Leave Planner & Coverage Calendar', sub: 'Month calendar of who is away, coverage peak days and the next 30 days of planned leave' };
       case 'payroll': return { title: 'Payroll & Compensation Engine', sub: 'Statutory CTC components, EPF, ESI, Professional Tax & Disbursable Net' };
       case 'performance': return { title: 'Performance & 9-Box Talent Matrix', sub: 'Bell curve distribution, potential vs performance rating grid' };
@@ -61,6 +61,17 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const info = getTabTitle(activeTab);
+
+  /**
+   * The Attendance and Leave tabs own their own search/department/location
+   * filters (see the sections' props in App). Showing the header's identical
+   * controls above them rendered two look-alike filter bars on one screen, and
+   * the header's global state would narrow this section's register from a tab
+   * the user had already left. The controls are hidden here rather than rewired
+   * into the sections: their state stays in App untouched, so leaving these
+   * tabs and coming back restores exactly what the header held before.
+   */
+  const showGlobalFilters = activeTab !== 'attendance' && activeTab !== 'leave';
 
   return (
     <header className="page-header no-print">
@@ -94,52 +105,58 @@ export const Header: React.FC<HeaderProps> = ({
 
       <div className="page-actions">
         {/* Global Search Input */}
-        <div style={{ width: '220px' }}>
-          <label className="omni-icon-field">
-            <Search size={15} />
-            <span className="sr-only">Search staff</span>
-            <input
-              type="text"
-              className="omni-input"
-              placeholder="Search staff, ID, role..."
-              aria-label="Search staff, ID or role"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </label>
-        </div>
+        {showGlobalFilters && (
+          <div style={{ width: '220px' }}>
+            <label className="omni-icon-field">
+              <Search size={15} />
+              <span className="sr-only">Search staff</span>
+              <input
+                type="text"
+                className="omni-input"
+                placeholder="Search staff, ID, role..."
+                aria-label="Search staff, ID or role"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </label>
+          </div>
+        )}
 
         {/* Department Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
-          <Building2 size={15} className="text-dim" />
-          <select
-            className="omni-select"
-            aria-label="Filter by department"
-            value={selectedDept}
-            onChange={(e) => setSelectedDept(e.target.value)}
-          >
-            <option value="ALL">All Departments (7 Orgs)</option>
-            {departments.map(d => (
-              <option key={d.id} value={d.name}>{d.name}</option>
-            ))}
-          </select>
-        </div>
+        {showGlobalFilters && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
+            <Building2 size={15} className="text-dim" />
+            <select
+              className="omni-select"
+              aria-label="Filter by department"
+              value={selectedDept}
+              onChange={(e) => setSelectedDept(e.target.value)}
+            >
+              <option value="ALL">All Departments (7 Orgs)</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Location Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
-          <MapPin size={15} className="text-dim" />
-          <select
-            className="omni-select"
-            aria-label="Filter by office location"
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-          >
-            <option value="ALL">All Locations (5 Hubs)</option>
-            {locations.map(loc => (
-              <option key={loc} value={loc}>{loc}</option>
-            ))}
-          </select>
-        </div>
+        {showGlobalFilters && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
+            <MapPin size={15} className="text-dim" />
+            <select
+              className="omni-select"
+              aria-label="Filter by office location"
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+            >
+              <option value="ALL">All Locations (5 Hubs)</option>
+              {locations.map(loc => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Actions */}
         <button onClick={onOpenAddModal} className="btn btn-primary">

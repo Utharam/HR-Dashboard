@@ -35,6 +35,28 @@ export interface Department {
   roles: string[];
 }
 
+/**
+ * An employee as the payroll-and-overview consumers see it (design decision D8).
+ *
+ * App derives these from `Employee` by folding in the current-month daily rollup:
+ * an employee with daily records also carries the month's true figures, the
+ * optional fields below; everyone else is the plain `Employee` and keeps the
+ * legacy monthly fields (`presentDays`, `lopDays`) untouched.
+ *
+ * `attendancePct` is `present ÷ workingDays × 100` from the rollup (0 when the
+ * month has no working days), and `workingDays` is the calendar fact behind it
+ * (days in month − Sundays − holidays). They describe the MONTH, so they must
+ * not be read as payroll constants: the LOP wage cut stays `(Basic / 26) × LOP
+ * Days` — the 26-day denominator is the statutory/company policy for pricing
+ * wages and is deliberately independent of how many days a given month has.
+ */
+export interface PayrollEmployee extends Employee {
+  /** Present days as a share of the month's working days, 0–100, from the daily rollup. */
+  attendancePct?: number;
+  /** Working days of the rollup's month (Sundays and holidays excluded). */
+  workingDays?: number;
+}
+
 export interface MonthlyTracker {
   month: string;
   headcount: number;

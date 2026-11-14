@@ -298,7 +298,7 @@ A single view of who is away, for HR input and for leadership coverage reviews:
 
 4. **Coverage Threshold:**
    - `maxConcurrentLeave` (default 3) is editable in the planner panel.
-   - Durations count working days, excluding Sundays, matching the app's 26-day working month.
+   - Durations count working days (days in the month minus Sundays), so the count follows the real calendar rather than a fixed monthly figure.
 
 ### 3.12 Admin & Data Exchange (Excel Hub)
 The former **Excel Data Hub** tab is now the **Admin** page (sidebar and header shortcuts point to **Admin**); the Excel Hub and its guide link are unchanged inside it:
@@ -328,7 +328,7 @@ OmniHR implements the following Indian statutory regulations:
 | **Payment of Gratuity Act, 1972** | 15 days wages per year of completed service based on a 26-day working month. Minimum 5 years service. Max ceiling ₹20 Lakhs. | `(15 * basicSalary * roundedTenure) / 26`, capped at `2000000` |
 | **Industrial Disputes Act, 1947 (Sec 25F)** | 1 month notice pay + 15 days average pay per completed year of service for retrenched workmen. | `Basic + (15 * Basic * Tenure / 30)` |
 | **State Professional Tax Acts** | Monthly state tax deduction on salaried income. | Standard `₹200 / month` |
-| **Standard Monthly Working Cycle** | 26 working days excluding 4 weekly off days (Sundays). | LOP deduction = `(Basic / 26) * LOP Days` |
+| **Standard Monthly Working Cycle (LOP pricing)** | The LOP wage deduction uses a fixed 26-day denominator, a company/statutory policy constant — independent of a month's actual working days. | LOP deduction = `(Basic / 26) * LOP Days` |
 | **CTC Structure Guidelines** | 50% Basic, 25% HRA, 25% Special Allowance. | Basic = 50% CTC; HRA = 50% Basic; Special = CTC - (Basic + HRA) |
 
 ---

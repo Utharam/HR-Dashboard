@@ -274,11 +274,11 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 {/* Module 3 */}
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong className="text-bright" style={{ fontSize: 'var(--fs-base)' }}>Time, Attendance & Leave Quotas</strong>
+                    <strong className="text-bright" style={{ fontSize: 'var(--fs-base)' }}>Time & Attendance</strong>
                     <span className="badge badge-primary">Tab: Attendance</span>
                   </div>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Operates on a standard <strong>26-day corporate working cycle</strong> (excluding 4 Sundays). Tracks Casual Leave (CL), Sick Leave (SL), and Privilege Leave (EL) quotas. Automatically calculates Loss of Pay (LOP) deductions using the formula: <code>(Basic Salary / 26) * LOP Days</code>.
+                    A daily ledger of one record per employee and date, shown as a monthly matrix with the company holiday calendar beside it. Working days are derived per month (all days minus Sundays and holidays), so attendance % is <code>present ÷ working days</code> of the month in view. Loss of Pay is priced with the statutory formula: <code>(Basic Salary / 26) * LOP Days</code>.
                   </p>
                 </div>
 
@@ -421,7 +421,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-warning-soft">• Restoring Factory Demo Data:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Click <strong>Reset Demo State</strong> at the bottom of the sidebar. This resets all four business datasets: the roster returns to the original 200 corporate staff records, and HR policies, leave plans and planner settings return to their demo defaults.
+                    Click <strong>Reset Demo State</strong> at the bottom of the sidebar. This resets all six business datasets: the roster returns to the original 200 corporate staff records, HR policies, leave plans and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list.
                   </p>
                 </div>
               </div>

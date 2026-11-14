@@ -118,14 +118,15 @@ Spreadsheets originate from diverse operating systems (Windows, macOS, Linux) an
 
 ## 5. Attendance & Leave Calculation Rules
 
-- **Standard Work Days:** Always evaluated against the **26-day** corporate operational cycle (excluding 4 Sundays).
-- **Attendance Percentage Calculation:**
+- **Legacy monthly columns:** the ingested `Attendance Days` / `LOP Days` columns are monthly totals, and the stored `Attendance Days` figure is evaluated against the fixed **26-day payroll baseline** (`presentDays / 26`), the same constant used to price LOP wages. This is a legacy baseline for rosters without a daily ledger, **not** a claim about any real month.
+- **Attendance Percentage Calculation (legacy column):**
   $$\text{Attendance Rate \%} = \text{round}\left(\left(\frac{\text{Present Days}}{26}\right) \times 100, 1\right)$$
 - **LOP Days Ingestion Logic:**
   - If the spreadsheet contains an explicit `LOP Days` column, that value is honored.
   - If `LOP Days` is omitted, OmniHR calculates it as:
     $$\text{LOP Days} = \max(0, 26 - \text{Present Days} - 1)$$
     *(Assuming 1 authorized approved leave day).*
+  - The **LOP wage deduction itself always uses the statutory 26-day denominator**, `(Basic / 26) × LOP Days`, as company/statutory policy — regardless of how many working days the month actually has.
 
 ### 5.1 Daily attendance rollup (monthly matrix)
 
@@ -135,8 +136,9 @@ Once a month has daily attendance records (see the matrix in §7), the monthly f
 - **Leave days** are counted by type (`CL`, `SL`, `EL`, `LOP`, `ML`, `PL`, `CO`, `O`); balances are not deducted automatically.
 - **LOP days** = `A` absences + `LOP` leave days. Half-days without a leave type do not create LOP.
 - **Working days** = days in month − Sundays − holidays (from the company holiday calendar).
+- **Attendance % = present ÷ working days** of the month in view — the real calendar month, not a fixed 26-day cycle.
 - **Sundays and holidays are derived**, never stored: the matrix displays `WO`/`H` and both the template and the importer ignore those cells.
-- **Payroll/overview fallback:** for the current month, payroll and the overview use the daily rollup only for employees who have at least one record that month; everyone else keeps the legacy `presentDays`/`lopDays` values from the register. Months without daily records (including prior months) keep the legacy values everywhere.
+- **Payroll/overview fallback:** for the current month, payroll and the overview use the daily rollup only for employees who have at least one record that month; everyone else keeps the legacy `presentDays`/`lopDays` values from the register. Months without daily records (including prior months) keep the legacy values everywhere. The LOP wage deduction keeps the statutory `(Basic / 26)` denominator in both paths.
 
 ---
 
@@ -200,9 +202,9 @@ OmniHR provides four standardized Excel export capabilities:
 - **Sheets:**
   - `Attendance` — `A1` title, `A2` `Month` / `B2` `YYYY-MM`, `A3` `Generated` / `B3` timestamp, header row 5 (`Employee ID`, `Employee Name`, `Department`, then day numbers `1`..`N`), and one row per employee in roster order.
   - `Legend` — status code → meaning.
-- **Cell codes:** `P` Present, `A` Absent, `W` WFH, `HD` Half-day (with a leave type: `HD` + leave code), `CL`/`SL`/`EL`/`LOP`/`ML`/`PL`/`CO`/`O` typed leave, `H` holiday, `WO` Sunday, blank unmarked. Sundays are pre-filled `WO`, holidays from the company calendar `H`, approved leave plans with their code, and other working days `P` when prefill-present is on.
+- **Cell codes:** `P` Present, `A` Absent, `W` WFH, `HD` Half-day, `HD-CL`/`HD-SL`/`HD-EL`/`HD-LOP`/`HD-ML`/`HD-PL`/`HD-CO`/`HD-O` half-day with a leave type, `CL`/`SL`/`EL`/`LOP`/`ML`/`PL`/`CO`/`O` typed leave, `H` holiday, `WO` Sunday, blank unmarked. Sundays are pre-filled `WO`, holidays from the company calendar `H`, existing records for the month are carried into the template as their own codes, approved leave plans are pre-filled with their code (approved half-day leave as `HD-<code>`), and other working days `P` when prefill-present is on.
 - **Round-trip safe:** a generated template parsed back produces exactly the intended records; `H`/`WO`/blank cells never become records.
-- **Import & replace-month semantics:** upload on the Attendance tab (`.xlsx`/`.xls`/`.csv`). The month is read from `B2`, rows are matched by `Employee ID` (name/department columns are ignored), and the preview reports employees matched, records to create, existing records to replace, and per-cell issues. **Confirmation replaces the whole month's records** — every record dated in that month is removed and the parsed rows take their place — and never touches other months. Unknown employee IDs, invalid codes and day numbers outside the month become preview issues rather than silent skips. A failed import leaves the previous month untouched.
+- **Import & replace-month semantics:** upload on the Attendance tab (`.xlsx`/`.xls` only). The month is read from `B2`, rows are matched by `Employee ID` (name/department columns are ignored), and the preview reports employees matched, records to create, existing records to replace, per-cell issues, and roster gaps (employee IDs not found on the sheet and working-day columns with no marks). **Confirmation replaces the whole month's records** — every record dated in that month is removed and the parsed rows take their place — and never touches other months. Unknown employee IDs, invalid codes and day numbers outside the month become preview issues rather than silent skips. A failed import leaves the previous month untouched.
 
 ---
 
@@ -220,7 +222,7 @@ OmniHR provides four standardized Excel export capabilities:
 | **Performance Rating > 5 or < 1** | Clamped to the valid integer range between 1 and 5. |
 | **Special Characters in Email/Phone** | Names are sanitized (`siddharth.verma@omnixhr.io`), whitespace stripped. |
 | **Unknown Employee ID in the attendance matrix** | Becomes a preview issue; the row is not imported and the existing month is untouched until the preview is confirmed. |
-| **Invalid status code in the attendance matrix** | Becomes a preview issue naming the row and cell; only valid codes (`P`, `A`, `W`, `HD`, typed leave codes) are stored. |
+| **Invalid status code in the attendance matrix** | Becomes a preview issue naming the row and cell; only valid codes (`P`, `A`, `W`, `HD`, `HD-<leave code>`, typed leave codes) are stored. |
 | **Duplicate dates or duplicate attendance ids** | Refused by the store as a whole, so an import that could produce them collapses repeats by `employee|date` at the boundary instead. |
 | **Holiday dates** | Company-wide and unique by date; the matrix and the rollup treat a holiday like a derived `H` day, and no attendance record is stored for it. |
 
