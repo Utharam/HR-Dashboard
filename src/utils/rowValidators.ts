@@ -33,7 +33,18 @@
  * paid or averaged in.
  */
 
-import type { Employee, HRPolicy, LeavePlan, LeaveStatus, LeaveType, PlannerSettings } from '../types';
+import type {
+  AttendanceRecord,
+  AttendanceSource,
+  AttendanceStatus,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  LeaveStatus,
+  LeaveType,
+  PlannerSettings,
+} from '../types';
 import { isValidDateKey } from './leavePlanner';
 
 /** Fields `filteredEmployees` calls a string method on. */
@@ -54,6 +65,12 @@ const LEAVE_TYPES: readonly LeaveType[] = [
 ];
 
 const LEAVE_STATUSES: readonly LeaveStatus[] = ['Planned', 'Approved', 'Cancelled'];
+
+const ATTENDANCE_STATUSES: readonly AttendanceStatus[] = [
+  'Present', 'Absent', 'Leave', 'WFH', 'HalfDay',
+];
+
+const ATTENDANCE_SOURCES: readonly AttendanceSource[] = ['manual', 'excel', 'leave', 'seed'];
 
 const asRecord = (row: unknown): Record<string, unknown> | null =>
   typeof row === 'object' && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : null;
@@ -169,6 +186,81 @@ export function isLeavePlanRow(row: unknown): row is LeavePlan {
     const value = rec[field];
     if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return false;
   }
+
+  return true;
+}
+
+/**
+ * True when `row` is safe to hand to every consumer of an `AttendanceRecord`.
+ *
+ * A record is the unit the month rollup and the matrix both trust, so the date must be
+ * a real local key and the status/source must be values this build can render. Leave
+ * rows carry the type that produces their code; a `Leave` row without one would render
+ * as an untyped absence and cannot be turned back into a matrix cell, so it is rejected
+ * at the door. `halfDay` is optional because a matrix `HD` has no AM/PM marker, but a
+ * present value must be one this build understands.
+ */
+export function isAttendanceRecordRow(row: unknown): row is AttendanceRecord {
+  const rec = asRecord(row);
+  if (!rec) return false;
+
+  // Both ids key records and join them to employees; an empty id is not an identity.
+  if (typeof rec.id !== 'string' || rec.id.length === 0) return false;
+  if (typeof rec.employeeId !== 'string' || rec.employeeId.length === 0) return false;
+
+  if (!isValidDateKey(rec.date)) return false;
+
+  if (
+    typeof rec.status !== 'string' ||
+    !ATTENDANCE_STATUSES.includes(rec.status as AttendanceStatus)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof rec.source !== 'string' ||
+    !ATTENDANCE_SOURCES.includes(rec.source as AttendanceSource)
+  ) {
+    return false;
+  }
+
+  if (typeof rec.updatedAt !== 'string' || Number.isNaN(Date.parse(rec.updatedAt))) {
+    return false;
+  }
+
+  const leaveType = rec.leaveType;
+  if (leaveType !== undefined) {
+    if (typeof leaveType !== 'string' || !LEAVE_TYPES.includes(leaveType as LeaveType)) {
+      return false;
+    }
+  }
+  // `Leave` without a type cannot produce a code or a `leaveByType` entry.
+  if (rec.status === 'Leave' && leaveType === undefined) return false;
+
+  const halfDay = rec.halfDay;
+  if (halfDay !== undefined && halfDay !== null && halfDay !== 'AM' && halfDay !== 'PM') {
+    return false;
+  }
+
+  if (rec.note !== undefined && typeof rec.note !== 'string') return false;
+
+  return true;
+}
+
+/**
+ * True when `row` is safe to hand to every consumer of a `Holiday`.
+ *
+ * Uniqueness by date is a store/snapshot rule, not a row-shape rule: a row validator
+ * cannot see its siblings. Dates still have to be real local keys, because the holiday
+ * set is compared against date keys in the matrix and working-day math.
+ */
+export function isHolidayRow(row: unknown): row is Holiday {
+  const rec = asRecord(row);
+  if (!rec) return false;
+
+  if (typeof rec.id !== 'string' || rec.id.length === 0) return false;
+  if (!isValidDateKey(rec.date)) return false;
+  if (typeof rec.name !== 'string' || rec.name.trim().length === 0) return false;
 
   return true;
 }

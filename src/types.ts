@@ -173,3 +173,57 @@ export interface PlannerSettings {
   /** Days at or above this concurrent-leave count are flagged as peak/coverage risk. */
   maxConcurrentLeave: number;
 }
+
+/**
+ * Daily attendance domain.
+ *
+ * A record is keyed by employee + date (the id is `${employeeId}|${date}`), and a date is
+ * a local calendar day (`YYYY-MM-DD`), never an instant. Sundays and holidays are not
+ * stored per employee: they are derived from the calendar and the holiday list.
+ */
+export type AttendanceStatus = 'Present' | 'Absent' | 'Leave' | 'WFH' | 'HalfDay';
+
+export type AttendanceSource = 'manual' | 'excel' | 'leave' | 'seed';
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  /** `YYYY-MM-DD`, local calendar date. */
+  date: string;
+  status: AttendanceStatus;
+  /** Required when `status === 'Leave'`; also used by a half-day leave. */
+  leaveType?: LeaveType;
+  /** `AM`/`PM` for a half-day, `null` for a full day. */
+  halfDay?: 'AM' | 'PM' | null;
+  note?: string;
+  source: AttendanceSource;
+  /** ISO timestamp. */
+  updatedAt: string;
+}
+
+export interface Holiday {
+  /** `holiday-${date}`. */
+  id: string;
+  /** `YYYY-MM-DD`, local calendar date. */
+  date: string;
+  name: string;
+}
+
+/**
+ * Per-employee totals for one month. `workingDays` excludes Sundays and holidays;
+ * `holidayDays` and `weeklyOffDays` report the calendar facts that produced it.
+ */
+export interface AttendanceRollup {
+  employeeId: string;
+  presentDays: number;
+  leaveDays: number;
+  leaveByType: Partial<Record<LeaveType, number>>;
+  absentDays: number;
+  wfhDays: number;
+  holidayDays: number;
+  weeklyOffDays: number;
+  workingDays: number;
+  lopDays: number;
+  unmarkedDays: number;
+  hasRecords: boolean;
+}

@@ -3,12 +3,17 @@ import {
   isEmployeeRow,
   isPolicyRow,
   isLeavePlanRow,
+  isAttendanceRecordRow,
+  isHolidayRow,
   isPlannerSettingsRow,
 } from '../rowValidators';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 import { INITIAL_POLICIES } from '../../data/initialPolicies';
 import { createInitialLeavePlans } from '../../data/initialLeavePlans';
-import type { LeavePlan } from '../../types';
+import { createInitialHolidays } from '../../data/initialHolidays';
+import { createInitialAttendance } from '../../data/initialAttendance';
+import { codeToRecord } from '../attendance';
+import type { AttendanceRecord, Holiday, LeavePlan, LeaveType } from '../../types';
 
 const employee = () => ({ ...INITIAL_EMPLOYEES[0] });
 
@@ -227,6 +232,179 @@ describe('isLeavePlanRow', () => {
 
   it('rejects an empty object', () => {
     expect(isLeavePlanRow({})).toBe(false);
+  });
+});
+
+describe('isAttendanceRecordRow', () => {
+  const attendanceRecord = (): AttendanceRecord =>
+    codeToRecord('P', 'EMP-1001', '2026-01-05', new Date('2026-01-05T00:00:00.000Z')) as AttendanceRecord;
+
+  it('accepts a mapped matrix record', () => {
+    expect(isAttendanceRecordRow(attendanceRecord())).toBe(true);
+  });
+
+  it('accepts every seeded demo record', () => {
+    const seeded = createInitialAttendance(
+      INITIAL_EMPLOYEES.slice(0, 3),
+      createInitialHolidays(2026),
+      new Date(2026, 0, 15),
+    );
+    expect(seeded.length).toBeGreaterThan(0);
+    for (const record of seeded) {
+      expect(isAttendanceRecordRow(record)).toBe(true);
+    }
+  });
+
+  it.each(['id', 'employeeId'] as const)('rejects a row whose %s is empty or not a string', (field) => {
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), [field]: '' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), [field]: 42 })).toBe(false);
+    const missing = attendanceRecord() as unknown as Record<string, unknown>;
+    delete missing[field];
+    expect(isAttendanceRecordRow(missing)).toBe(false);
+  });
+
+  it('rejects an impossible or malformed date', () => {
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), date: '2026-02-30' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), date: '05/01/2026' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), date: 20260105 })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), date: null })).toBe(false);
+  });
+
+  it('accepts every status this build renders', () => {
+    for (const status of ['Present', 'Absent', 'WFH', 'HalfDay'] as const) {
+      expect(isAttendanceRecordRow({ ...attendanceRecord(), status })).toBe(true);
+    }
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), status: 'Leave', leaveType: 'CL' })).toBe(
+      true,
+    );
+  });
+
+  it('rejects an unknown status', () => {
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), status: 'Holiday' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), status: null })).toBe(false);
+  });
+
+  it('accepts every persisted source', () => {
+    for (const source of ['manual', 'excel', 'leave', 'seed'] as const) {
+      expect(isAttendanceRecordRow({ ...attendanceRecord(), source })).toBe(true);
+    }
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), source: 'import' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), source: 1 })).toBe(false);
+  });
+
+  it('requires a valid leave type on a Leave record', () => {
+    const leaveTypes: LeaveType[] = [
+      'CL', 'SL', 'EL', 'LOP', 'Maternity', 'Paternity', 'Comp Off', 'Other',
+    ];
+    for (const leaveType of leaveTypes) {
+      expect(
+        isAttendanceRecordRow({ ...attendanceRecord(), status: 'Leave', leaveType }),
+      ).toBe(true);
+    }
+
+    const withoutType = { ...attendanceRecord(), status: 'Leave' as const };
+    expect(isAttendanceRecordRow(withoutType)).toBe(false);
+    expect(
+      isAttendanceRecordRow({ ...attendanceRecord(), status: 'Leave', leaveType: null }),
+    ).toBe(false);
+    expect(
+      isAttendanceRecordRow({ ...attendanceRecord(), status: 'Leave', leaveType: 'Vacation' }),
+    ).toBe(false);
+  });
+
+  it('accepts a leave type on a half-day and rejects an unknown one', () => {
+    expect(
+      isAttendanceRecordRow({ ...attendanceRecord(), status: 'HalfDay', leaveType: 'CL' }),
+    ).toBe(true);
+    expect(
+      isAttendanceRecordRow({ ...attendanceRecord(), status: 'HalfDay', leaveType: 'Vacation' }),
+    ).toBe(false);
+  });
+
+  it('treats halfDay as optional but rejects unknown markers', () => {
+    const withoutHalfDay = attendanceRecord() as unknown as Record<string, unknown>;
+    delete withoutHalfDay.halfDay;
+    expect(isAttendanceRecordRow(withoutHalfDay)).toBe(true);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), halfDay: null })).toBe(true);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), halfDay: 'AM' })).toBe(true);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), halfDay: 'PM' })).toBe(true);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), halfDay: 'FULL' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), halfDay: 1 })).toBe(false);
+  });
+
+  it('treats the note as optional but rejects a non-string one', () => {
+    const withoutNote = attendanceRecord() as unknown as Record<string, unknown>;
+    delete withoutNote.note;
+    expect(isAttendanceRecordRow(withoutNote)).toBe(true);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), note: 'Worked from client site' })).toBe(
+      true,
+    );
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), note: 42 })).toBe(false);
+  });
+
+  it('rejects an unparseable updatedAt', () => {
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), updatedAt: 'not-a-date' })).toBe(false);
+    expect(isAttendanceRecordRow({ ...attendanceRecord(), updatedAt: 0 })).toBe(false);
+  });
+
+  it.each([null, undefined, 42, 'attendance', ['x'], true])(
+    'rejects the non-object %s',
+    (row) => {
+      expect(isAttendanceRecordRow(row)).toBe(false);
+    },
+  );
+
+  it('rejects an empty object', () => {
+    expect(isAttendanceRecordRow({})).toBe(false);
+  });
+});
+
+describe('isHolidayRow', () => {
+  const holiday = (): Holiday => ({ ...createInitialHolidays(2026)[0] });
+
+  it('accepts a seeded holiday', () => {
+    expect(isHolidayRow(holiday())).toBe(true);
+    for (const row of createInitialHolidays(2026)) {
+      expect(isHolidayRow(row)).toBe(true);
+    }
+  });
+
+  it('rejects an empty or non-string id', () => {
+    expect(isHolidayRow({ ...holiday(), id: '' })).toBe(false);
+    expect(isHolidayRow({ ...holiday(), id: 42 })).toBe(false);
+    const missing = holiday() as unknown as Record<string, unknown>;
+    delete missing.id;
+    expect(isHolidayRow(missing)).toBe(false);
+  });
+
+  it('rejects an impossible or malformed date', () => {
+    expect(isHolidayRow({ ...holiday(), date: '2026-02-30' })).toBe(false);
+    expect(isHolidayRow({ ...holiday(), date: '01/01/2026' })).toBe(false);
+    expect(isHolidayRow({ ...holiday(), date: null })).toBe(false);
+  });
+
+  it('requires a non-blank name', () => {
+    expect(isHolidayRow({ ...holiday(), name: '' })).toBe(false);
+    expect(isHolidayRow({ ...holiday(), name: '   ' })).toBe(false);
+    expect(isHolidayRow({ ...holiday(), name: 42 })).toBe(false);
+    const missing = holiday() as unknown as Record<string, unknown>;
+    delete missing.name;
+    expect(isHolidayRow(missing)).toBe(false);
+  });
+
+  it('does not enforce store-level date uniqueness on a single row', () => {
+    // Uniqueness needs the whole dataset; that rule belongs to the store/snapshot
+    // layer, not to a row guard that cannot see siblings.
+    expect(isHolidayRow({ ...holiday() })).toBe(true);
+    expect(isHolidayRow({ ...holiday(), id: 'holiday-copy' })).toBe(true);
+  });
+
+  it.each([null, 42, 'holiday', [], true])('rejects the non-object %s', (row) => {
+    expect(isHolidayRow(row)).toBe(false);
+  });
+
+  it('rejects an empty object', () => {
+    expect(isHolidayRow({})).toBe(false);
   });
 });
 
