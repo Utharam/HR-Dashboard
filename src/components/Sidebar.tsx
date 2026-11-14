@@ -39,7 +39,7 @@ const LEADING_ITEMS: NavLeaf[] = [
   { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard size={18} /> },
   { id: 'directory', label: 'Employee Directory', icon: <Users size={18} /> },
   { id: 'attendance', label: 'Time & Attendance', icon: <CalendarCheck size={18} /> },
-  { id: 'leave', label: 'Leave Planner', icon: <CalendarDays size={18} /> },
+  { id: 'leave', label: 'Planner', icon: <CalendarDays size={18} /> },
   { id: 'payroll', label: 'Payroll & Compensation', icon: <CreditCard size={18} /> },
   { id: 'performance', label: 'Performance & 9-Box', icon: <TrendingUp size={18} /> },
 ];

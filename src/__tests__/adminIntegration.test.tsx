@@ -13,7 +13,7 @@ import { DATA_SCHEMA_VERSION } from '../utils/storage';
 import { snapshotToJson } from '../data/snapshot';
 import { INITIAL_EMPLOYEES } from '../data/initialData';
 import { INITIAL_POLICIES } from '../data/initialPolicies';
-import type { Employee } from '../types';
+import type { Employee, PlannerEvent } from '../types';
 
 // jsdom has no 2D canvas; the console's charts must be stubbed or their async
 // teardown throws out of cleanup and blames an unrelated test. Same reason as
@@ -163,6 +163,7 @@ describe('Admin integration', () => {
     expect(within(countBlock('Employees')).getByText('1')).toBeInTheDocument();
     expect(within(countBlock('Policies')).getByText('1')).toBeInTheDocument();
     expect(within(countBlock('Leave plans')).getByText('0')).toBeInTheDocument();
+    expect(within(countBlock('Events')).getByText('0')).toBeInTheDocument();
     expect(within(countBlock('Peak threshold')).getByText('3')).toBeInTheDocument();
 
     // The Excel Hub lives on the same page, below the card.
@@ -225,11 +226,21 @@ describe('Admin integration', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/Snapshot imported/i);
   });
 
-  it('a confirmed import also reloads the attendance ledger and the holiday calendar', async () => {
+  it('a confirmed import also reloads the attendance ledger, the holiday calendar and the events', async () => {
     const { store, inner } = makeSpyStore();
     await renderApp({ initialData: makeSnapshot(), dataStore: store });
     await openAdmin();
 
+    const importedEvent: PlannerEvent = {
+      id: 'event-import-1',
+      title: 'Quarterly Business Review',
+      startDate: '2026-12-07',
+      endDate: '2026-12-08',
+      type: 'Event',
+      location: 'Bengaluru HQ',
+      createdAt: '2026-11-10T08:00:00.000Z',
+      updatedAt: '2026-11-10T08:00:00.000Z',
+    };
     const imported = makeSnapshot({
       employees: [ONE_EMPLOYEE],
       attendance: [
@@ -251,6 +262,7 @@ describe('Admin integration', () => {
         },
       ],
       holidays: [{ id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' }],
+      plannerEvents: [importedEvent],
     });
 
     await userEvent.upload(
@@ -261,12 +273,13 @@ describe('Admin integration', () => {
       within(screen.getByRole('dialog')).getByRole('button', { name: 'Replace data' }),
     );
 
-    // The card's new counts prove App's reload reached the two datasets the
-    // earlier snapshot format did not carry.
+    // The card's new counts prove App's reload reached the three datasets the
+    // earlier snapshot formats did not carry.
     await waitFor(() =>
       expect(within(countBlock('Attendance')).getByText('2')).toBeInTheDocument(),
     );
     expect(within(countBlock('Holidays')).getByText('1')).toBeInTheDocument();
+    expect(within(countBlock('Events')).getByText('1')).toBeInTheDocument();
 
     // And the store itself holds exactly what the file carried.
     const stored = await inner.load();
@@ -274,6 +287,7 @@ describe('Admin integration', () => {
     expect(stored.snapshot.holidays).toEqual([
       { id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' },
     ]);
+    expect(stored.snapshot.plannerEvents).toEqual([importedEvent]);
   });
 
   it('an invalid file is refused with an error and never reaches the store', async () => {

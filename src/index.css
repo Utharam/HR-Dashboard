@@ -2184,10 +2184,11 @@ textarea.omni-input {
     box-shadow: none !important;
   }
 }
-/* ── Leave planner ────────────────────────────────────────────────────────
-   Month calendar + toolbar + day panel. Every value resolves through the
-   token layer above; the only literals are the minmax() track widths the
-   existing grid-- classes already use.
+/* ── Planner ─────────────────────────────────────────────────────────────
+   Month calendar + toolbar + day panel, for leave plans and company events
+   on one calendar. Every value resolves through the token layer above; the
+   only literals are the minmax() track widths the existing grid-- classes
+   already use.
 
    Toolbar ---------------------------------------------------------------- */
 .planner-toolbar {
@@ -2238,6 +2239,9 @@ textarea.omni-input {
   align-items: end;
 }
 .planner-toolbar__filters .btn-primary {
+  align-self: start;
+}
+.planner-toolbar__filters .btn-secondary {
   align-self: start;
 }
 
@@ -2387,6 +2391,19 @@ textarea.omni-input {
   background: var(--bg-card);
   color: var(--warning-text);
 }
+/* Event chips read as company calendar entries, not people: squared, in the
+   purple family, so leave initials and events stay distinguishable at a glance
+   even before the tooltip or the day panel names them. */
+.planner-chip--event {
+  border-radius: var(--r-sm);
+  background: var(--purple-glow);
+  color: var(--purple-soft);
+  border: 1px solid var(--purple-edge);
+}
+.planner-day--peak .planner-chip--event {
+  background: var(--bg-card);
+  color: var(--purple-soft);
+}
 .planner-day__more {
   font-size: var(--fs-2xs);
   font-weight: var(--fw-semibold);
@@ -2440,6 +2457,11 @@ textarea.omni-input {
 }
 .planner-entry--cancelled {
   opacity: 0.65;
+}
+/* Event entries pick up the chip's purple edge, so the panel shows the same
+   two-tone split the calendar cells do. */
+.planner-entry--event {
+  border-color: var(--purple-edge);
 }
 .planner-entry__head {
   display: flex;

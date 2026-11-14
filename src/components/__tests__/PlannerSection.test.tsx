@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { LeavePlannerSection } from '../LeavePlannerSection';
-import type { Employee, LeavePlan, PlannerSettings } from '../../types';
+import { PlannerSection } from '../PlannerSection';
+import type { Employee, LeavePlan, PlannerEvent, PlannerEventType, PlannerSettings } from '../../types';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 import { toDateKey } from '../../utils/leavePlanner';
 
@@ -46,7 +46,7 @@ const EMPLOYEES: Employee[] = [
   employee('EMP-D', 'Vikram Rao', 'Sales & Business Development', 'Pune Campus'),
 ];
 
-type SectionProps = ComponentProps<typeof LeavePlannerSection>;
+type SectionProps = ComponentProps<typeof PlannerSection>;
 
 const DEFAULT_SETTINGS: PlannerSettings = { maxConcurrentLeave: 3 };
 
@@ -103,6 +103,33 @@ const dayButton = (month: RenderedMonth, day: number) =>
     name: new RegExp(`${MONTH_NAMES[month.monthIndex]} ${day}, ${month.year}`),
   });
 
+let eventSeq = 0;
+
+/** A planner event anchored to `startDay` (and `endDay`) of the rendered month. */
+const eventFor = (
+  month: RenderedMonth,
+  startDay: number,
+  options: {
+    endDay?: number;
+    title?: string;
+    type?: PlannerEventType;
+    department?: string;
+    location?: string;
+    notes?: string;
+  } = {},
+): PlannerEvent => ({
+  id: `test-event-${(eventSeq += 1)}`,
+  title: options.title ?? 'Quarterly Business Review',
+  startDate: dayKey(month, startDay),
+  endDate: dayKey(month, options.endDay ?? startDay),
+  type: options.type ?? 'Event',
+  ...(options.department ? { department: options.department } : {}),
+  ...(options.location ? { location: options.location } : {}),
+  ...(options.notes ? { notes: options.notes } : {}),
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
+
 /**
  * Renders the section empty, reads back the month it displays, and returns a
  * `rerenderWith` that swaps in props (state such as the selected day survives).
@@ -111,19 +138,22 @@ const renderPlanner = (props: Partial<SectionProps> = {}) => {
   const base: SectionProps = {
     employees: EMPLOYEES,
     leavePlans: [],
+    plannerEvents: [],
     settings: DEFAULT_SETTINGS,
     onSave: noop,
     onDelete: noop,
+    onSaveEvent: noop,
+    onDeleteEvent: noop,
     onSettingsChange: noop,
     ...props,
   };
-  const utils = render(<LeavePlannerSection {...base} />);
+  const utils = render(<PlannerSection {...base} />);
   const month = readRenderedMonth();
   return {
     ...utils,
     month,
     rerenderWith: (overrides: Partial<SectionProps>) => {
-      utils.rerender(<LeavePlannerSection {...base} {...overrides} />);
+      utils.rerender(<PlannerSection {...base} {...overrides} />);
     },
   };
 };
@@ -142,7 +172,7 @@ const fillDates = (dialog: HTMLElement, start: string, end: string) => {
   });
 };
 
-describe('LeavePlannerSection', () => {
+describe('PlannerSection', () => {
   it('renders the current month, a Monday-first weekday header and a 42-cell grid', () => {
     const now = new Date();
     renderPlanner();
@@ -566,5 +596,277 @@ describe('LeavePlannerSection', () => {
     fireEvent.blur(threshold);
     expect(threshold).toHaveValue(4);
     expect(onSettingsChange).toHaveBeenCalledTimes(1);
+  });
+
+  describe('planner events', () => {
+    it('renders event chips alongside leave chips and names both in the day cell', () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({
+        leavePlans: [planFor(month, 'EMP-A', 18)],
+        plannerEvents: [eventFor(month, 18, { title: 'Quarterly Business Review' })],
+      });
+
+      const cell = dayButton(month, 18);
+      // The event chip is the squared purple one, distinct from the leave initials.
+      const eventChip = cell.querySelector('.planner-chip--event');
+      expect(eventChip).not.toBeNull();
+      expect(eventChip).toHaveAttribute('title', 'Quarterly Business Review');
+      expect(cell.querySelector('.planner-chip:not(.planner-chip--event)')).not.toBeNull();
+      expect(cell).toHaveAccessibleName(/1 person on leave, 1 event/);
+    });
+
+    it('names an event-only day in the accessible name without inventing leave', () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({ plannerEvents: [eventFor(month, 12)] });
+
+      expect(dayButton(month, 12)).toHaveAccessibleName(/no leave, 1 event/);
+    });
+
+    it('opens the event modal from Add event and saves a valid event', async () => {
+      const onSaveEvent = vi.fn();
+      const { month } = renderPlanner({ onSaveEvent });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+      const dialog = screen.getByRole('dialog');
+      await userEvent.type(within(dialog).getByLabelText('Title'), 'Quarterly Business Review');
+      fillDates(dialog, dayKey(month, 9), dayKey(month, 10));
+      await userEvent.selectOptions(within(dialog).getByLabelText('Event type'), 'Event');
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Save event entry' }),
+      );
+
+      expect(onSaveEvent).toHaveBeenCalledTimes(1);
+      expect(onSaveEvent.mock.calls[0][0]).toMatchObject({
+        title: 'Quarterly Business Review',
+        startDate: dayKey(month, 9),
+        endDate: dayKey(month, 10),
+        type: 'Event',
+      });
+      // A company-wide event carries no department or location at all, rather
+      // than empty strings that would read as "scoped to nothing".
+      expect(onSaveEvent.mock.calls[0][0].department).toBeUndefined();
+      expect(onSaveEvent.mock.calls[0][0].location).toBeUndefined();
+      expect(onSaveEvent.mock.calls[0][0].id).toMatch(/^event-/);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('prefills the anchored day when Add event is used from a selected day', async () => {
+      const { month } = renderPlanner();
+
+      await userEvent.click(dayButton(month, 12));
+      await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByLabelText('Start date')).toHaveValue(dayKey(month, 12));
+      expect(within(dialog).getByLabelText('End date')).toHaveValue(dayKey(month, 12));
+    });
+
+    it('validates the title and the date range before saving', async () => {
+      const onSaveEvent = vi.fn();
+      const { month } = renderPlanner({ onSaveEvent });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+      const dialog = screen.getByRole('dialog');
+      // No title, and an end before the start: both problems are named.
+      fillDates(dialog, dayKey(month, 12), dayKey(month, 10));
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Save event entry' }),
+      );
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(/Enter an event title/);
+      expect(alert).toHaveTextContent(/End date cannot be before the start date/);
+      expect(onSaveEvent).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toBe(dialog);
+    });
+
+    it('lists events in the day panel with their type, range and scope', async () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({
+        plannerEvents: [
+          eventFor(month, 18, {
+            title: 'Manager Training Day',
+            type: 'Training',
+            department: 'People & Human Resources',
+            location: 'Bengaluru HQ',
+            notes: 'Bring laptops',
+          }),
+        ],
+      });
+
+      await userEvent.click(dayButton(month, 18));
+
+      // The toolbar selects carry the same words as options, so the assertions
+      // are scoped to the event entry they describe.
+      const entry = screen
+        .getByText('Manager Training Day')
+        .closest('.planner-entry--event');
+      expect(entry).not.toBeNull();
+      expect(within(entry as HTMLElement).getByText('Training')).toBeInTheDocument();
+      expect(within(entry as HTMLElement).getByText('1 day')).toBeInTheDocument();
+      expect(
+        within(entry as HTMLElement).getByText('People & Human Resources'),
+      ).toBeInTheDocument();
+      expect(within(entry as HTMLElement).getByText('Bengaluru HQ')).toBeInTheDocument();
+      expect(within(entry as HTMLElement).getByText(/Bring laptops/)).toBeInTheDocument();
+    });
+
+    it('edits an event from the day panel, preserving its identity', async () => {
+      const onSaveEvent = vi.fn();
+      const { month, rerenderWith } = renderPlanner({ onSaveEvent });
+      const existing = eventFor(month, 18, { title: 'Manager Training Day', type: 'Training' });
+      rerenderWith({ plannerEvents: [existing] });
+
+      await userEvent.click(dayButton(month, 18));
+      await userEvent.click(screen.getByRole('button', { name: 'Edit event' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByLabelText('Title')).toHaveValue('Manager Training Day');
+      expect(within(dialog).getByLabelText('Event type')).toHaveValue('Training');
+
+      await userEvent.type(within(dialog).getByLabelText('Title'), ' 2026');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+      expect(onSaveEvent).toHaveBeenCalledTimes(1);
+      expect(onSaveEvent.mock.calls[0][0]).toMatchObject({
+        id: existing.id,
+        createdAt: existing.createdAt,
+        title: 'Manager Training Day 2026',
+        type: 'Training',
+      });
+    });
+
+    it('keeps an edited event scoping option that the roster no longer offers', async () => {
+      const onSaveEvent = vi.fn();
+      const { month, rerenderWith } = renderPlanner({ onSaveEvent });
+      const existing = eventFor(month, 18, { department: 'Archived Department' });
+      rerenderWith({ plannerEvents: [existing] });
+
+      await userEvent.click(dayButton(month, 18));
+      await userEvent.click(screen.getByRole('button', { name: 'Edit event' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByLabelText('Department')).toHaveValue('Archived Department');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+      expect(onSaveEvent.mock.calls[0][0]).toMatchObject({
+        id: existing.id,
+        department: 'Archived Department',
+      });
+    });
+
+    it('asks before deleting an event and reports the id only on confirm', async () => {
+      const onDeleteEvent = vi.fn();
+      const { month, rerenderWith } = renderPlanner({ onDeleteEvent });
+      const existing = eventFor(month, 18, {
+        title: 'Manager Training Day',
+        type: 'Training',
+      });
+      rerenderWith({ plannerEvents: [existing] });
+
+      await userEvent.click(dayButton(month, 18));
+      await userEvent.click(screen.getByRole('button', { name: 'Delete event' }));
+
+      // Asked first: the dialog names the event and nothing reaches the parent.
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent(/Delete this event\?/);
+      expect(dialog).toHaveTextContent(/Manager Training Day/);
+      expect(onDeleteEvent).not.toHaveBeenCalled();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(onDeleteEvent).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      // Confirming is what reports the deletion.
+      await userEvent.click(screen.getByRole('button', { name: 'Delete event' }));
+      await userEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete event' }),
+      );
+      expect(onDeleteEvent).toHaveBeenCalledTimes(1);
+      expect(onDeleteEvent).toHaveBeenCalledWith(existing.id);
+    });
+
+    it('filters events by event type without hiding leave, and vice versa', async () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({
+        leavePlans: [planFor(month, 'EMP-A', 5)],
+        plannerEvents: [
+          eventFor(month, 5, { title: 'Manager Training Day', type: 'Training' }),
+          eventFor(month, 6, { title: 'All hands meeting', type: 'Meeting' }),
+        ],
+      });
+
+      await userEvent.click(dayButton(month, 5));
+      expect(screen.getByText('Ravi Kumar')).toBeInTheDocument();
+      expect(screen.getByText('Manager Training Day')).toBeInTheDocument();
+
+      // The event filter narrows EVENTS only; the leave entry stays.
+      await userEvent.selectOptions(screen.getByLabelText('Filter by event type'), 'Meeting');
+      expect(screen.queryByText('Manager Training Day')).toBeNull();
+      expect(screen.getByText('Ravi Kumar')).toBeInTheDocument();
+
+      // And a leave filter narrows LEAVE only; events are untouched.
+      await userEvent.selectOptions(screen.getByLabelText('Filter by event type'), 'ALL');
+      await userEvent.selectOptions(screen.getByLabelText('Filter by leave type'), 'SL');
+      expect(screen.queryByText('Ravi Kumar')).toBeNull();
+      expect(screen.getByText('Manager Training Day')).toBeInTheDocument();
+    });
+
+    it('keeps company-wide events visible under a department filter', async () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({
+        plannerEvents: [
+          eventFor(month, 5, { title: 'Quarterly Business Review' }),
+          eventFor(month, 6, {
+            title: 'Manager Training Day',
+            type: 'Training',
+            department: 'People & Human Resources',
+          }),
+        ],
+      });
+
+      await userEvent.selectOptions(
+        screen.getByLabelText('Filter by department'),
+        'Engineering & Technology',
+      );
+
+      // The company-wide event concerns everyone, so it survives the filter...
+      await userEvent.click(dayButton(month, 5));
+      expect(screen.getByText('Quarterly Business Review')).toBeInTheDocument();
+
+      // ...while the department-scoped event is hidden under another department.
+      await userEvent.click(dayButton(month, 6));
+      expect(screen.queryByText('Manager Training Day')).toBeNull();
+    });
+
+    it('matches events in the shared search without dropping the leave wording', async () => {
+      const { month, rerenderWith } = renderPlanner();
+      rerenderWith({
+        leavePlans: [planFor(month, 'EMP-A', 5)],
+        plannerEvents: [eventFor(month, 5, { title: 'Quarterly Business Review' })],
+      });
+
+      await userEvent.click(dayButton(month, 5));
+      expect(screen.getByText('Quarterly Business Review')).toBeInTheDocument();
+
+      const search = screen.getByLabelText('Search employees and events');
+      await userEvent.type(search, 'business');
+      // The event's own text matched; the leave entry (which never matches the
+      // event's title) is hidden by the same search, as it always was.
+      expect(screen.getByText('Quarterly Business Review')).toBeInTheDocument();
+      expect(screen.queryByText('Ravi Kumar')).toBeNull();
+
+      await userEvent.clear(search);
+      expect(screen.getByText('Ravi Kumar')).toBeInTheDocument();
+    });
+
+    it('shows separate empty states for leave and events on an empty day', async () => {
+      const { month } = renderPlanner();
+
+      await userEvent.click(dayButton(month, 15));
+
+      expect(screen.getByText('No leave entries for this day.')).toBeInTheDocument();
+      expect(screen.getByText('No events for this day.')).toBeInTheDocument();
+    });
   });
 });

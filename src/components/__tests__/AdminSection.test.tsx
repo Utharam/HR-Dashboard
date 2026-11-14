@@ -14,6 +14,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
 } from '../../types';
 
 /*
@@ -75,6 +76,21 @@ const ATTENDANCE: AttendanceRecord[] = [
   record('EMP-LOCAL-2', '2026-11-12', 'HalfDay'),
 ];
 
+const EVENT = (id: string, title: string, type: PlannerEvent['type']): PlannerEvent => ({
+  id,
+  title,
+  startDate: '2026-11-18',
+  endDate: '2026-11-19',
+  type,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+});
+
+const PLANNER_EVENTS: PlannerEvent[] = [
+  EVENT('event-local-1', 'Quarterly Business Review', 'Event'),
+  EVENT('event-local-2', 'Manager Training Day', 'Training'),
+];
+
 const HOLIDAYS: Holiday[] = [
   { id: 'holiday-2026-12-25', date: '2026-12-25', name: 'Christmas' },
 ];
@@ -106,6 +122,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   employees: EMPLOYEES,
   policies: [POLICY],
   leavePlans: [PLAN],
+  plannerEvents: PLANNER_EVENTS,
   attendance: ATTENDANCE,
   holidays: HOLIDAYS,
   settings: { maxConcurrentLeave: 3 },
@@ -225,13 +242,16 @@ describe('Admin snapshot card — display', () => {
     const card = screen.getByRole('region', { name: 'Data snapshot' });
 
     expect(within(card).getByText('Employees')).toBeInTheDocument();
-    expect(within(card).getByText('2')).toBeInTheDocument();
+    expect(within(countBlock('Employees')).getByText('2')).toBeInTheDocument();
     expect(within(card).getByText('Leave plans')).toBeInTheDocument();
     expect(within(card).getByText('3')).toBeInTheDocument();
 
     // The daily ledger and the holiday calendar joined the card's counts.
     expect(within(countBlock('Attendance')).getByText('4')).toBeInTheDocument();
     expect(within(countBlock('Holidays')).getByText('1')).toBeInTheDocument();
+
+    // So did the Planner's event calendar (v3).
+    expect(within(countBlock('Events')).getByText('2')).toBeInTheDocument();
 
     expect(within(card).getByText('IndexedDB (this browser)')).toBeInTheDocument();
     expect(
@@ -307,7 +327,10 @@ describe('Admin snapshot card — export', () => {
           expect.objectContaining({ id: 'EMP-LOCAL-1|2026-11-10' }),
         ]),
         holidays: [expect.objectContaining({ id: 'holiday-2026-12-25' })],
-        plannerEvents: [],
+        plannerEvents: [
+          expect.objectContaining({ id: 'event-local-1' }),
+          expect.objectContaining({ id: 'event-local-2' }),
+        ],
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -370,7 +393,10 @@ describe('Admin snapshot card — export', () => {
         ]),
         policies: [expect.objectContaining({ id: 'POL-LOCAL-1' })],
         leavePlans: [expect.objectContaining({ id: 'plan-local-1' })],
-        plannerEvents: [],
+        plannerEvents: expect.arrayContaining([
+          expect.objectContaining({ id: 'event-local-1' }),
+          expect.objectContaining({ id: 'event-local-2' }),
+        ]),
         settings: { maxConcurrentLeave: 3 },
       }),
     );

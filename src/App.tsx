@@ -16,7 +16,7 @@ import { ExcelHubSection } from './components/ExcelHubSection';
 import { AdminSection } from './components/AdminSection';
 import { PolicySection } from './components/PolicySection';
 import { GuidesSection } from './components/GuidesSection';
-import { LeavePlannerSection } from './components/LeavePlannerSection';
+import { PlannerSection } from './components/PlannerSection';
 import { EmployeeModal } from './components/EmployeeModal';
 import { AddEmployeeModal } from './components/AddEmployeeModal';
 import { Callout } from './components/Callout';
@@ -30,6 +30,7 @@ import type {
   HRPolicy,
   LeavePlan,
   PayrollEmployee,
+  PlannerEvent,
   PlannerSettings,
 } from './types';
 import {
@@ -49,6 +50,7 @@ import { INITIAL_POLICIES } from './data/initialPolicies';
 import { createInitialLeavePlans } from './data/initialLeavePlans';
 import { createInitialAttendance } from './data/initialAttendance';
 import { createInitialHolidays } from './data/initialHolidays';
+import { createInitialPlannerEvents } from './data/initialPlannerEvents';
 import { computePayroll, isActive } from './utils/payroll';
 import { rollupMonth } from './utils/attendance';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
@@ -58,6 +60,7 @@ import {
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
 } from './utils/rowValidators';
@@ -71,6 +74,11 @@ const POLICIES_KEY = 'omnihr_policies';
 // path and should not need the store module's key map to do so).
 const LEAVE_PLANS_KEY = 'omnihr_leave_plans';
 const PLANNER_SETTINGS_KEY = 'omnihr_planner_settings';
+// The Planner's general-event calendar joins the leave plans and settings under
+// the same rule: this literal is the exact key the store layer reads and writes
+// (STORAGE_KEYS.plannerEvents), so a browser that switches backend finds the
+// same data either way.
+const PLANNER_EVENTS_KEY = 'omnihr_planner_events';
 // The daily attendance ledger and the company holiday calendar join them under
 // the same rule: these literals are the exact keys the store layer reads and
 // writes, so a browser that switches backend finds the same data either way.
@@ -126,13 +134,15 @@ const EMPLOYEES_BACKUP_KEY = 'omnihr_employees_backup';
  * `scope` names the dataset the banner is about. `leave` covers both the leave plans
  * and the planner settings: one calendar and one number belong to the same planner,
  * and a failed write of either is the same "on screen but not written down" event.
- * `attendance` and `holidays` name the daily ledger and the company calendar, which
- * are separate datasets with separate saves.
+ * `events` names the Planner's event calendar, which saves separately from the
+ * leave plans even though the two share the page. `attendance` and `holidays` name
+ * the daily ledger and the company calendar, which are separate datasets with
+ * separate saves.
  *
  * A user must never have to guess whether the register they are looking at is the one
  * that will survive a refresh.
  */
-type NoticeScope = 'employees' | 'policies' | 'leave' | 'attendance' | 'holidays';
+type NoticeScope = 'employees' | 'policies' | 'leave' | 'events' | 'attendance' | 'holidays';
 
 type AppNotice =
   | { kind: 'discarded'; scope: NoticeScope }
@@ -152,6 +162,12 @@ const SAVE_NOTICE_COPY: Record<NoticeScope, Record<'quota' | 'unavailable', stri
       'Your leave planner change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove a leave entry, or close other OmniHR tabs, then make the change again.',
     unavailable:
       'Your leave planner change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
+  },
+  events: {
+    quota:
+      'Your planner event change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove an event, or close other OmniHR tabs, then make the change again.',
+    unavailable:
+      'Your planner event change is on screen but was NOT saved: this browser is blocking storage for this site (private mode, or a strict privacy setting). It will be lost when you close the tab.',
   },
   attendance: {
     quota:
@@ -174,6 +190,8 @@ const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
     'The HR policies saved in this browser could not be read and have been set aside. The default policies are showing in their place - any policy you added or edited is gone.',
   leave:
     'The leave plans saved in this browser could not be read and have been set aside. The planner is empty in their place - any leave you recorded earlier is gone. Re-enter the leave to continue.',
+  events:
+    'The planner events saved in this browser could not be read and have been set aside. The event calendar is empty in their place - any event you added is gone. Re-add the events to continue.',
   attendance:
     'The attendance records saved in this browser could not be read and have been set aside. The daily ledger is empty in their place - any marks you made or imported earlier are gone. Mark attendance again or re-import the monthly matrix to continue.',
   holidays:
@@ -244,6 +262,14 @@ export const App: React.FC<{
       leavePlans: initialData
         ? { rows: initialData.leavePlans, status: 'loaded' as const }
         : loadPersisted(LEAVE_PLANS_KEY, isLeavePlanRow, []),
+      // The Planner's event calendar follows the same rule as the leave plans on
+      // the legacy path: an EMPTY calendar, not a demo seed - the seed belongs to
+      // the stores, and a register the user built themselves must not be given
+      // invented company events. An unreadable stored payload is still
+      // `recovered`, which raises the events banner below.
+      plannerEvents: initialData
+        ? { rows: initialData.plannerEvents, status: 'loaded' as const }
+        : loadPersisted(PLANNER_EVENTS_KEY, isPlannerEventRow, []),
       // Settings is a single object rather than a row list, so it travels in the
       // envelope as one row; an absent or unusable one falls back to the default
       // threshold. A lost threshold is a preference, not a record, so it never
@@ -281,6 +307,10 @@ export const App: React.FC<{
   // callbacks, and written back by the save effects below.
   const [leavePlans, setLeavePlans] = useState<LeavePlan[]>(initialLoad.leavePlans.rows);
   const [plannerSettings, setPlannerSettings] = useState<PlannerSettings>(initialLoad.settings);
+  // The Planner's event calendar shares that lifecycle: one more dataset read at
+  // mount, edited through PlannerSection's event callbacks, persisted by its own
+  // save effect below.
+  const [plannerEvents, setPlannerEvents] = useState<PlannerEvent[]>(initialLoad.plannerEvents.rows);
 
   // Daily attendance and the company holidays share that lifecycle too: read once
   // at mount, edited through the Attendance section's callbacks, persisted by the
@@ -365,6 +395,9 @@ export const App: React.FC<{
     if (initialLoad.leavePlans.status === 'recovered') {
       return { kind: 'discarded', scope: 'leave' };
     }
+    if (initialLoad.plannerEvents.status === 'recovered') {
+      return { kind: 'discarded', scope: 'events' };
+    }
     if (initialLoad.attendance.status === 'recovered') {
       return { kind: 'discarded', scope: 'attendance' };
     }
@@ -398,7 +431,7 @@ export const App: React.FC<{
     setPolicies(INITIAL_POLICIES);
   };
 
-  // Leave planner intents, reported by LeavePlannerSection. A save is an upsert by
+  // Leave planner intents, reported by PlannerSection. A save is an upsert by
   // id: the modal reuses the id of the entry it was opened to edit, so a replace and
   // an add are the same callback.
   const handleSaveLeavePlan = (plan: LeavePlan) => {
@@ -411,6 +444,20 @@ export const App: React.FC<{
 
   const handleDeleteLeavePlan = (id: string) => {
     setLeavePlans(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Planner event intents, reported by PlannerSection, following the identical
+  // upsert-by-id contract: the event modal reuses the id of the event it edits.
+  const handleSavePlannerEvent = (event: PlannerEvent) => {
+    setPlannerEvents(prev =>
+      prev.some(e => e.id === event.id)
+        ? prev.map(e => (e.id === event.id ? event : e))
+        : [...prev, event],
+    );
+  };
+
+  const handleDeletePlannerEvent = (id: string) => {
+    setPlannerEvents(prev => prev.filter(e => e.id !== id));
   };
 
   const handleUpdatePlannerSettings = (next: PlannerSettings) => {
@@ -496,6 +543,7 @@ export const App: React.FC<{
         setPolicies(loaded.snapshot.policies);
         setLeavePlans(loaded.snapshot.leavePlans);
         setPlannerSettings(loaded.snapshot.settings);
+        setPlannerEvents(loaded.snapshot.plannerEvents);
         // The daily ledger and the holiday calendar are part of the snapshot too
         // (v2), so the screen follows the store for them as well.
         setAttendance(loaded.snapshot.attendance);
@@ -632,6 +680,33 @@ export const App: React.FC<{
       setNotice({ kind: 'not-saved', scope: 'leave', reason: result.reason });
     }
   }, [dataStore, plannerSettings]);
+
+  // The event calendar persists under the same contract as the leave plans: a
+  // whole-dataset save, reported loudly when storage refuses it.
+  useEffect(() => {
+    if (dataStore) {
+      let cancelled = false;
+      void dataStore.savePlannerEvents(plannerEvents).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setNotice({
+            kind: 'not-saved',
+            scope: 'events',
+            reason: result.reason === 'quota' ? 'quota' : 'unavailable',
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const result = savePersisted(PLANNER_EVENTS_KEY, plannerEvents);
+    if (!result.ok) {
+      // oxlint-disable-next-line react/set-state-in-effect -- see the note above
+      setNotice({ kind: 'not-saved', scope: 'events', reason: result.reason });
+    }
+  }, [dataStore, plannerEvents]);
 
   // The attendance ledger and the holiday calendar persist under the identical
   // contract. A whole-dataset save is deliberate: like the register, the ledger
@@ -825,23 +900,26 @@ export const App: React.FC<{
   const handleResetData = () => setIsResetRequested(true);
 
   const handleConfirmResetData = () => {
-    // ALL SIX business datasets reset, not just the register. A reset that restored
+    // ALL SEVEN business datasets reset, not just the register. A reset that restored
     // employees but kept a half-edited policy set, a threshold someone had pushed to
-    // 9, or an attendance ledger still carrying last week's corrections would not be
-    // the demo state the dialog promises, and the next person demoing the app
-    // inherits the leftovers. The ledger seed is the demo roster's current-month
-    // records (D11) and the calendar seed is the fixed 2026 national holidays (D9),
-    // exactly what the stores install on a first visit.
+    // 9, events someone added for a different demo story, or an attendance ledger
+    // still carrying last week's corrections would not be the demo state the dialog
+    // promises, and the next person demoing the app inherits the leftovers. The
+    // ledger seed is the demo roster's current-month records (D11), the calendar
+    // seed is the fixed 2026 national holidays (D9) and the event calendar seed is
+    // the demo roster's coming-weeks events, exactly what the stores install on a
+    // first visit.
     setEmployees(INITIAL_EMPLOYEES);
     setPolicies(INITIAL_POLICIES);
     setLeavePlans(createInitialLeavePlans());
     setPlannerSettings({ ...DEFAULT_PLANNER_SETTINGS });
+    setPlannerEvents(createInitialPlannerEvents());
     setAttendance(createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026)));
     setHolidays(createInitialHolidays(2026));
     setIsResetRequested(false);
     setConfirmation({
       text:
-        'Demo data reset: the register is back to the 200 staff Master Dataset, HR policies, leave plans and planner settings are back to their defaults, and the daily attendance ledger and company holiday calendar are back to their demo seed.',
+        'Demo data reset: the register is back to the 200 staff Master Dataset, HR policies, leave plans, planner events and planner settings are back to their defaults, and the daily attendance ledger and company holiday calendar are back to their demo seed.',
     });
   };
 
@@ -1113,20 +1191,23 @@ export const App: React.FC<{
         )}
 
         {/*
-          The planner deliberately receives the FULL register, not `filteredEmployees`:
+          The Planner deliberately receives the FULL register, not `filteredEmployees`:
           it owns its own department/location/search filters, and its coverage view is
-          org-wide. Feeding it the header's filtered subset would both shrink the filter
+          org-wide. Feeding it the toolbar's filtered subset would both shrink the filter
           lists it offers and silently hide a person's leave whenever a global search
           was left behind from another tab - the calendar would lie by omission about
-          who is away.
+          who is away. The event calendar rides along as its own dataset.
         */}
         {activeTab === 'leave' && (
-          <LeavePlannerSection
+          <PlannerSection
             employees={employees}
             leavePlans={leavePlans}
+            plannerEvents={plannerEvents}
             settings={plannerSettings}
             onSave={handleSaveLeavePlan}
             onDelete={handleDeleteLeavePlan}
+            onSaveEvent={handleSavePlannerEvent}
+            onDeleteEvent={handleDeletePlannerEvent}
             onSettingsChange={handleUpdatePlannerSettings}
           />
         )}
@@ -1188,6 +1269,7 @@ export const App: React.FC<{
               employees={employees}
               policies={policies}
               leavePlans={leavePlans}
+              plannerEvents={plannerEvents}
               attendance={attendance}
               holidays={holidays}
               settings={plannerSettings}
@@ -1252,7 +1334,7 @@ export const App: React.FC<{
       <ConfirmDialog
         isOpen={isResetRequested}
         title="Reset application to the Master Demo state?"
-        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, HR policies, leave plans and planner settings return to their defaults, and the daily attendance ledger and company holiday calendar are restored to their demo seed. This cannot be undone."
+        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, HR policies, leave plans, planner events and planner settings return to their defaults, and the daily attendance ledger and company holiday calendar are restored to their demo seed. This cannot be undone."
         confirmLabel="Reset demo data"
         onConfirm={handleConfirmResetData}
         onCancel={() => setIsResetRequested(false)}

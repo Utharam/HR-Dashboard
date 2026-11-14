@@ -10,7 +10,7 @@ import {
   type StoreResult,
 } from '../data/DataStore';
 import { DATA_SCHEMA_VERSION } from '../utils/storage';
-import type { LeavePlan, PlannerSettings } from '../types';
+import type { LeavePlan, PlannerEvent, PlannerSettings } from '../types';
 import { INITIAL_EMPLOYEES } from '../data/initialData';
 import { INITIAL_POLICIES } from '../data/initialPolicies';
 import { toDateKey } from '../utils/leavePlanner';
@@ -24,7 +24,7 @@ vi.mock('react-chartjs-2', () => {
 });
 
 /**
- * Integration: the leave planner under its own tab, with App holding the state
+ * Integration: the Planner under its own tab, with App holding the state
  * and the store holding the persistence.
  *
  * The console is mounted through `renderApp` (the data seam of design decision
@@ -64,6 +64,9 @@ function makeSpyStore() {
   const saveSettings = vi.fn(
     (settings: PlannerSettings): Promise<StoreResult> => inner.saveSettings(settings),
   );
+  const savePlannerEvents = vi.fn(
+    (rows: PlannerEvent[]): Promise<StoreResult> => inner.savePlannerEvents(rows),
+  );
   const store: DataStore = {
     backend: 'memory',
     load: () => inner.load(),
@@ -72,13 +75,13 @@ function makeSpyStore() {
     saveLeavePlans,
     saveAttendance: (rows) => inner.saveAttendance(rows),
     saveHolidays: (rows) => inner.saveHolidays(rows),
-    savePlannerEvents: (rows) => inner.savePlannerEvents(rows),
+    savePlannerEvents,
     saveSettings,
     exportSnapshot: () => inner.exportSnapshot(),
     importSnapshot: (snapshot) => inner.importSnapshot(snapshot),
     clearBusinessData: () => inner.clearBusinessData(),
   };
-  return { store, saveLeavePlans, saveSettings };
+  return { store, saveLeavePlans, saveSettings, savePlannerEvents };
 }
 
 // The planner's month heading is the only level-2 heading that reads as
@@ -104,7 +107,7 @@ const dayKey = (month: { year: number; monthIndex: number }, day: number): strin
   toDateKey(new Date(month.year, month.monthIndex, day));
 
 const openPlanner = async () => {
-  await userEvent.click(screen.getByRole('button', { name: 'Leave Planner' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Planner' }));
   return readRenderedMonth();
 };
 
@@ -117,19 +120,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Leave planner integration', () => {
-  it('renders the leave planner calendar and summary under its own tab', async () => {
+describe('Planner integration', () => {
+  it('renders the planner calendar and summary under its own tab', async () => {
     const snapshot = makeSnapshot();
-    const { store, saveLeavePlans, saveSettings } = makeSpyStore();
+    const { store, saveLeavePlans, saveSettings, savePlannerEvents } = makeSpyStore();
 
     await renderApp({ initialData: snapshot, dataStore: store });
 
-    // Mount persistence: the planner's (empty) dataset and its settings go to
+    // Mount persistence: the planner's (empty) datasets and its settings go to
     // the store exactly like the register and the policies do.
     expect(saveLeavePlans).toHaveBeenCalledWith([]);
+    expect(savePlannerEvents).toHaveBeenCalledWith([]);
     expect(saveSettings).toHaveBeenCalledWith(snapshot.settings);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Leave Planner' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Planner' }));
 
     // Calendar: a month heading, the Monday-first weekday row and 42 day cells.
     const month = readRenderedMonth();
@@ -151,7 +155,7 @@ describe('Leave planner integration', () => {
 
     // The page header names the new page.
     expect(
-      screen.getByRole('heading', { level: 2, name: /Leave Planner & Coverage Calendar/ }),
+      screen.getByRole('heading', { level: 2, name: /Leave, Events & Coverage/ }),
     ).toBeInTheDocument();
   });
 
@@ -229,5 +233,118 @@ describe('Leave planner integration', () => {
       ]),
     );
     expect(localStorage.getItem('omnihr_leave_plans')).toBeNull();
+  });
+
+  it('renders the events handed over in the snapshot on the calendar', async () => {
+    const now = new Date();
+    const monthStart = toDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthEnd = toDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const event: PlannerEvent = {
+      id: 'event-gate-1',
+      title: 'Quarterly Business Review',
+      startDate: monthStart,
+      endDate: monthEnd,
+      type: 'Event',
+      location: 'Bengaluru HQ',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      updatedAt: '2026-11-01T00:00:00.000Z',
+    };
+    const { store, savePlannerEvents } = makeSpyStore();
+
+    await renderApp({ initialData: makeSnapshot({ plannerEvents: [event] }), dataStore: store });
+    const month = await openPlanner();
+
+    // The snapshot's events - not seed data, not an empty calendar - are on the
+    // calendar: a day inside the range names the event even with no leave on it.
+    const midMonthCell = screen.getByRole('button', {
+      name: new RegExp(`${MONTH_NAMES[month.monthIndex]} 15, ${month.year}`),
+    });
+    expect(midMonthCell).toHaveAccessibleName(/no leave, 1 event/);
+
+    // The mount save persisted the snapshot's events, not an empty list.
+    expect(savePlannerEvents).toHaveBeenCalledWith([event]);
+  });
+
+  it('adds an event through the modal and saves it through the store', async () => {
+    const snapshot = makeSnapshot();
+    const { store, savePlannerEvents } = makeSpyStore();
+
+    await renderApp({ initialData: snapshot, dataStore: store });
+    const month = await openPlanner();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+    const dialog = screen.getByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Title'), 'Manager training day');
+    fireEvent.change(within(dialog).getByLabelText('Start date'), {
+      target: { value: dayKey(month, 8) },
+    });
+    fireEvent.change(within(dialog).getByLabelText('End date'), {
+      target: { value: dayKey(month, 9) },
+    });
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Save event entry' }),
+    );
+
+    // The event modal closed, the day shows the event, and the save went
+    // through the store with the event App now holds - never to localStorage.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const dayCell = screen.getByRole('button', {
+      name: new RegExp(`${MONTH_NAMES[month.monthIndex]} 8, ${month.year}`),
+    });
+    expect(dayCell).toHaveAccessibleName(/no leave, 1 event/);
+
+    expect(savePlannerEvents).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Manager training day',
+          startDate: dayKey(month, 8),
+          endDate: dayKey(month, 9),
+          type: 'Event',
+        }),
+      ]),
+    );
+    expect(localStorage.getItem('omnihr_planner_events')).toBeNull();
+  });
+
+  it('lists snapshot events in the day panel and deletes them through the store', async () => {
+    const now = new Date();
+    const day = toDateKey(new Date(now.getFullYear(), now.getMonth(), 12));
+    const event: PlannerEvent = {
+      id: 'event-gate-2',
+      title: 'Manager Training Day',
+      startDate: day,
+      endDate: day,
+      type: 'Training',
+      department: 'People & Human Resources',
+      notes: 'Bring laptops',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      updatedAt: '2026-11-01T00:00:00.000Z',
+    };
+    const { store, savePlannerEvents } = makeSpyStore();
+
+    await renderApp({ initialData: makeSnapshot({ plannerEvents: [event] }), dataStore: store });
+    const month = await openPlanner();
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: new RegExp(`${MONTH_NAMES[month.monthIndex]} 12, ${month.year}`),
+      }),
+    );
+
+    // The badge and the toolbar select share the word "Training", so the
+    // assertion is scoped to the event entry in the day panel.
+    const entry = screen
+      .getByText('Manager Training Day')
+      .closest('.planner-entry--event');
+    expect(entry).not.toBeNull();
+    expect(within(entry as HTMLElement).getByText('Training')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete event' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete event' }),
+    );
+
+    // The removal is reported through the store as the event-less dataset.
+    expect(savePlannerEvents).toHaveBeenLastCalledWith([]);
   });
 });

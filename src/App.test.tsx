@@ -222,8 +222,8 @@ describe('App persistence', () => {
 
   it('persists the leave planner through the legacy localStorage path', async () => {
     // The bare-App contract (design decision D9): with no `dataStore`, the leave
-    // planner's empty dataset and default settings are written to the same kind of
-    // versioned envelope the register and the policies use.
+    // planner's empty datasets and default settings are written to the same kind
+    // of versioned envelope the register and the policies use.
     render(<ThemeProvider><App /></ThemeProvider>);
 
     await waitFor(() => {
@@ -235,6 +235,11 @@ describe('App persistence', () => {
     expect(readEnvelope('omnihr_planner_settings')).toEqual({
       v: DATA_SCHEMA_VERSION,
       rows: [{ maxConcurrentLeave: 3 }],
+    });
+    // The event calendar is a third planner dataset with the same contract.
+    expect(readEnvelope('omnihr_planner_events')).toEqual({
+      v: DATA_SCHEMA_VERSION,
+      rows: [],
     });
   });
 

@@ -6,6 +6,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types';
 import type { DataSnapshot, DataStore, StoreBackend } from '../data/DataStore';
@@ -104,6 +105,8 @@ interface AdminSectionProps {
   employees: Employee[];
   policies: HRPolicy[];
   leavePlans: LeavePlan[];
+  /** The FULL planner event calendar, same rule. */
+  plannerEvents: PlannerEvent[];
   /** The FULL daily attendance ledger and company holiday calendar, same rule. */
   attendance: AttendanceRecord[];
   holidays: Holiday[];
@@ -140,6 +143,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
   employees,
   policies,
   leavePlans,
+  plannerEvents,
   attendance,
   holidays,
   settings,
@@ -178,6 +182,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
         employees,
         policies,
         leavePlans,
+        plannerEvents,
         attendance,
         holidays,
         settings,
@@ -291,6 +296,10 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
           <div className="admin-snapshot__count">
             <dt>Leave plans</dt>
             <dd>{leavePlans.length}</dd>
+          </div>
+          <div className="admin-snapshot__count">
+            <dt>Events</dt>
+            <dd>{plannerEvents.length}</dd>
           </div>
           <div className="admin-snapshot__count">
             <dt>Attendance</dt>
@@ -447,7 +456,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
         title="Replace the data in this browser with the snapshot?"
         message={
           pending
-            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records, ${pending.leavePlans.length} leave records, ${pending.attendance.length} attendance records and ${pending.holidays.length} holiday records. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records, ${leavePlans.length} leave records, ${attendance.length} attendance records and ${holidays.length} holiday records - with the file's contents. This cannot be undone.`
+            ? `The file holds ${pending.employees.length} employee records, ${pending.policies.length} policy records, ${pending.leavePlans.length} leave records, ${pending.plannerEvents.length} event records, ${pending.attendance.length} attendance records and ${pending.holidays.length} holiday records. Importing replaces ALL business data stored here - currently ${employees.length} employee records, ${policies.length} policy records, ${leavePlans.length} leave records, ${plannerEvents.length} event records, ${attendance.length} attendance records and ${holidays.length} holiday records - with the file's contents. This cannot be undone.`
             : ''
         }
         confirmLabel="Replace data"

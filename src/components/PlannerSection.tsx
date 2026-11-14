@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import type { Employee, LeavePlan, LeaveStatus, LeaveType, PlannerSettings } from '../types';
+import type {
+  Employee,
+  LeavePlan,
+  LeaveStatus,
+  LeaveType,
+  PlannerEvent,
+  PlannerEventType,
+  PlannerSettings,
+} from '../types';
 import {
   countWorkingDays,
   dailyLeaveCounts,
+  eachDateKey,
   filterLeavePlans,
   isValidDateKey,
   monthGrid,
@@ -12,25 +21,35 @@ import {
   plansOnDate,
   toDateKey,
 } from '../utils/leavePlanner';
+import { PLANNER_EVENT_TYPES } from '../utils/plannerEvents';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LeavePlanModal } from './LeavePlanModal';
+import { PlannerEventModal } from './PlannerEventModal';
 
 /**
- * The leave planner: a month calendar of who is away, the filters that narrow
- * it, and the day/coverage panels around it.
+ * The Planner: one month calendar of who is away AND what the company has on,
+ * the filters that narrow both, and the day/coverage panels around them.
  *
  * This component is deliberately presentational. The parent owns employees,
- * leave plans and settings, and every change here - a saved entry, a deletion,
- * a new coverage threshold - is reported back through a callback. Nothing in
- * this file reads a store, localStorage or the App state.
+ * leave plans, events and settings, and every change here - a saved entry, a
+ * deletion, a new coverage threshold - is reported back through a callback.
+ * Nothing in this file reads a store, localStorage or the App state.
  *
  * A deletion is asked, not assumed: ConfirmDialog names the entry first, and
- * only its confirm button reports `onDelete` to the parent.
+ * only its confirm button reports the delete to the parent.
+ *
+ * Leave and events are two datasets on one calendar, and their filters are
+ * deliberately separate (spec §4): the leave type/status filters narrow leave
+ * without touching events, and the event type filter narrows events without
+ * touching leave. Department, location and search are shared - an event with
+ * no department/location is company-wide, so it survives any department or
+ * location filter, and search matches titles as well as people.
  *
  * Coverage numbers count distinct PEOPLE, not entries: one person with two
- * overlapping bookings is still one desk empty. Cancelled plans are listed in
- * the day panel (they are records someone may want to reopen) but never count
- * toward who is away.
+ * overlapping bookings is still one desk empty. Events never count toward
+ * coverage - an event is not a person away - but they do appear on the day
+ * they run. Cancelled plans are listed in the day panel (they are records
+ * someone may want to reopen) but never count toward who is away.
  */
 
 const ACTIVE_STATUSES: LeaveStatus[] = ['Planned', 'Approved'];
@@ -48,6 +67,14 @@ const TYPE_BADGE_CLASS: Record<LeaveType, string> = {
   Maternity: 'badge-pink',
   Paternity: 'badge-info',
   'Comp Off': 'badge-primary',
+  Other: 'badge-neutral',
+};
+
+const EVENT_BADGE_CLASS: Record<PlannerEventType, string> = {
+  Event: 'badge-primary',
+  Training: 'badge-info',
+  Meeting: 'badge-purple',
+  Holiday: 'badge-pink',
   Other: 'badge-neutral',
 };
 
@@ -85,27 +112,52 @@ const describeDuration = (plan: LeavePlan): string => {
   return `${days} working ${days === 1 ? 'day' : 'days'}`;
 };
 
+/** Human description of an event's length; events count calendar days. */
+const describeEventRange = (event: PlannerEvent): string => {
+  if (
+    !isValidDateKey(event.startDate) ||
+    !isValidDateKey(event.endDate) ||
+    event.startDate > event.endDate
+  ) {
+    return 'invalid dates';
+  }
+  const days = eachDateKey(event.startDate, event.endDate).length;
+  return `${days} ${days === 1 ? 'day' : 'days'}`;
+};
+
 interface DayModal {
   mode: 'add' | 'edit';
   plan?: LeavePlan;
   anchorDate?: string;
 }
 
-interface LeavePlannerSectionProps {
+interface EventModal {
+  mode: 'add' | 'edit';
+  event?: PlannerEvent;
+  anchorDate?: string;
+}
+
+interface PlannerSectionProps {
   employees: Employee[];
   leavePlans: LeavePlan[];
+  plannerEvents: PlannerEvent[];
   settings: PlannerSettings;
   onSave: (plan: LeavePlan) => void;
   onDelete: (id: string) => void;
+  onSaveEvent: (event: PlannerEvent) => void;
+  onDeleteEvent: (id: string) => void;
   onSettingsChange: (settings: PlannerSettings) => void;
 }
 
-export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
+export const PlannerSection: React.FC<PlannerSectionProps> = ({
   employees,
   leavePlans,
+  plannerEvents,
   settings,
   onSave,
   onDelete,
+  onSaveEvent,
+  onDeleteEvent,
   onSettingsChange,
 }) => {
   // Captured once per mount: "today" cannot drift between renders.
@@ -121,13 +173,16 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
   const [search, setSearch] = useState('');
   const [leaveType, setLeaveType] = useState<LeaveType | 'ALL'>('ALL');
   const [status, setStatus] = useState<LeaveStatus | 'ALL'>('ALL');
+  const [eventType, setEventType] = useState<PlannerEventType | 'ALL'>('ALL');
 
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [modal, setModal] = useState<DayModal | null>(null);
-  // The entry awaiting its deletion confirmation. Holding the whole plan lets
-  // the dialog name what is about to be lost, the way Admin's import dialog
-  // names both sides of the replacement.
+  const [eventModal, setEventModal] = useState<EventModal | null>(null);
+  // The entries awaiting their deletion confirmation. Holding the whole record
+  // lets the dialog name what is about to be lost, the way Admin's import
+  // dialog names both sides of the replacement.
   const [pendingDelete, setPendingDelete] = useState<LeavePlan | null>(null);
+  const [pendingEventDelete, setPendingEventDelete] = useState<PlannerEvent | null>(null);
 
   // The threshold field keeps a local draft so clearing it (an empty input while
   // the user types a new number) is a visible state, not an instant snap-back to
@@ -158,6 +213,29 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
     status: status === 'ALL' ? undefined : status,
   });
   const activePlans = filteredPlans.filter((plan) => ACTIVE_STATUSES.includes(plan.status));
+
+  // Events go through the shared department/location/search filters and their
+  // own event type filter. An event with no department or no location is
+  // company-wide, so it is never hidden by a filter it was never scoped to;
+  // search matches the event's own text, not a person.
+  const searchKey = search.trim().toLowerCase();
+  const filteredEvents = plannerEvents.filter((event) => {
+    if (eventType !== 'ALL' && event.type !== eventType) return false;
+    if (department !== 'ALL' && event.department !== undefined && event.department !== department) {
+      return false;
+    }
+    if (location !== 'ALL' && event.location !== undefined && event.location !== location) {
+      return false;
+    }
+    if (searchKey) {
+      const haystack = [event.title, event.department, event.location, event.notes]
+        .filter((value): value is string => typeof value === 'string')
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(searchKey)) return false;
+    }
+    return true;
+  });
 
   const monthStartKey = toDateKey(new Date(view.year, view.monthIndex, 1));
   const monthEndKey = toDateKey(new Date(view.year, view.monthIndex + 1, 0));
@@ -191,6 +269,29 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
     }
     return entries;
   };
+
+  // Events by day for the displayed view. The walk is clamped to the rendered
+  // grid (plus the selected day, which stays listed after navigating months,
+  // exactly like the leave panel keeps its day) so even a pathological range
+  // costs at most 43 day keys per render, not years of them. The leave counts
+  // above are clamped the same way.
+  const eventsByDay = new Map<string, PlannerEvent[]>();
+  const windowStartKey =
+    selectedDateKey && selectedDateKey < cells[0].dateKey ? selectedDateKey : cells[0].dateKey;
+  const windowEndKey =
+    selectedDateKey && selectedDateKey > cells[41].dateKey ? selectedDateKey : cells[41].dateKey;
+  for (const event of filteredEvents) {
+    if (!isValidDateKey(event.startDate) || !isValidDateKey(event.endDate)) continue;
+    const from = event.startDate > windowStartKey ? event.startDate : windowStartKey;
+    const to = event.endDate < windowEndKey ? event.endDate : windowEndKey;
+    if (from > to) continue;
+    for (const key of eachDateKey(from, to)) {
+      const onDay = eventsByDay.get(key);
+      if (onDay) onDay.push(event);
+      else eventsByDay.set(key, [event]);
+    }
+  }
+  const eventsOn = (dateKey: string): PlannerEvent[] => eventsByDay.get(dateKey) ?? [];
 
   const goPrevMonth = () => {
     setView((current) =>
@@ -245,6 +346,7 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
     : bookedWorkingDays.toFixed(1);
 
   const selectedEntries = selectedDateKey ? plansOnDate(filteredPlans, selectedDateKey) : [];
+  const selectedEventEntries = selectedDateKey ? eventsOn(selectedDateKey) : [];
   const selectedLongLabel = selectedDateKey
     ? FULL_DAY_LABEL.format(parseDateKey(selectedDateKey))
     : '';
@@ -321,8 +423,8 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
               id="planner-filter-search"
               type="text"
               className="omni-input"
-              aria-label="Search employees"
-              placeholder="Name or employee ID"
+              aria-label="Search employees and events"
+              placeholder="Name, employee ID or event title"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -364,6 +466,24 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
             </select>
           </div>
 
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="planner-filter-event-type">
+              Event type
+            </label>
+            <select
+              id="planner-filter-event-type"
+              className="omni-select"
+              aria-label="Filter by event type"
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value as PlannerEventType | 'ALL')}
+            >
+              <option value="ALL">All event types</option>
+              {PLANNER_EVENT_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             className="btn btn-primary"
@@ -372,6 +492,16 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
             }
           >
             <Plus size={15} aria-hidden="true" /> Add leave
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() =>
+              setEventModal({ mode: 'add', anchorDate: selectedDateKey ?? undefined })
+            }
+          >
+            <Plus size={15} aria-hidden="true" /> Add event
           </button>
         </div>
       </div>
@@ -413,7 +543,7 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
       <div className="planner-layout">
         <div className="omni-card omni-card--flush">
           <table className="planner-calendar">
-            <caption className="sr-only">Leave calendar for {monthLabel}</caption>
+            <caption className="sr-only">Planner calendar for {monthLabel}</caption>
             <thead>
               <tr>
                 <th scope="col">Mon</th>
@@ -435,9 +565,24 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                     // adjacent month still shows on its leading/trailing cell.
                     // The month-scoped `counts` map stays reserved for the peaks.
                     const entries = activeEntriesOn(cell.dateKey);
+                    const dayEvents = eventsOn(cell.dateKey);
                     const count = entries.length;
-                    const chips = entries.slice(0, 3);
-                    const extra = entries.length - chips.length;
+                    const eventCount = dayEvents.length;
+                    // One chip row serves both datasets: round primary chips for
+                    // people on leave, squared purple chips for company events,
+                    // capped at three with a "+N" for the rest either way.
+                    const leaveChips = entries.slice(0, 3).map((plan) => ({
+                      kind: 'leave' as const,
+                      id: plan.id,
+                      label: nameOf(plan.employeeId),
+                    }));
+                    const eventChips = dayEvents.map((event) => ({
+                      kind: 'event' as const,
+                      id: event.id,
+                      label: event.title,
+                    }));
+                    const chips = [...leaveChips, ...eventChips].slice(0, 3);
+                    const extra = count + eventCount - chips.length;
                     const isSunday = date.getDay() === 0;
                     const isSelected = selectedDateKey === cell.dateKey;
                     const cellClass = [
@@ -450,6 +595,18 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                     ]
                       .filter(Boolean)
                       .join(' ');
+                    const leavePhrase =
+                      count === 0
+                        ? 'no leave'
+                        : count === 1
+                          ? '1 person on leave'
+                          : `${count} people on leave`;
+                    const eventPhrase =
+                      eventCount === 0
+                        ? ''
+                        : eventCount === 1
+                          ? ', 1 event'
+                          : `, ${eventCount} events`;
 
                     return (
                       <td key={cell.dateKey}>
@@ -457,13 +614,7 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                           type="button"
                           className={cellClass}
                           aria-pressed={isSelected}
-                          aria-label={`${FULL_DAY_LABEL.format(date)}, ${
-                            count === 0
-                              ? 'no leave'
-                              : count === 1
-                                ? '1 person on leave'
-                                : `${count} people on leave`
-                          }`}
+                          aria-label={`${FULL_DAY_LABEL.format(date)}, ${leavePhrase}${eventPhrase}`}
                           onClick={() => setSelectedDateKey(cell.dateKey)}
                         >
                           <span className="planner-day__head">
@@ -474,15 +625,25 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                           </span>
                           {chips.length > 0 && (
                             <span className="planner-day__chips">
-                              {chips.map((plan) => (
-                                <span
-                                  key={plan.id}
-                                  className="planner-chip"
-                                  title={nameOf(plan.employeeId)}
-                                >
-                                  {initialsOf(nameOf(plan.employeeId))}
-                                </span>
-                              ))}
+                              {chips.map((chip) =>
+                                chip.kind === 'leave' ? (
+                                  <span
+                                    key={chip.id}
+                                    className="planner-chip"
+                                    title={chip.label}
+                                  >
+                                    {initialsOf(chip.label)}
+                                  </span>
+                                ) : (
+                                  <span
+                                    key={chip.id}
+                                    className="planner-chip planner-chip--event"
+                                    title={chip.label}
+                                  >
+                                    {chip.label.charAt(0).toUpperCase()}
+                                  </span>
+                                ),
+                              )}
                               {extra > 0 && (
                                 <span className="planner-day__more">+{extra}</span>
                               )}
@@ -505,7 +666,7 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
               <p className="planner-panel__date">{selectedLongLabel}</p>
             ) : (
               <p className="omni-card-sub">
-                Select a day on the calendar to review its leave entries.
+                Select a day on the calendar to review its leave entries and events.
               </p>
             )}
           </div>
@@ -553,6 +714,58 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
                           onClick={() => setPendingDelete(entry)}
                         >
                           Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {selectedDateKey && (
+            <div>
+              <h4 className="planner-panel__heading">Events</h4>
+              {selectedEventEntries.length === 0 ? (
+                <p className="planner-empty">No events for this day.</p>
+              ) : (
+                <ul className="planner-entries">
+                  {selectedEventEntries.map((entry) => (
+                    <li key={entry.id} className="planner-entry planner-entry--event">
+                      <div className="planner-entry__head">
+                        <span className="planner-entry__name">{entry.title}</span>
+                        <span className={`badge ${EVENT_BADGE_CLASS[entry.type] ?? 'badge-neutral'}`}>
+                          {entry.type}
+                        </span>
+                      </div>
+                      <div className="planner-entry__meta">
+                        <span>{describeEventRange(entry)}</span>
+                        {entry.department && (
+                          <span aria-hidden="true">·</span>
+                        )}
+                        {entry.department && <span>{entry.department}</span>}
+                        {entry.location && (
+                          <span aria-hidden="true">·</span>
+                        )}
+                        {entry.location && <span>{entry.location}</span>}
+                        {entry.notes && (
+                          <span className="planner-entry__note">· {entry.notes}</span>
+                        )}
+                      </div>
+                      <div className="planner-entry__actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setEventModal({ mode: 'edit', event: entry })}
+                        >
+                          Edit event
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => setPendingEventDelete(entry)}
+                        >
+                          Delete event
                         </button>
                       </div>
                     </li>
@@ -634,8 +847,24 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
         />
       )}
 
-      {/* Asked last so it stacks above the calendar panels, the same placement
-          rule the modals and the Admin import dialog follow. The message names
+      {eventModal && (
+        <PlannerEventModal
+          isOpen
+          onClose={() => setEventModal(null)}
+          onSave={onSaveEvent}
+          eventToEdit={eventModal.mode === 'edit' ? eventModal.event ?? null : null}
+          departments={departments}
+          locations={locations}
+          initialDates={
+            eventModal.mode === 'add' && eventModal.anchorDate
+              ? { startDate: eventModal.anchorDate, endDate: eventModal.anchorDate }
+              : null
+          }
+        />
+      )}
+
+      {/* Asked last so they stack above the calendar panels, the same placement
+          rule the modals and the Admin import dialog follow. Each message names
           the entry it is about to remove. */}
       {pendingDelete && (
         <ConfirmDialog
@@ -648,6 +877,20 @@ export const LeavePlannerSection: React.FC<LeavePlannerSectionProps> = ({
             setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {pendingEventDelete && (
+        <ConfirmDialog
+          isOpen
+          title="Delete this event?"
+          message={`This removes the event "${pendingEventDelete.title}" (${describeEventRange(pendingEventDelete)}). This cannot be undone.`}
+          confirmLabel="Delete event"
+          onConfirm={() => {
+            onDeleteEvent(pendingEventDelete.id);
+            setPendingEventDelete(null);
+          }}
+          onCancel={() => setPendingEventDelete(null)}
         />
       )}
     </div>
