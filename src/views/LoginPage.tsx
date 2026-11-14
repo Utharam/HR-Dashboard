@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { Callout } from '../components/Callout'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../auth/AuthContext'
@@ -64,13 +65,17 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     <div className="auth-shell">
       <main className="auth-main">
         <div className="auth-card">
-          <div className="auth-theme no-print">
-            <ThemeToggle />
-          </div>
-
-          <div className="auth-brand">
-            <div className="brand-mark" aria-hidden="true">Ω</div>
-            <span className="brand-name">Omni<span className="text-primary">HR</span></span>
+          {/* One 44px head row: the brand stays centred on the card and the
+              theme control is a static grid item at the right edge, so the
+              toggle shares the row's touch height instead of floating over it. */}
+          <div className="auth-head">
+            <div className="auth-brand">
+              <div className="brand-mark" aria-hidden="true">Ω</div>
+              <span className="brand-name">Omni<span className="text-primary">HR</span></span>
+            </div>
+            <div className="auth-theme no-print">
+              <ThemeToggle />
+            </div>
           </div>
 
           <h1 className="auth-title">Sign in</h1>
@@ -130,17 +135,23 @@ export const LoginPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             >
               Okta
             </button>
+            {/* Third way in, kept quiet: a disclosure rather than a peer
+                button, with the state mirrored to assistive tech through
+                aria-expanded and the chevron. */}
             <button
               type="button"
-              className="btn btn-secondary btn-block"
+              className="btn auth-disclosure"
               onClick={() => setShowDomain((shown) => !shown)}
               disabled={isSubmitting}
+              aria-expanded={showDomain}
+              aria-controls={showDomain ? 'auth-domain-panel' : undefined}
             >
               Sign in with SSO by domain
+              <ChevronDown size={16} className="auth-disclosure__chevron" aria-hidden="true" />
             </button>
 
             {showDomain && (
-              <div className="auth-domain">
+              <div className="auth-domain" id="auth-domain-panel">
                 <div className="omni-field">
                   <label className="omni-label" htmlFor="login-domain">Work domain</label>
                   <input

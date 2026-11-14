@@ -299,8 +299,9 @@
 
 /* Light component overrides that cannot live in the token block: surfaces that
    dissolve into a white field without a stronger edge or a brighter fill. The
-   preview tiles/dots and the divider rules only matter in light — in dark the
-   shared base rules already read correctly. */
+   preview tiles/dots only matter in light — in dark the shared base rules
+   already read correctly. The auth overrides below restore or swap the values
+   the dark auth shell retunes. */
 :root[data-theme="light"] .product-preview__tile { border-color: var(--border-strong); }
 :root[data-theme="light"] .product-preview__dot { background: var(--border-strong); }
 /* The active dot must read as filled, not merely outlined: the light override
@@ -311,8 +312,26 @@
   border-color: var(--primary);
 }
 :root[data-theme="light"] .auth-sso .btn-secondary { background: var(--bg-card); }
-:root[data-theme="light"] .auth-divider::before,
-:root[data-theme="light"] .auth-divider::after { background: var(--border-strong); }
+/* The dark auth shell retunes the control borders for its bare field (see the
+   Authentication section); on white the shared light values are already the
+   right contrast, so the light shell restores them. */
+:root[data-theme="light"] .auth-shell {
+  --border-control: #7C8698;
+  --border-control-strong: #5B6472;
+}
+/* The dark card is carried by a firm 18% white edge and no shadow; on a white
+   field that edge vanishes, so light leans on the stronger border and a real
+   shadow instead. */
+:root[data-theme="light"] .auth-card {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+/* Recessed fields are a dark-field device (see the Authentication section);
+   light keeps the shared subtle fill. */
+:root[data-theme="light"] .auth-shell .omni-input,
+:root[data-theme="light"] .auth-shell .omni-select {
+  background: var(--bg-card-subtle);
+}
 
 /* ── 6. Base ────────────────────────────────────────────────────────────── */
 * {
@@ -751,20 +770,58 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   }
 }
 
-/* Authentication ------------------------------------------------------- */
+/* Authentication -------------------------------------------------------
+   The login page shares the console's tokens but retunes the ones a bare
+   sign-in card needs: with one form on an empty field the control boundary
+   has to carry its own weight, so --border-control is re-set under the shell
+   and every control inside (fields, secondary buttons, the divider) picks it
+   up by inheritance. */
 .auth-shell {
+  /* Auth-only control borders. The shared dark alias is an 8% card hairline
+     tuned for controls that sit on filled surfaces; on a lone form it reads
+     as a disabled edge. Light restores the shared light values in section 5b. */
+  --border-control: #747E90;
+  --border-control-strong: #9CA3AF;
+
   min-height: 100dvh;
   display: flex;
+  /* `safe center` drops to start alignment when the card outgrows a short
+     viewport, so the top of the form can never be pushed out of scroll reach;
+     the plain `center` line above keeps engines that would drop the `safe`
+     keyword — and with it the whole declaration — centre-aligned. */
   align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
   padding: var(--space-8);
   background: var(--bg-main);
   position: relative;
 }
-.auth-theme {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
+/* One 44px head row: the brand sits truly centred on the card while the theme
+   toggle is pinned to the right edge as a static grid item - no absolute
+   overlay - so row and toggle share the same 44px touch height. */
+.auth-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: var(--space-5);
+}
+.auth-head .auth-brand {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+}
+.auth-head .auth-theme {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+/* The 44px square is an auth-only target size: the landing and console
+   toggles keep the shared 32px control size. */
+.auth-shell .theme-toggle {
+  width: 44px;
+  height: 44px;
 }
 .auth-main {
   width: 100%;
@@ -775,9 +832,12 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   width: 100%;
   max-width: 400px;
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  /* The dark card is carried by a firm 18% white edge and no shadow: on the
+     empty --bg-main field the edge reads as the physical boundary and a drop
+     shadow would disappear into it. Light swaps edge + shadow in section 5b. */
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--r-2xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: none;
   padding: var(--space-8);
   position: relative;
 }
@@ -789,7 +849,6 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-5);
 }
 .auth-title {
   margin: 0;
@@ -798,6 +857,7 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   font-weight: var(--fw-bold);
   color: var(--text-bright);
   letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-tight);
 }
 .auth-sub {
   margin: var(--space-1) 0 var(--space-5);
@@ -816,6 +876,20 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .auth-form .btn-primary:disabled {
   opacity: 1;
 }
+/* The console primary lifts and glows because it competes with a row of
+   actions; the auth card holds exactly one, so it sits flat. */
+.auth-shell .btn-primary {
+  box-shadow: none;
+}
+.auth-shell .btn-primary:hover:not(:disabled) {
+  transform: none;
+}
+/* Dark fields sit recessed in the well so the lone form reads as inset into
+   the card; light keeps the shared subtle fill (section 5b). */
+.auth-shell .omni-input,
+.auth-shell .omni-select {
+  background: var(--bg-well);
+}
 .auth-divider {
   display: flex;
   align-items: center;
@@ -829,12 +903,38 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--border);
+  /* The control border rather than the card hairline: the rule separates the
+     owned sign-in from the federated options and follows the retuned auth
+     edges in both themes. */
+  background: var(--border-control);
 }
 .auth-sso {
   display: flex;
   flex-direction: column;
   gap: var(--gap-inline);
+}
+/* The domain path is the third way in, not a peer of the providers: a quiet,
+   edgeless disclosure keeps Microsoft/Okta the loudest buttons in the group,
+   and the chevron mirrors the expanded state for pointer and assistive tech
+   alike. */
+.auth-disclosure {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.auth-disclosure:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-main);
+}
+.auth-disclosure__chevron {
+  flex-shrink: 0;
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.auth-disclosure[aria-expanded='true'] .auth-disclosure__chevron {
+  transform: rotate(180deg);
 }
 .auth-domain {
   display: flex;
@@ -848,13 +948,21 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 .auth-foot {
   margin: var(--space-5) 0 0;
   text-align: center;
-  font-size: var(--fs-2xs);
+  /* 13px, not the 11px micro tier: the provisioning line is a sentence a
+     first-time visitor may need to actually read. */
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   line-height: var(--lh-snug);
 }
+/* The back link carries the same 44px touch height as the head row: it is the
+   only way out of the page and sits at its very bottom edge. */
 .auth-back {
-  display: block;
-  margin: var(--space-3) auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: var(--space-2) auto 0;
+  padding: 0 var(--space-3);
   background: none;
   border: none;
   color: var(--text-muted);
@@ -866,6 +974,16 @@ input[type='date']:hover::-webkit-calendar-picker-indicator {
 }
 .auth-back:hover {
   color: var(--text-bright);
+}
+/* Phone: the shell gutter and the card's full padding together eat a 390px
+   screen, so both step down at the same 480px breakpoint the planner uses. */
+@media (max-width: 480px) {
+  .auth-shell {
+    padding: var(--space-5) var(--space-4);
+  }
+  .auth-card {
+    padding: var(--space-6) var(--space-5);
+  }
 }
 
 /* Boot placeholder — the moment between reading the session and routing on it. */
