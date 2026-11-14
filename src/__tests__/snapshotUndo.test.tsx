@@ -69,7 +69,7 @@ const snapshotFile = (snapshot: DataSnapshot): File =>
 
 const openAdmin = async () => {
   const nav = screen.getByRole('navigation');
-  await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
 };
 
@@ -172,7 +172,7 @@ describe('snapshot import clears the stale Excel Undo', () => {
 
     // The app is still alive and the store still holds the imported snapshot.
     expect(
-      screen.getByRole('heading', { level: 2, name: /Admin & Data Exchange/ }),
+      screen.getByRole('heading', { level: 2, name: /Admin & Settings/ }),
     ).toBeInTheDocument();
     const stored = await store.exportSnapshot();
     expect(stored.employees.map((e) => e.id)).toEqual(['EMP-SNAP-1']);

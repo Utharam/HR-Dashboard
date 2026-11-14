@@ -582,7 +582,7 @@ describe('Attendance integration — payroll register export', () => {
     const writeFile = vi.mocked(XLSX.writeFile);
     writeFile.mockClear();
     const nav = screen.getByRole('navigation');
-    await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+    await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
     await userEvent.click(
       await screen.findByRole('button', { name: /Download Payroll Sheet/i }),
     );
@@ -625,7 +625,10 @@ describe('Attendance integration — demo reset', () => {
       holidays: [holidayFor(CURRENT, 5, 'Founders Day')],
     });
 
-    // The reset control lives in the sidebar footer, outside the <nav> element.
+    // The reset control lives on the Admin & Settings page now, so navigation
+    // goes through the sidebar before reaching for it.
+    const nav = screen.getByRole('navigation');
+    await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
 
     // The question says what is lost, attendance and holidays included.
@@ -672,7 +675,10 @@ describe('Attendance integration — demo reset', () => {
     const holiday = holidayFor(CURRENT, 5, 'Founders Day');
     await mountConsole({ attendance: [seed], holidays: [holiday] });
 
-    // The reset control lives in the sidebar footer, outside the <nav> element.
+    // The reset control lives on the Admin & Settings page now, so navigation
+    // goes through the sidebar before reaching for it.
+    const nav = screen.getByRole('navigation');
+    await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
 
     // Asked, not answered: the datasets are still exactly what App started with.

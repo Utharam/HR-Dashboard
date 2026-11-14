@@ -124,6 +124,8 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   backend: 'indexeddb',
   legacyBackup: true,
   onImported: vi.fn(),
+  onExportRoster: vi.fn(),
+  onResetData: vi.fn(),
   ...overrides,
 });
 
@@ -499,5 +501,52 @@ describe('Admin snapshot card — import', () => {
     expect(importButton).toBeDisabled();
     // Export still works without a store, so the fallback path is not a dead page.
     expect(screen.getByRole('button', { name: 'Export snapshot' })).toBeEnabled();
+  });
+});
+
+describe('Admin workspace actions card', () => {
+  /*
+   * The sidebar footer's three quick actions (Export Roster, Reset Demo State,
+   * Sign out) moved onto the Admin & Settings page (design decision D3). The
+   * card is presentational-plus-intents like every other section: the callbacks
+   * belong to App, which owns the datasets the export/reset act on and the
+   * ConfirmDialog the reset asks through.
+   */
+
+  it('wires the Export Roster, Reset Demo State and Sign out actions', async () => {
+    const onExportRoster = vi.fn();
+    const onResetData = vi.fn();
+    const onSignOut = vi.fn();
+    render(
+      <AdminSection
+        {...baseProps({ onExportRoster, onResetData, onSignOut })}
+      />,
+    );
+
+    const card = screen.getByRole('region', { name: 'Workspace actions' });
+    expect(
+      within(card).getByRole('button', { name: 'Export Roster (Excel)' }),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Reset Demo State' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Export Roster (Excel)' }));
+    expect(onExportRoster).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Reset Demo State' }));
+    // A reset is a QUESTION, not an action: the card reports the intent, App asks.
+    expect(onResetData).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Sign out only when the console is hosted by a session', () => {
+    render(<AdminSection {...baseProps({ onSignOut: undefined })} />);
+
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    // The other two actions are session-independent and stay.
+    expect(screen.getByRole('button', { name: 'Export Roster (Excel)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset Demo State' })).toBeInTheDocument();
   });
 });

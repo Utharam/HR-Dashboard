@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { AlertTriangle, X } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
+import { PageToolbar } from './components/PageToolbar';
 import { OverviewSection } from './components/OverviewSection';
 import { DirectorySection } from './components/DirectorySection';
 import { AttendanceSection } from './components/AttendanceSection';
@@ -75,6 +76,22 @@ const PLANNER_SETTINGS_KEY = 'omnihr_planner_settings';
 // writes, so a browser that switches backend finds the same data either way.
 const ATTENDANCE_KEY = 'omnihr_attendance';
 const HOLIDAYS_KEY = 'omnihr_holidays';
+
+/**
+ * The tabs whose sections work on the filtered roster (design decision D2): the
+ * page-owned `PageToolbar` (search, department, location, Add Staff) renders on
+ * exactly these. Attendance and the planner carry their own filters; Admin,
+ * Policies and Guides filter nothing, so they render no toolbar at all.
+ */
+const TOOLBAR_TABS: ActiveTab[] = [
+  'overview',
+  'directory',
+  'payroll',
+  'performance',
+  'recruitment',
+  'retention',
+  'trends',
+];
 
 /**
  * True when the sidebar is the off-canvas drawer (the 760px breakpoint in
@@ -967,14 +984,12 @@ export const App: React.FC<{
 
   return (
     <div className="app-shell" data-nav-open={isSidebarOpen}>
-      {/* Sidebar Navigation */}
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={handleNavigate} 
-        onExportExcel={handleExportEmployees}
-        onResetData={handleResetData}
+      {/* Sidebar Navigation - navigation only since the workspace actions moved
+          to the Admin & Settings page. */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={handleNavigate}
         isOpen={isSidebarOpen}
-        onSignOut={onSignOut}
       />
 
       {/* Main Content Pane.
@@ -985,22 +1000,33 @@ export const App: React.FC<{
           either - the document does, which is what makes `Dialog`'s body scroll lock
           actually lock something. */}
       <main className="app-shell__main">
-        <Header 
+        <Header
           activeTab={activeTab}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          selectedDept={selectedDept}
-          setSelectedDept={setSelectedDept}
-          selectedLocation={selectedLocation}
-          setSelectedLocation={setSelectedLocation}
-          departments={departments}
-          locations={locations}
-          onOpenAddModal={() => setIsAddModalOpen(true)}
-          onNavigateToAdmin={() => setActiveTab('admin')}
-          onNavigateToGuides={() => handleNavigateToGuides('general')}
           onToggleNav={() => setIsSidebarOpen(open => !open)}
           navOpen={isSidebarOpen}
         />
+
+        {/*
+          The page-owned tool row (D2): the search / department / location / Add
+          Staff controls the slim header no longer carries, on exactly the tabs
+          whose sections work on the filtered roster. The state is unchanged -
+          these are the same pieces of App state the header used to bind, so a
+          search left behind survives a round trip through a tab without a
+          toolbar and comes back with the values intact.
+        */}
+        {TOOLBAR_TABS.includes(activeTab) && (
+          <PageToolbar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedDept={selectedDept}
+            setSelectedDept={setSelectedDept}
+            selectedLocation={selectedLocation}
+            setSelectedLocation={setSelectedLocation}
+            departments={departments}
+            locations={locations}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+          />
+        )}
 
         {/*
           Persistence problems are shown here, above the view and below the header, so
@@ -1149,10 +1175,12 @@ export const App: React.FC<{
         )}
 
         {/*
-          The Admin page composes the snapshot exchange card and the existing Excel
-          Hub. The card deliberately receives the FULL datasets - its counts and its
-          export describe the store, which is not narrowed by the header's filters,
-          while the Excel Hub below keeps its filter-aware exports.
+          The Admin & Settings page composes the workspace actions card, the
+          snapshot exchange card and the existing Excel Hub. The card deliberately
+          receives the FULL datasets - its counts and its export describe the
+          store, which is not narrowed by the toolbar's filters, while the Excel
+          Hub below keeps its filter-aware exports. The workspace actions ride
+          the same handlers the sidebar footer used to bind.
         */}
         {activeTab === 'admin' && (
           <>
@@ -1167,6 +1195,9 @@ export const App: React.FC<{
               backend={backend}
               legacyBackup={legacyBackup}
               onImported={handleSnapshotImported}
+              onExportRoster={handleExportEmployees}
+              onResetData={handleResetData}
+              onSignOut={onSignOut}
             />
             <ExcelHubSection
               employees={filteredEmployees}

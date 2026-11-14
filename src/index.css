@@ -1375,13 +1375,6 @@ textarea.omni-input {
   flex: 1;
   width: 100%;
 }
-.app-sidebar__footer {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-inline);
-}
 
 /* Section stack: one rhythm for every tab */
 .section-stack {
@@ -1437,7 +1430,18 @@ textarea.omni-input {
     justify-content: center;
     padding: var(--space-2);
   }
-  .app-sidebar__footer .btn { padding: var(--space-2); }
+
+  /* The group's children join the rail: the inset border reads as clutter at
+     64px, so the children center exactly like the top-level items. */
+  .nav-group__children {
+    padding-left: 0;
+    margin-left: 0;
+    border-left: none;
+  }
+  .nav-group__children .nav-item {
+    justify-content: center;
+    padding: var(--space-2);
+  }
 
   /* `.col-optional` is deliberately class-based rather than nth-child: it marks a COLUMN BY
      MEANING (an identifier, an office, a tax line) so the rule survives a column being
@@ -1826,6 +1830,42 @@ textarea.omni-input {
 .nav-item--active .nav-item__icon { color: var(--primary); }
 .nav-item:hover .nav-item__icon { color: var(--text-muted); }
 
+/* Workforce Planning group: a disclosure inside the nav list. The parent is a
+   real button with `aria-expanded`; the children keep the same item treatment
+   one step in, so the hierarchy reads without a second visual language. */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.nav-group__chevron {
+  margin-left: auto;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.nav-item[aria-expanded='true'] .nav-group__chevron { transform: rotate(180deg); }
+.nav-item--group-active {
+  color: var(--text-main);
+  font-weight: var(--fw-semibold);
+}
+.nav-group__children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  margin-left: var(--space-2);
+  border-left: 1px solid var(--border);
+}
+/* `hidden` is a UA style, so the author `display: flex` above would beat it and
+   a collapsed group would stay on screen. This restores the attribute's meaning
+   without giving up the flex layout when the group is open. */
+.nav-group__children[hidden] { display: none; }
+.nav-item--sub {
+  padding-left: var(--space-3);
+  font-size: var(--fs-sm);
+}
+
 /* Brand mark */
 .brand-mark {
   width: var(--space-8);
@@ -1883,6 +1923,23 @@ textarea.omni-input {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+
+/* Page toolbar: the page-owned tool row (search / filters / Add Staff) that the
+   slim header no longer carries. Rendered only on the tabs whose sections work
+   on the filtered roster, directly under the header it took over from. */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+.page-toolbar__field {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-micro);
+}
+.page-toolbar__search { width: 220px; }
 
 /* Labeled numeric tile (leave balances, settlement line items) */
 .stat-tile {
@@ -2538,6 +2595,20 @@ textarea.omni-input {
   flex-shrink: 0;
   margin-top: 2px;
   color: var(--text-dim);
+}
+
+/* Workspace actions card: the Export / Reset / Sign-out trio that used to be the
+   sidebar footer. Reuses the snapshot card's head/action anatomy; only the
+   section wrapper is its own class. */
+.admin-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.admin-workspace__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
 }
 
 /* ── Attendance matrix ────────────────────────────────────────────────────

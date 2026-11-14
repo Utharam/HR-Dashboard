@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Database, Download, ShieldCheck, Upload } from 'lucide-react';
+import { Database, Download, LogOut, RotateCcw, Settings2, ShieldCheck, Upload } from 'lucide-react';
 import type {
   AttendanceRecord,
   Employee,
@@ -119,6 +119,16 @@ interface AdminSectionProps {
   legacyBackup: boolean;
   /** Called after a confirmed, successful import. The parent reloads its data. */
   onImported: () => void;
+  /**
+   * Workspace actions (design decisions D3/D4), moved here from the sidebar
+   * footer: export the FULL roster, ask the parent for the demo-state reset
+   * (the parent owns the confirmation), and end the session. `onSignOut` is
+   * optional because the console can render without a session; the other two
+   * always exist - the export and the reset are App's own handlers.
+   */
+  onExportRoster: () => void;
+  onResetData: () => void;
+  onSignOut?: () => void;
 }
 
 type SnapshotNotice =
@@ -137,6 +147,9 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
   backend,
   legacyBackup,
   onImported,
+  onExportRoster,
+  onResetData,
+  onSignOut,
 }) => {
   // Captured once per mount, then updated through the same helper that writes it,
   // so the card reflects an exchange without remounting and can never show a
@@ -364,6 +377,58 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
           file to Google Drive, OneDrive or any shared drive. An imported snapshot is a local copy
           for this browser - changes made from it do not propagate back to HR.
         </p>
+      </section>
+
+      {/*
+        The workspace actions card (D3). These three were the sidebar footer's
+        quick actions; they now live on the page that is ABOUT administering the
+        workspace, so the sidebar is purely navigation. The reset still only ASKS
+        - the ConfirmDialog lives in App, which owns every dataset the reset
+        replaces.
+      */}
+      <section className="omni-card admin-workspace" aria-labelledby="admin-workspace-title">
+        <div className="admin-workspace__head">
+          <span className="admin-snapshot__icon" aria-hidden="true">
+            <Settings2 size={20} />
+          </span>
+          <div>
+            <h3 id="admin-workspace-title" className="omni-card-title">
+              Workspace actions
+            </h3>
+            <p className="omni-card-sub">
+              Session-wide tools: take the roster to Excel, restore the demo state, or end the session.
+            </p>
+          </div>
+        </div>
+
+        <div className="admin-snapshot__actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onExportRoster}
+            title="Export the staff roster to Excel"
+          >
+            <Download size={15} aria-hidden="true" /> Export Roster (Excel)
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary text-dim"
+            onClick={onResetData}
+            title="Reset the register to the master demo dataset"
+          >
+            <RotateCcw size={14} aria-hidden="true" /> Reset Demo State
+          </button>
+          {onSignOut && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onSignOut}
+              title="Sign out of OmniHR"
+            >
+              <LogOut size={15} aria-hidden="true" /> Sign out
+            </button>
+          )}
+        </div>
       </section>
 
       {notice && (

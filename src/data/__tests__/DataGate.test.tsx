@@ -326,8 +326,10 @@ describe('App through the data seam', () => {
     await waitFor(() => expect(store.saveEmployees).toHaveBeenCalledWith(snapshot.employees))
     await waitFor(() => expect(store.savePolicies).toHaveBeenCalledWith(snapshot.policies))
 
-    // An employee change goes to the store: reset the demo data through the sidebar
+    // An employee change goes to the store: reset the demo data from the Admin
+    // & Settings page (where the workspace actions live, design decision D3)
     // and confirm the dialog, the same path a user takes.
+    await userEvent.click(screen.getByRole('button', { name: /admin & settings/i }))
     await userEvent.click(screen.getByRole('button', { name: /reset demo state/i }))
     await userEvent.click(await screen.findByRole('button', { name: /reset demo data/i }))
     await waitFor(() => expect(store.saveEmployees).toHaveBeenLastCalledWith(INITIAL_EMPLOYEES))
@@ -362,6 +364,8 @@ describe('App through the data seam', () => {
 
     await renderApp({ dataStore: store })
 
+    // The reset control lives on the Admin & Settings page now (design decision D3).
+    await userEvent.click(screen.getByRole('button', { name: /admin & settings/i }))
     await userEvent.click(screen.getByRole('button', { name: /reset demo state/i }))
     await userEvent.click(await screen.findByRole('button', { name: /reset demo data/i }))
 

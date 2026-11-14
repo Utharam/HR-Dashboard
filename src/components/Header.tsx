@@ -1,22 +1,10 @@
 import React from 'react';
-import { Search, UserPlus, Database, Building2, MapPin, BookOpen, Menu } from 'lucide-react';
-import type { ActiveTab, Department } from '../types';
+import { Menu } from 'lucide-react';
+import type { ActiveTab } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   activeTab: ActiveTab;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
-  selectedDept: string;
-  setSelectedDept: (dept: string) => void;
-  selectedLocation: string;
-  setSelectedLocation: (loc: string) => void;
-  departments: Department[];
-  locations: string[];
-  onOpenAddModal: () => void;
-  /** Jumps to the Admin page, which owns the snapshot exchange and the Excel Hub. */
-  onNavigateToAdmin: () => void;
-  onNavigateToGuides?: () => void;
   /**
    * Opens and closes the navigation. Required rather than optional: below the collapse
    * breakpoint the sidebar is a fixed panel that only this control can summon, and a
@@ -27,21 +15,16 @@ interface HeaderProps {
   navOpen: boolean;
 }
 
+/**
+ * The slim page header (design decision D1): menu toggle, page title/subtitle and
+ * the theme control - and nothing else. Search, the department/location filters
+ * and Add Staff belong to the pages that use them (`PageToolbar`); Admin and
+ * Guides are reached through the sidebar, where every destination lives.
+ */
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
-  searchQuery,
-  setSearchQuery,
-  selectedDept,
-  setSelectedDept,
-  selectedLocation,
-  setSelectedLocation,
-  departments,
-  locations,
-  onOpenAddModal,
-  onNavigateToAdmin,
-  onNavigateToGuides,
   onToggleNav,
-  navOpen
+  navOpen,
 }) => {
   const getTabTitle = (tab: ActiveTab) => {
     switch (tab) {
@@ -54,24 +37,13 @@ export const Header: React.FC<HeaderProps> = ({
       case 'recruitment': return { title: 'Talent Acquisition & Hiring Pipeline', sub: 'Active requisitions, candidate funnel stages & time-to-hire' };
       case 'retention': return { title: 'Statutory EOSB & Gratuity Calculator', sub: 'Payment of Gratuity Act 1972 compliance with tenure rounding & ₹20L cap' };
       case 'trends': return { title: '33-Month Financial & Headcount Analytics', sub: 'Historical trends from Jan 2024 to Sep 2026' };
-      case 'admin': return { title: 'Admin & Data Exchange', sub: 'Business-data snapshots, storage status and the Excel ingestion hub' };
+      case 'admin': return { title: 'Admin & Settings', sub: 'Workspace actions, business-data snapshots, storage status and the Excel ingestion hub' };
       case 'policies': return { title: 'Corporate HR Policy & Benefits Hub', sub: 'Maternal & paternal provisions, leave quotas, notice periods, sabbaticals & custom enterprise rules' };
       case 'guides': return { title: 'OmniHR Knowledge Base & Operational Guides', sub: 'Comprehensive operational manual and technical Excel spreadsheet synchronization guide' };
     }
   };
 
   const info = getTabTitle(activeTab);
-
-  /**
-   * The Attendance and Leave tabs own their own search/department/location
-   * filters (see the sections' props in App). Showing the header's identical
-   * controls above them rendered two look-alike filter bars on one screen, and
-   * the header's global state would narrow this section's register from a tab
-   * the user had already left. The controls are hidden here rather than rewired
-   * into the sections: their state stays in App untouched, so leaving these
-   * tabs and coming back restores exactly what the header held before.
-   */
-  const showGlobalFilters = activeTab !== 'attendance' && activeTab !== 'leave';
 
   return (
     <header className="page-header no-print">
@@ -103,80 +75,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
+      {/* Last in the action row: the same control ends the action cluster on the
+          landing and login, so the theme affordance stays with the cluster
+          even when the row wraps. */}
       <div className="page-actions">
-        {/* Global Search Input */}
-        {showGlobalFilters && (
-          <div style={{ width: '220px' }}>
-            <label className="omni-icon-field">
-              <Search size={15} />
-              <span className="sr-only">Search staff</span>
-              <input
-                type="text"
-                className="omni-input"
-                placeholder="Search staff, ID, role..."
-                aria-label="Search staff, ID or role"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </label>
-          </div>
-        )}
-
-        {/* Department Filter */}
-        {showGlobalFilters && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
-            <Building2 size={15} className="text-dim" />
-            <select
-              className="omni-select"
-              aria-label="Filter by department"
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-            >
-              <option value="ALL">All Departments (7 Orgs)</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Location Filter */}
-        {showGlobalFilters && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-micro)' }}>
-            <MapPin size={15} className="text-dim" />
-            <select
-              className="omni-select"
-              aria-label="Filter by office location"
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-            >
-              <option value="ALL">All Locations (5 Hubs)</option>
-              {locations.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Actions */}
-        <button onClick={onOpenAddModal} className="btn btn-primary">
-          <UserPlus size={16} /> Add Staff
-        </button>
-        <button onClick={onNavigateToAdmin} className="btn btn-secondary">
-          <Database size={16} /> Admin
-        </button>
-        {onNavigateToGuides && (
-          <button 
-            onClick={onNavigateToGuides} 
-            className={`btn ${activeTab === 'guides' ? 'btn-active' : 'btn-secondary'}`}
-          >
-            <BookOpen size={16} /> Guides
-          </button>
-        )}
-
-        {/* Last in the action row: the same control ends the action cluster on the
-            landing and login, so the theme affordance stays with the cluster
-            even when the row wraps. */}
         <ThemeToggle />
       </div>
     </header>

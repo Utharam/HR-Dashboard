@@ -50,7 +50,10 @@ describe('Root flow', () => {
     await userEvent.type(screen.getByLabelText(/password/i), 'demo')
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
     await waitFor(() => expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    // Sign out moved from the sidebar footer to the Admin & Settings page
+    // (design decision D3), so the flow visits that page before signing out.
+    await userEvent.click(screen.getByRole('button', { name: /admin & settings/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /sign out/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /sign in to omnihr/i })).toBeInTheDocument())
   })
 

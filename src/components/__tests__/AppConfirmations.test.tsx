@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
 import { ThemeProvider } from '../../theme/ThemeContext';
@@ -36,6 +36,16 @@ const dismissConfirmation = async () => {
   await userEvent.click(screen.getByRole('button', { name: /Dismiss this message/ }));
 };
 
+/**
+ * The workspace actions moved from the sidebar footer to the Admin & Settings
+ * page (design decision D3), so a reset test navigates there before reaching
+ * for the control - the same path a user takes.
+ */
+const openAdminSettings = async () => {
+  const nav = screen.getByRole('navigation');
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
+};
+
 describe('App destructive and confirmational actions', () => {
   it('asks before resetting the register, and says what is lost', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
@@ -43,6 +53,7 @@ describe('App destructive and confirmational actions', () => {
     await dismissConfirmation();
     expect(storedRoster()).toHaveLength(201);
 
+    await openAdminSettings();
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/ }));
 
     const dialog = screen.getByRole('dialog');
@@ -57,6 +68,7 @@ describe('App destructive and confirmational actions', () => {
     await addAHire();
     await dismissConfirmation();
 
+    await openAdminSettings();
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/ }));
     await userEvent.keyboard('{Escape}');
 
@@ -70,6 +82,7 @@ describe('App destructive and confirmational actions', () => {
     await addAHire();
     await dismissConfirmation();
 
+    await openAdminSettings();
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/ }));
     await userEvent.click(screen.getByRole('button', { name: /Reset demo data/ }));
 
@@ -81,6 +94,7 @@ describe('App destructive and confirmational actions', () => {
 
   it('lets the confirmation be dismissed', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
+    await openAdminSettings();
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/ }));
     await userEvent.click(screen.getByRole('button', { name: /Reset demo data/ }));
     await screen.findByRole('status');

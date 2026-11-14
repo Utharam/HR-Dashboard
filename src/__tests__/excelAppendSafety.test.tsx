@@ -94,7 +94,7 @@ const ALL_DUPLICATE_ROW = [
 
 const openAdmin = async () => {
   const nav = screen.getByRole('navigation');
-  await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
 };
 

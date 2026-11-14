@@ -96,7 +96,7 @@ const snapshotFile = (snapshot: unknown): File =>
 
 const openAdmin = async () => {
   const nav = screen.getByRole('navigation');
-  await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
   // The Excel Hub is on the same page; waiting for one of its controls proves
   // the whole Admin composition rendered, not just the card.
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
@@ -138,21 +138,24 @@ afterEach(() => {
 });
 
 describe('Admin integration', () => {
-  it('shows the snapshot card and the Excel Hub under the Admin tab, labelled Admin throughout', async () => {
+  it('shows the snapshot card and the Excel Hub under the Admin tab, labelled Admin & Settings throughout', async () => {
     const snapshot = makeSnapshot();
     const { store } = makeSpyStore();
 
     await renderApp({ initialData: snapshot, dataStore: store });
     await openAdmin();
 
-    // The page is Admin now: the header names it and the sidebar carries the new
-    // label - and the old Excel tab is gone from the navigation entirely.
+    // The page is Admin & Settings now: the header names it and the sidebar
+    // carries the new label - and the old Excel tab is gone from the navigation
+    // entirely.
     expect(
-      screen.getByRole('heading', { level: 2, name: /Admin & Data Exchange/ }),
+      screen.getByRole('heading', { level: 2, name: /Admin & Settings/ }),
     ).toBeInTheDocument();
     const nav = screen.getByRole('navigation');
-    expect(within(nav).getByRole('button', { name: 'Admin' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Admin & Settings' })).toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: /Excel Data Hub/i })).toBeNull();
+    // The workspace actions card is on the same page, alongside the snapshot card.
+    expect(screen.getByRole('region', { name: 'Workspace actions' })).toBeInTheDocument();
 
     // The snapshot card reports the datasets App holds, through the store.
     const card = screen.getByRole('region', { name: 'Data snapshot' });

@@ -70,10 +70,10 @@ const storedRoster = () =>
   JSON.parse(localStorage.getItem(EMPLOYEES_KEY) as string).rows as { id: string; name: string }[];
 
 const openExcelHub = async () => {
-  // The Admin page owns the Excel Hub now, so navigation goes through the sidebar's
-  // Admin item - which the header shortcut shares a name with, hence the nav scope.
+  // The Admin & Settings page owns the Excel Hub now, so navigation goes through
+  // the sidebar's Admin & Settings item.
   const nav = screen.getByRole('navigation');
-  await userEvent.click(within(nav).getByRole('button', { name: 'Admin' }));
+  await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
   // The page title and the card heading both mention spreadsheet ingestion, so the tab is
   // recognised by the one control the hub alone owns.
   await screen.findByRole('button', { name: /Download Payroll Sheet/i });
@@ -214,6 +214,9 @@ describe('App destructive import', () => {
 
   it('does not offer an Undo for the reset confirmation, which has no snapshot', async () => {
     render(<ThemeProvider><App /></ThemeProvider>);
+    // The reset control lives on the Admin & Settings page now (design decision D3).
+    const nav = screen.getByRole('navigation');
+    await userEvent.click(within(nav).getByRole('button', { name: 'Admin & Settings' }));
     await userEvent.click(screen.getByRole('button', { name: /Reset Demo State/i }));
     await userEvent.click(screen.getByRole('button', { name: /Reset demo data/i }));
 
