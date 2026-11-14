@@ -1062,8 +1062,7 @@ describe('AttendanceSection — monthly register', () => {
 
 /*
  * The parser reports its gaps from Agent A's fix wave; these pin the preview's
- * replace-gating decision itself, including the gap fields the running parser
- * does not fill yet (they read as "no gap known" until it does).
+ * replace-gating decision itself.
  */
 describe('importBlockers — preview replace gating', () => {
   type GapPreview = Extract<ParseAttendanceResult, { ok: true }> & AttendanceImportGaps;
@@ -1075,6 +1074,8 @@ describe('importBlockers — preview replace gating', () => {
     issues: [],
     matchedEmployees: EMPLOYEES.length,
     unknownEmployeeIds: [],
+    missingEmployeeIds: [],
+    missingDayNumbers: [],
     ...overrides,
   });
 
