@@ -92,6 +92,13 @@ for (const [code, mapping] of Object.entries(ATTENDANCE_CODES)) {
   }
 }
 
+/** A short, readable list for preview warnings; a 199-ID wall is not a warning. */
+const summarizeValues = (values: Array<string | number>, limit = 6): string => {
+  const shown = values.slice(0, limit);
+  const extra = values.length - shown.length;
+  return extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
+};
+
 /** Half-day leave codes: `HD-<full code>`, derived the same way from the one
  * code table so a ghost cell for a half-day plan renders exactly what the
  * template prefills for the same plan. */
@@ -779,7 +786,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
           {importPreview.unknownEmployeeIds.length > 0 && (
             <p className="attendance-preview__unknown">
-              Unknown employee IDs: {importPreview.unknownEmployeeIds.join(', ')}. Their
+              Unknown employee IDs: {summarizeValues(importPreview.unknownEmployeeIds)}. Their
               rows were skipped.
             </p>
           )}
@@ -789,12 +796,12 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               {missingEmployeeIds.length === 1
                 ? '1 roster employee is'
                 : `${missingEmployeeIds.length} roster employees are`}{' '}
-              not in the file: {missingEmployeeIds.join(', ')}.
+              not in the file: {summarizeValues(missingEmployeeIds)}.
             </p>
           )}
           {missingDayNumbers.length > 0 && (
             <p className="attendance-preview__danger">
-              Day columns missing from the header: {missingDayNumbers.join(', ')}.
+              Day columns missing from the header: {summarizeValues(missingDayNumbers, 8)}.
             </p>
           )}
 

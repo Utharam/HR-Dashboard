@@ -20,7 +20,7 @@
  * one is replaced by the app seed instead of throwing. Duplicate ids inside a valid
  * envelope are repaired (first occurrence kept) before the keyed stores see them,
  * and the load reports `recovered` for both repairs and substitutions. The same
- * transaction writes all four datasets, the planner settings and the `initialized`
+ * transaction writes all six datasets, the planner settings and the `initialized`
  * marker, so a failure cannot leave a half-migrated database that later looks
  * initialized.
  *
