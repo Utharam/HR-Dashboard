@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { AttendanceRecord, Holiday, LeavePlan, PlannerSettings } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import {
+  hasUniqueAttendanceDates,
   hasUniqueHolidayDates,
   hasUniqueIds,
+  validateDataSnapshot,
   type DataSnapshot,
 } from '../DataStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
@@ -88,6 +90,28 @@ describe('hasUniqueHolidayDates', () => {
       hasUniqueHolidayDates([
         { date: '2026-01-01' },
         { date: '2026-01-01' },
+      ]),
+    ).toBe(false)
+  })
+})
+
+describe('hasUniqueAttendanceDates', () => {
+  it('accepts one row per employee and date, including an empty ledger', () => {
+    expect(hasUniqueAttendanceDates([])).toBe(true)
+    expect(
+      hasUniqueAttendanceDates([
+        { employeeId: 'E1', date: '2026-01-05' },
+        { employeeId: 'E1', date: '2026-01-06' },
+        { employeeId: 'E2', date: '2026-01-05' },
+      ]),
+    ).toBe(true)
+  })
+
+  it('rejects two rows for the same employee and date even with different ids', () => {
+    expect(
+      hasUniqueAttendanceDates([
+        { employeeId: 'E1', date: '2026-01-05' },
+        { employeeId: 'E1', date: '2026-01-05' },
       ]),
     ).toBe(false)
   })
@@ -339,6 +363,29 @@ describe('parseSnapshot', () => {
           HOLIDAYS[0],
           { ...HOLIDAYS[0], id: 'holiday-copy', name: 'Duplicate day' },
         ],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+  })
+
+  it('rejects two attendance rows for the same employee and date with different ids', () => {
+    const duplicateDay = {
+      ...ATTENDANCE[0],
+      id: 'manual-copy',
+      status: 'WFH' as const,
+    }
+
+    expect(
+      parseSnapshot({
+        ...baseSnapshot(),
+        attendance: [ATTENDANCE[0], duplicateDay],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    // The store boundary is the same contract as the file boundary.
+    expect(
+      validateDataSnapshot({
+        ...baseSnapshot(),
+        attendance: [ATTENDANCE[0], duplicateDay],
       }),
     ).toEqual({ ok: false, reason: 'invalid' })
   })

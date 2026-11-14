@@ -12,18 +12,22 @@ import * as XLSX from 'xlsx'
 import type {
   AttendanceRecord,
   Employee,
+  HalfDay,
   Holiday,
   LeavePlan,
   LeaveType,
 } from '../types'
 import {
   ATTENDANCE_CODES,
+  FULL_LEAVE_CODE_BY_TYPE,
+  HALF_LEAVE_CODE_BY_TYPE,
   codeToRecord,
   holidayDateSet,
   isSunday,
   monthDateKeys,
   monthKey,
   parseMonthKey,
+  recordToCode,
 } from './attendance'
 import { eachDateKey } from './leavePlanner'
 
@@ -43,16 +47,16 @@ export type ParseAttendanceResult =
       issues: ParseAttendanceIssue[]
       matchedEmployees: number
       unknownEmployeeIds: string[]
+      /**
+       * Roster employees with no row in the sheet. A missing person is not an issue
+       * with the file's syntax, but importing it would silently drop their month, so
+       * the UI needs the list to block/confirm the replace.
+       */
+      missingEmployeeIds: string[]
+      /** Day columns 1..daysInMonth that the header does not contain. */
+      missingDayNumbers: number[]
     }
   | { ok: false; reason: 'not-a-workbook' | 'missing-month' | 'missing-header' | 'no-employees' }
-
-/** Reverse of `ATTENDANCE_CODES`, derived from the one code table rather than copied. */
-const LEAVE_CODE_BY_TYPE = new Map<LeaveType, string>()
-for (const [code, mapping] of Object.entries(ATTENDANCE_CODES)) {
-  if (typeof mapping === 'object' && mapping.status === 'Leave' && mapping.leaveType) {
-    LEAVE_CODE_BY_TYPE.set(mapping.leaveType, code)
-  }
-}
 
 const LEGEND_ROWS: Array<[string, string]> = [
   ['Code', 'Meaning'],
@@ -68,6 +72,14 @@ const LEGEND_ROWS: Array<[string, string]> = [
   ['PL', 'Paternity Leave'],
   ['CO', 'Comp Off'],
   ['O', 'Other Leave'],
+  ['HD-CL', 'Half Day - Casual Leave'],
+  ['HD-SL', 'Half Day - Sick Leave'],
+  ['HD-EL', 'Half Day - Earned Leave'],
+  ['HD-LOP', 'Half Day - Loss of Pay'],
+  ['HD-ML', 'Half Day - Maternity Leave'],
+  ['HD-PL', 'Half Day - Paternity Leave'],
+  ['HD-CO', 'Half Day - Comp Off'],
+  ['HD-O', 'Half Day - Other Leave'],
   ['H', 'Holiday (derived)'],
   ['WO', 'Weekly Off (derived)'],
   ['(blank)', 'Unmarked'],
@@ -77,23 +89,46 @@ function buildLegendSheet(): XLSX.WorkSheet {
   return XLSX.utils.aoa_to_sheet(LEGEND_ROWS)
 }
 
+/** The approved leave covering one employee/day, including whether it is a half-day. */
+export interface ApprovedLeaveCell {
+  type: LeaveType
+  halfDay: HalfDay
+}
+
 /**
- * `${employeeId}|${date}` → the approved `LeaveType` covering that date.
+ * `${employeeId}|${date}` → the approved leave covering that date.
  *
  * Shared with the Attendance matrix UI, which renders the same approved leave as
  * ghost cells, so the template and the screen can never disagree about what the
- * planner has approved.
+ * planner has approved. Half-day plans keep their `halfDay` marker here so the
+ * template can write `HD-<code>` instead of silently promoting them to a full day.
  */
-export function approvedLeaveByEmployeeDate(leavePlans: LeavePlan[]): Map<string, LeaveType> {
-  const leave = new Map<string, LeaveType>()
+export function approvedLeaveCellsByEmployeeDate(
+  leavePlans: LeavePlan[],
+): Map<string, ApprovedLeaveCell> {
+  const leave = new Map<string, ApprovedLeaveCell>()
   for (const plan of leavePlans) {
     if (plan.status !== 'Approved') continue
     for (const date of eachDateKey(plan.startDate, plan.endDate)) {
       const key = `${plan.employeeId}|${date}`
       // Overlapping approved plans are already a planner anomaly; first one wins so
       // the template stays deterministic.
-      if (!leave.has(key)) leave.set(key, plan.type)
+      if (!leave.has(key)) leave.set(key, { type: plan.type, halfDay: plan.halfDay })
     }
+  }
+  return leave
+}
+
+/**
+ * `${employeeId}|${date}` → the approved `LeaveType` covering that date.
+ *
+ * Kept as the type-only view the matrix ghost cells use; the template uses
+ * `approvedLeaveCellsByEmployeeDate` because it also needs the half-day marker.
+ */
+export function approvedLeaveByEmployeeDate(leavePlans: LeavePlan[]): Map<string, LeaveType> {
+  const leave = new Map<string, LeaveType>()
+  for (const [key, cell] of approvedLeaveCellsByEmployeeDate(leavePlans)) {
+    leave.set(key, cell.type)
   }
   return leave
 }
@@ -101,22 +136,35 @@ export function approvedLeaveByEmployeeDate(leavePlans: LeavePlan[]): Map<string
 /**
  * Builds the workbook HR fills in and uploads.
  *
- * Cell precedence is calendar first: Sunday is `WO`, then a holiday is `H`, then an
- * approved leave plan, then `P` (when prefill is on) or blank. A leave plan that spans
- * a Sunday or holiday therefore cannot consume a non-working day.
+ * Cell precedence is calendar first, then the ledger, then approved plans: Sunday is
+ * `WO`, a holiday is `H`, an existing record renders its matrix code, an approved
+ * leave plan renders its leave code (`HD-<code>` for a half-day plan), and only then
+ * `P` (when prefill is on) or blank. The ledger wins over a plan because HR may have
+ * edited the day after the planner was approved; the calendar still wins over both
+ * because a Sunday or holiday is derived, not stored per employee.
  */
 export function buildAttendanceWorkbook(input: {
   employees: Employee[]
   holidays: Holiday[]
   leavePlans: LeavePlan[]
+  /**
+   * The existing daily ledger. Optional so callers that only need the layout (and
+   * tests written before the ledger was wired in) remain valid; the app passes the
+   * full month and the template then preserves every mark.
+   */
+  attendance?: AttendanceRecord[]
   year: number
   monthIndex: number
   prefillPresent: boolean
 }): XLSX.WorkBook {
   const { employees, holidays, leavePlans, year, monthIndex, prefillPresent } = input
+  const attendance = input.attendance ?? []
   const dates = monthDateKeys(year, monthIndex)
   const holidaysOnDate = holidayDateSet(holidays)
-  const leaveOnDate = approvedLeaveByEmployeeDate(leavePlans)
+  const leaveOnDate = approvedLeaveCellsByEmployeeDate(leavePlans)
+  const recordOnDate = new Map(
+    attendance.map((record) => [`${record.employeeId}|${record.date}`, record] as const),
+  )
 
   const rows: Array<Array<string | number | null>> = [
     ['OmniHR Monthly Attendance'],
@@ -131,8 +179,15 @@ export function buildAttendanceWorkbook(input: {
       if (isSunday(date)) return 'WO'
       if (holidaysOnDate.has(date)) return 'H'
 
-      const leaveType = leaveOnDate.get(`${employee.id}|${date}`)
-      if (leaveType) return LEAVE_CODE_BY_TYPE.get(leaveType) ?? 'O'
+      const record = recordOnDate.get(`${employee.id}|${date}`)
+      if (record) return recordToCode(record)
+
+      const leaveCell = leaveOnDate.get(`${employee.id}|${date}`)
+      if (leaveCell) {
+        return leaveCell.halfDay
+          ? HALF_LEAVE_CODE_BY_TYPE[leaveCell.type] ?? 'HD'
+          : FULL_LEAVE_CODE_BY_TYPE[leaveCell.type] ?? 'O'
+      }
 
       return prefillPresent ? 'P' : null
     })
@@ -316,6 +371,16 @@ export function parseAttendanceWorkbook(
     }
   }
 
+  // Gaps are reported separately from syntax issues: a sheet can be perfectly valid
+  // and still be missing an employee row or a day column, and replacing a month from
+  // it would silently erase that person or day.
+  const missingEmployeeIds = employees
+    .map((employee) => employee.id)
+    .filter((employeeId) => !matchedEmployees.has(employeeId))
+  const missingDayNumbers = dates
+    .map((_, index) => index + 1)
+    .filter((day) => !dayColumns.has(day))
+
   return {
     ok: true,
     monthKey: monthText,
@@ -323,5 +388,7 @@ export function parseAttendanceWorkbook(
     issues,
     matchedEmployees: matchedEmployees.size,
     unknownEmployeeIds: Array.from(unknownEmployeeIds),
+    missingEmployeeIds,
+    missingDayNumbers,
   }
 }

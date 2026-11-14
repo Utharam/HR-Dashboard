@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   ATTENDANCE_CODES,
+  FULL_LEAVE_CODE_BY_TYPE,
+  HALF_LEAVE_CODE_BY_TYPE,
   monthKey,
   parseMonthKey,
   daysInMonth,
@@ -169,17 +171,53 @@ describe('matrix code mapping', () => {
   });
 
   it('round-trips every record-producing code', () => {
-    for (const code of ['P', 'A', 'W', 'HD', 'CL', 'SL', 'EL', 'LOP', 'ML', 'PL', 'CO', 'O']) {
+    for (const code of [
+      'P', 'A', 'W', 'HD',
+      'CL', 'SL', 'EL', 'LOP', 'ML', 'PL', 'CO', 'O',
+      'HD-CL', 'HD-SL', 'HD-EL', 'HD-LOP', 'HD-ML', 'HD-PL', 'HD-CO', 'HD-O',
+    ]) {
       const mapped = codeToRecord(code, 'EMP-1001', '2026-01-05');
       expect(mapped).not.toBeNull();
       expect(recordToCode(mapped as AttendanceRecord)).toBe(code);
     }
   });
 
-  it('always renders a half-day with a leave type as HD', () => {
+  it('maps half-day leave codes to HalfDay records with the matching leave type', () => {
+    const expectations: Array<[string, LeaveType]> = [
+      ['HD-CL', 'CL'],
+      ['HD-SL', 'SL'],
+      ['HD-EL', 'EL'],
+      ['HD-LOP', 'LOP'],
+      ['HD-ML', 'Maternity'],
+      ['HD-PL', 'Paternity'],
+      ['HD-CO', 'Comp Off'],
+      ['HD-O', 'Other'],
+    ];
+
+    for (const [code, leaveType] of expectations) {
+      const mapped = codeToRecord(code, 'EMP-1001', '2026-01-05');
+      expect(mapped).toMatchObject({ status: 'HalfDay', leaveType });
+    }
+  });
+
+  it('renders a half-day leave as HD-<code> and a plain half-day as HD', () => {
     expect(
       recordToCode(record({ employeeId: 'E1', date: '2026-01-05', status: 'HalfDay', leaveType: 'CL' })),
+    ).toBe('HD-CL');
+    expect(
+      recordToCode(record({ employeeId: 'E1', date: '2026-01-05', status: 'HalfDay', leaveType: 'LOP' })),
+    ).toBe('HD-LOP');
+    expect(
+      recordToCode(record({ employeeId: 'E1', date: '2026-01-05', status: 'HalfDay' })),
     ).toBe('HD');
+  });
+
+  it('exports separate full-day and half-day code maps for the UI and template', () => {
+    expect(FULL_LEAVE_CODE_BY_TYPE.SL).toBe('SL');
+    expect(FULL_LEAVE_CODE_BY_TYPE.LOP).toBe('LOP');
+    expect(HALF_LEAVE_CODE_BY_TYPE.SL).toBe('HD-SL');
+    expect(HALF_LEAVE_CODE_BY_TYPE.LOP).toBe('HD-LOP');
+    expect(FULL_LEAVE_CODE_BY_TYPE.SL).not.toBe(HALF_LEAVE_CODE_BY_TYPE.SL);
   });
 
   it('exposes the derived markers in the shared table', () => {
@@ -273,5 +311,54 @@ describe('rollupMonth', () => {
 
   it('ignores records for employees outside the roster', () => {
     expect(rollup.has('E404')).toBe(false);
+  });
+
+  it('counts half-day SL and LOP leave as half present, half leave and the right LOP', () => {
+    const halfDayRollup = rollupMonth(
+      [
+        record({ employeeId: 'E4', date: '2026-01-05', status: 'HalfDay', leaveType: 'SL' }),
+        record({ employeeId: 'E4', date: '2026-01-06', status: 'HalfDay', leaveType: 'LOP' }),
+      ],
+      [employee({ id: 'E4', name: 'Four' })],
+      holidays,
+      2026,
+      0,
+    ).get('E4');
+
+    expect(halfDayRollup).toMatchObject({
+      presentDays: 1,
+      leaveDays: 1,
+      absentDays: 0,
+      lopDays: 0.5,
+      workingDays: 25,
+      unmarkedDays: 23,
+      hasRecords: true,
+    });
+    expect(halfDayRollup?.leaveByType).toEqual({ SL: 0.5, LOP: 0.5 });
+  });
+
+  it('does not set hasRecords for a month with only off-day marks', () => {
+    // M1: a stale template can leave a Present on New Year or a Sunday. It must not
+    // make payroll think the employee was marked for the month; the legacy aggregate
+    // present/lop values are still the only usable source.
+    const offDayRollup = rollupMonth(
+      [
+        record({ employeeId: 'OFF', date: '2026-01-01', status: 'Present' }),
+        record({ employeeId: 'OFF', date: '2026-01-04', status: 'Present' }),
+      ],
+      [employee({ id: 'OFF', name: 'Off Day Only' })],
+      holidays,
+      2026,
+      0,
+    ).get('OFF');
+
+    expect(offDayRollup).toMatchObject({
+      presentDays: 0,
+      leaveDays: 0,
+      absentDays: 0,
+      workingDays: 25,
+      unmarkedDays: 25,
+      hasRecords: false,
+    });
   });
 });

@@ -160,6 +160,27 @@ export function hasUniqueHolidayDates(rows: { date: string }[]): boolean {
 }
 
 /**
+ * True when every attendance row has a distinct employee+date.
+ *
+ * The canonical id is `${employeeId}|${date}`, but uniqueness is checked on the two
+ * fields rather than the id: two differently-id'd rows for the same person and day
+ * would both survive a keyed-by-id write, then the matrix and the rollup would pick
+ * whichever one happened to be last. That is a silently wrong day, so the snapshot
+ * rejects the whole file instead of storing an ambiguous ledger.
+ */
+export function hasUniqueAttendanceDates(
+  rows: { employeeId: string; date: string }[],
+): boolean {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const key = `${row.employeeId}|${row.date}`
+    if (seen.has(key)) return false
+    seen.add(key)
+  }
+  return true
+}
+
+/**
  * Keeps the first row for each `id`, reporting whether anything was dropped.
  *
  * `loadPersisted` validates the SHAPE of a stored envelope, not the uniqueness of its
@@ -287,12 +308,16 @@ export function validateDataSnapshot(
   // Shape-valid rows are not enough: duplicate ids would silently collapse when the
   // snapshot is written to a keyed store, shortening the register the user thought
   // they imported. A duplicate holiday date is the same lossy write in calendar terms.
-  // Reject the whole file rather than write a lossy one.
+  // Attendance has a second key - employee+date - so two differently-id'd rows for the
+  // same person and day are rejected too: both would persist, and the matrix/rollup
+  // would read an arbitrary one.
+  // Reject the whole file rather than write a lossy or ambiguous one.
   if (
     !hasUniqueIds(candidate.employees) ||
     !hasUniqueIds(candidate.policies) ||
     !hasUniqueIds(candidate.leavePlans) ||
     !hasUniqueIds(attendance) ||
+    !hasUniqueAttendanceDates(attendance) ||
     !hasUniqueIds(holidays) ||
     !hasUniqueHolidayDates(holidays)
   ) {

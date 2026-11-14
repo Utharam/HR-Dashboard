@@ -105,33 +105,14 @@ export function workingDateKeys(year: number, monthIndex: number, holidays: Holi
 }
 
 /**
- * The matrix alphabet.
+ * Full-day leave codes, keyed by leave type.
  *
- * `H`, `WO` and `blank` are not statuses: they are derived/absent cells. Keeping them
- * in the same table lets the template writer and the parser share one vocabulary.
+ * These and `HALF_LEAVE_CODE_BY_TYPE` are separate maps on purpose: a half-day leave
+ * is a different record (`HalfDay` + `leaveType`) from a full leave day, and a UI that
+ * used one map for both would render `CL` where the imported sheet said `HD-CL` (or
+ * turn a full leave into half a day on the next download).
  */
-export const ATTENDANCE_CODES: Record<
-  string,
-  { status: AttendanceStatus; leaveType?: LeaveType } | 'H' | 'WO' | 'blank'
-> = {
-  P: { status: 'Present' },
-  A: { status: 'Absent' },
-  W: { status: 'WFH' },
-  HD: { status: 'HalfDay' },
-  CL: { status: 'Leave', leaveType: 'CL' },
-  SL: { status: 'Leave', leaveType: 'SL' },
-  EL: { status: 'Leave', leaveType: 'EL' },
-  LOP: { status: 'Leave', leaveType: 'LOP' },
-  ML: { status: 'Leave', leaveType: 'Maternity' },
-  PL: { status: 'Leave', leaveType: 'Paternity' },
-  CO: { status: 'Leave', leaveType: 'Comp Off' },
-  O: { status: 'Leave', leaveType: 'Other' },
-  H: 'H',
-  WO: 'WO',
-  '': 'blank',
-}
-
-const LEAVE_CODE_BY_TYPE: Record<LeaveType, string> = {
+export const FULL_LEAVE_CODE_BY_TYPE: Record<LeaveType, string> = {
   CL: 'CL',
   SL: 'SL',
   EL: 'EL',
@@ -140,6 +121,55 @@ const LEAVE_CODE_BY_TYPE: Record<LeaveType, string> = {
   Paternity: 'PL',
   'Comp Off': 'CO',
   Other: 'O',
+}
+
+/** Half-day leave codes (`HD-CL` = half Casual Leave, ...), keyed by leave type. */
+export const HALF_LEAVE_CODE_BY_TYPE: Record<LeaveType, string> = {
+  CL: 'HD-CL',
+  SL: 'HD-SL',
+  EL: 'HD-EL',
+  LOP: 'HD-LOP',
+  Maternity: 'HD-ML',
+  Paternity: 'HD-PL',
+  'Comp Off': 'HD-CO',
+  Other: 'HD-O',
+}
+
+type AttendanceCodeMapping = { status: AttendanceStatus; leaveType?: LeaveType }
+
+/** Expands a leave-code map into matrix entries so codes and types cannot drift. */
+function leaveCodeMappings(
+  codeByType: Record<LeaveType, string>,
+  status: AttendanceStatus,
+): Record<string, AttendanceCodeMapping> {
+  const mappings: Record<string, AttendanceCodeMapping> = {}
+  for (const [leaveType, code] of Object.entries(codeByType) as Array<[LeaveType, string]>) {
+    mappings[code] = { status, leaveType }
+  }
+  return mappings
+}
+
+/**
+ * The matrix alphabet.
+ *
+ * `H`, `WO` and `blank` are not statuses: they are derived/absent cells. Keeping them
+ * in the same table lets the template writer and the parser share one vocabulary.
+ * Full-day and half-day leave codes are generated from the two exported maps above, so
+ * every code the template can write is a code the parser understands.
+ */
+export const ATTENDANCE_CODES: Record<
+  string,
+  AttendanceCodeMapping | 'H' | 'WO' | 'blank'
+> = {
+  P: { status: 'Present' },
+  A: { status: 'Absent' },
+  W: { status: 'WFH' },
+  HD: { status: 'HalfDay' },
+  ...leaveCodeMappings(FULL_LEAVE_CODE_BY_TYPE, 'Leave'),
+  ...leaveCodeMappings(HALF_LEAVE_CODE_BY_TYPE, 'HalfDay'),
+  H: 'H',
+  WO: 'WO',
+  '': 'blank',
 }
 
 /**
@@ -172,7 +202,13 @@ export function codeToRecord(
   return record
 }
 
-/** The matrix code for a record. Half-days always render `HD`, even with a leave type. */
+/**
+ * The matrix code for a record.
+ *
+ * A half-day with a leave type is `HD-<code>` (for example `HD-SL`), while a plain
+ * half-day stays `HD`. That distinction is the only way the round trip can preserve
+ * "half sick leave" instead of collapsing it to a worked half-day on the next import.
+ */
 export function recordToCode(record: AttendanceRecord): string {
   switch (record.status) {
     case 'Present':
@@ -182,9 +218,9 @@ export function recordToCode(record: AttendanceRecord): string {
     case 'WFH':
       return 'W'
     case 'HalfDay':
-      return 'HD'
+      return record.leaveType ? HALF_LEAVE_CODE_BY_TYPE[record.leaveType] ?? 'HD' : 'HD'
     case 'Leave':
-      return record.leaveType ? LEAVE_CODE_BY_TYPE[record.leaveType] : 'O'
+      return record.leaveType ? FULL_LEAVE_CODE_BY_TYPE[record.leaveType] ?? 'O' : 'O'
   }
 }
 
@@ -199,8 +235,10 @@ export function recordToCode(record: AttendanceRecord): string {
  *
  * Records dated on a Sunday or a holiday are ignored for the totals: those are derived
  * non-working days, and counting them would let present days exceed working days.
- * `hasRecords` still reports that the employee has data in the month, because payroll
- * uses it to decide whether to replace legacy values at all.
+ * `hasRecords` means "this employee has at least one usable mark this month", so an
+ * off-day-only ledger also leaves it false. Payroll uses that flag to decide whether to
+ * replace the employee's legacy aggregate values at all; treating a stray holiday
+ * record as a ledger would replace a fully populated legacy month with zeros.
  */
 export function rollupMonth(
   attendance: AttendanceRecord[],
@@ -243,8 +281,10 @@ export function rollupMonth(
     const rollup = rollups.get(record.employeeId)
     if (!rollup) continue
 
-    rollup.hasRecords = true
+    // A Sunday/holiday mark is a display artifact from an old template, not evidence
+    // the employee has been marked for this month. Only a working-day record counts.
     if (!workingDates.has(record.date)) continue
+    rollup.hasRecords = true
 
     switch (record.status) {
       case 'Present':

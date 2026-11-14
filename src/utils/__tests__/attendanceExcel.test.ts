@@ -7,7 +7,7 @@ import {
 } from '../attendanceExcel';
 import { createInitialHolidays } from '../../data/initialHolidays';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
-import type { Employee, LeavePlan } from '../../types';
+import type { AttendanceRecord, Employee, LeavePlan } from '../../types';
 
 const employee = (index: number): Employee => ({ ...INITIAL_EMPLOYEES[index] });
 
@@ -55,15 +55,35 @@ const leavePlans: LeavePlan[] = [
   }),
 ];
 
-const build = (prefillPresent: boolean): XLSX.WorkBook =>
+const build = (
+  prefillPresent: boolean,
+  attendance: AttendanceRecord[] = [],
+  plans: LeavePlan[] = leavePlans,
+): XLSX.WorkBook =>
   buildAttendanceWorkbook({
     employees,
     holidays,
-    leavePlans,
+    leavePlans: plans,
+    attendance,
     year: 2026,
     monthIndex: 0,
     prefillPresent,
   });
+
+const attendanceRecord = (
+  employeeId: string,
+  day: number,
+  status: AttendanceRecord['status'],
+  leaveType?: AttendanceRecord['leaveType'],
+): AttendanceRecord => ({
+  id: `${employeeId}|2026-01-${String(day).padStart(2, '0')}`,
+  employeeId,
+  date: `2026-01-${String(day).padStart(2, '0')}`,
+  status,
+  ...(leaveType ? { leaveType } : {}),
+  source: 'manual',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
 
 const toBuffer = (workbook: XLSX.WorkBook): ArrayBuffer =>
   XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
@@ -124,13 +144,90 @@ describe('buildAttendanceWorkbook', () => {
     expect(dayCell(workbook, 6, 4)?.v).toBe('WO');
   });
 
+  it('preserves existing A/W/HD/CL records through template and parse', () => {
+    // Day 5 has an approved CL plan, day 1 is New Year and day 4 is a Sunday: the
+    // ledger mark wins over the plan, but never over the derived calendar.
+    const existing: AttendanceRecord[] = [
+      attendanceRecord(employees[0].id, 2, 'WFH'),
+      attendanceRecord(employees[0].id, 5, 'Absent'),
+      attendanceRecord(employees[0].id, 7, 'HalfDay'),
+      attendanceRecord(employees[0].id, 8, 'Leave', 'CL'),
+      attendanceRecord(employees[0].id, 1, 'Present'),
+      attendanceRecord(employees[0].id, 4, 'Present'),
+    ];
+    const workbook = build(true, existing);
+
+    expect(dayCell(workbook, 6, 1)?.v).toBe('H');
+    expect(dayCell(workbook, 6, 4)?.v).toBe('WO');
+    expect(dayCell(workbook, 6, 2)?.v).toBe('W');
+    expect(dayCell(workbook, 6, 5)?.v).toBe('A');
+    expect(dayCell(workbook, 6, 7)?.v).toBe('HD');
+    expect(dayCell(workbook, 6, 8)?.v).toBe('CL');
+
+    const parsed = parseAttendanceWorkbook(toBuffer(workbook), employees);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const byId = new Map(parsed.records.map((record) => [record.id, record]));
+    expect(byId.get(`${employees[0].id}|2026-01-02`)).toMatchObject({ status: 'WFH' });
+    expect(byId.get(`${employees[0].id}|2026-01-05`)).toMatchObject({ status: 'Absent' });
+    expect(byId.get(`${employees[0].id}|2026-01-07`)).toMatchObject({ status: 'HalfDay' });
+    expect(byId.get(`${employees[0].id}|2026-01-08`)).toMatchObject({
+      status: 'Leave',
+      leaveType: 'CL',
+    });
+    expect(parsed.records.some((record) => record.date === '2026-01-01')).toBe(false);
+    expect(parsed.records.some((record) => record.date === '2026-01-04')).toBe(false);
+  });
+
+  it('prefills approved half-day plans as HD-<code> and round-trips SL/LOP', () => {
+    const halfDayPlans: LeavePlan[] = [
+      leavePlan({
+        employeeId: employees[0].id,
+        startDate: '2026-01-09',
+        endDate: '2026-01-09',
+        type: 'SL',
+        halfDay: 'AM',
+      }),
+      leavePlan({
+        employeeId: employees[1].id,
+        startDate: '2026-01-12',
+        endDate: '2026-01-12',
+        type: 'LOP',
+        halfDay: 'PM',
+      }),
+    ];
+    const workbook = build(false, [], halfDayPlans);
+
+    expect(dayCell(workbook, 6, 9)?.v).toBe('HD-SL');
+    expect(dayCell(workbook, 7, 12)?.v).toBe('HD-LOP');
+
+    const parsed = parseAttendanceWorkbook(toBuffer(workbook), employees);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const byId = new Map(parsed.records.map((record) => [record.id, record]));
+    expect(byId.get(`${employees[0].id}|2026-01-09`)).toMatchObject({
+      status: 'HalfDay',
+      leaveType: 'SL',
+    });
+    expect(byId.get(`${employees[1].id}|2026-01-12`)).toMatchObject({
+      status: 'HalfDay',
+      leaveType: 'LOP',
+    });
+  });
+
   it('includes a legend mapping every code', () => {
     const legend = build(true).Sheets.Legend;
     const values = Object.values(legend)
       .map((cell) => (cell && typeof cell === 'object' && 'v' in cell ? String(cell.v) : ''))
       .join(' ');
 
-    for (const label of ['Present', 'Absent', 'Work From Home', 'Half Day', 'Holiday', 'Weekly Off']) {
+    for (const label of [
+      'Present', 'Absent', 'Work From Home', 'Half Day',
+      'Half Day - Casual Leave', 'Half Day - Loss of Pay',
+      'Holiday', 'Weekly Off',
+    ]) {
       expect(values).toContain(label);
     }
   });
@@ -152,6 +249,8 @@ describe('parseAttendanceWorkbook', () => {
     expect(parsed.matchedEmployees).toBe(2);
     expect(parsed.issues).toEqual([]);
     expect(parsed.unknownEmployeeIds).toEqual([]);
+    expect(parsed.missingEmployeeIds).toEqual([]);
+    expect(parsed.missingDayNumbers).toEqual([]);
 
     // 25 working days x 2 employees. Approved leave days are records too (Leave),
     // while New Year, Republic Day and all four Sundays are derived and must not be.
@@ -210,6 +309,37 @@ describe('parseAttendanceWorkbook', () => {
       employeeId: 'EMP-9999',
     });
     expect(parsed.records.every((record) => record.employeeId === employees[1].id)).toBe(true);
+    // The replaced roster row is now a gap: the employee is missing, not an unknown.
+    expect(parsed.missingEmployeeIds).toEqual([employees[0].id]);
+  });
+
+  it('reports every roster employee with no row in the sheet', () => {
+    const workbook = build(true);
+    workbook.Sheets.Attendance['A7'] = { t: 's', v: '' };
+
+    const parsed = parseAttendanceWorkbook(toBuffer(workbook), employees);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    expect(parsed.matchedEmployees).toBe(1);
+    expect(parsed.missingEmployeeIds).toEqual([employees[1].id]);
+  });
+
+  it('reports day columns absent from the header', () => {
+    const workbook = build(true);
+    // Day 15 lives at row 5, column 3 + 14 (zero-based).
+    delete workbook.Sheets.Attendance[XLSX.utils.encode_cell({ r: 4, c: 3 + 14 })];
+
+    const parsed = parseAttendanceWorkbook(toBuffer(workbook), employees);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    expect(parsed.missingDayNumbers).toEqual([15]);
+    // 25 working days per employee, minus the missing day, for both employees.
+    expect(parsed.records).toHaveLength(48);
+    expect(parsed.records.some((record) => record.date === '2026-01-15')).toBe(false);
   });
 
   it('reports an invalid code with its row, employee and date', () => {
@@ -259,6 +389,10 @@ describe('parseAttendanceWorkbook', () => {
       code: 'P',
     });
     expect(parsed.issues[0].message).toContain('Day 30');
+    // February has 28 days, so days 2..28 are genuinely absent from this header.
+    expect(parsed.missingDayNumbers).toEqual(
+      Array.from({ length: 27 }, (_, index) => index + 2),
+    );
   });
 
   it('rejects a workbook without a readable month', () => {
