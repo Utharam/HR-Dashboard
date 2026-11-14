@@ -1,5 +1,5 @@
 /**
- * Shape guards for the two things this app persists.
+ * Shape guards for the things this app persists.
  *
  * WHY THESE EXIST
  *
@@ -33,7 +33,8 @@
  * paid or averaged in.
  */
 
-import type { Employee, HRPolicy } from '../types';
+import type { Employee, HRPolicy, LeavePlan, LeaveStatus, LeaveType, PlannerSettings } from '../types';
+import { isValidDateKey } from './leavePlanner';
 
 /** Fields `filteredEmployees` calls a string method on. */
 const EMPLOYEE_STRING_FIELDS = [
@@ -47,6 +48,12 @@ const EMPLOYEE_NUMBER_FIELDS = [
 ] as const;
 
 const POLICY_STRING_FIELDS = ['id', 'title', 'category', 'shortDesc', 'eligibility'] as const;
+
+const LEAVE_TYPES: readonly LeaveType[] = [
+  'CL', 'SL', 'EL', 'LOP', 'Maternity', 'Paternity', 'Comp Off', 'Other',
+];
+
+const LEAVE_STATUSES: readonly LeaveStatus[] = ['Planned', 'Approved', 'Cancelled'];
 
 const asRecord = (row: unknown): Record<string, unknown> | null =>
   typeof row === 'object' && row !== null && !Array.isArray(row) ? (row as Record<string, unknown>) : null;
@@ -116,4 +123,67 @@ export function isPolicyRow(row: unknown): row is HRPolicy {
   }
 
   return true;
+}
+
+/**
+ * True when `row` is safe to hand to every consumer of a `LeavePlan`.
+ *
+ * A leave plan is date-range data, so unlike the employee/policy guards this one is
+ * deliberately stricter than "is it a string": a key that is not a real
+ * `YYYY-MM-DD` local date, an end before the start, or an AM/PM half-day on a
+ * multi-day range would produce a calendar that is wrong rather than one that
+ * crashes. Bad dates are rejected at the door.
+ *
+ * Type and status are closed unions here (unlike the widened Employee enums) because
+ * the planner renders a label/badge per member; an unknown value would render blank.
+ */
+export function isLeavePlanRow(row: unknown): row is LeavePlan {
+  const rec = asRecord(row);
+  if (!rec) return false;
+
+  // Both ids key UI rows and join plans to employees. An empty id is not a usable
+  // identity, even though it is technically a string.
+  if (typeof rec.id !== 'string' || rec.id.length === 0) return false;
+  if (typeof rec.employeeId !== 'string' || rec.employeeId.length === 0) return false;
+
+  if (!isValidDateKey(rec.startDate) || !isValidDateKey(rec.endDate)) return false;
+  // Keys are zero-padded, so lexical order is calendar order.
+  if (rec.startDate > rec.endDate) return false;
+
+  if (typeof rec.type !== 'string' || !LEAVE_TYPES.includes(rec.type as LeaveType)) return false;
+  if (typeof rec.status !== 'string' || !LEAVE_STATUSES.includes(rec.status as LeaveStatus)) {
+    return false;
+  }
+
+  // `halfDay` is `null` for a full day; only AM/PM are half-days, and only on a
+  // single-day plan. A half-day on a multi-day range has no coherent meaning.
+  const halfDay = rec.halfDay;
+  if (halfDay !== null && halfDay !== 'AM' && halfDay !== 'PM') return false;
+  if (halfDay !== null && rec.startDate !== rec.endDate) return false;
+
+  if (rec.note !== undefined && typeof rec.note !== 'string') return false;
+
+  // Timestamps are rendered and compared; an unparseable one is not a display
+  // fallback the planner can invent.
+  for (const field of ['createdAt', 'updatedAt'] as const) {
+    const value = rec[field];
+    if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return false;
+  }
+
+  return true;
+}
+
+/**
+ * True when `row` is a usable `PlannerSettings`.
+ *
+ * The threshold drives the peak-day comparison (`count >= maxConcurrentLeave`), so it
+ * must be a positive integer. Zero, a fraction or NaN would make every day (or no
+ * day) a peak, which is a settings bug rendered as a coverage signal.
+ */
+export function isPlannerSettingsRow(row: unknown): row is PlannerSettings {
+  const rec = asRecord(row);
+  if (!rec) return false;
+
+  const threshold = rec.maxConcurrentLeave;
+  return typeof threshold === 'number' && Number.isInteger(threshold) && threshold >= 1;
 }

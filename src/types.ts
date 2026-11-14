@@ -129,3 +129,46 @@ export interface HRPolicy {
   isCustom?: boolean;
 }
 
+/**
+ * Leave planner domain.
+ *
+ * Leave dates are stored as local calendar keys (`YYYY-MM-DD`), never as instants:
+ * a leave day is a day on the office calendar, not a moment in time. Half-days are
+ * only meaningful for a single-day plan; `LeavePlan.halfDay` is `null` otherwise.
+ */
+export type LeaveType =
+  | 'CL'
+  | 'SL'
+  | 'EL'
+  | 'LOP'
+  | 'Maternity'
+  | 'Paternity'
+  | 'Comp Off'
+  | 'Other';
+
+export type LeaveStatus = 'Planned' | 'Approved' | 'Cancelled';
+
+/** `AM`/`PM` for a single-day plan, `null` for a full day. */
+export type HalfDay = 'AM' | 'PM' | null;
+
+export interface LeavePlan {
+  id: string;
+  employeeId: string;
+  /** `YYYY-MM-DD`, local calendar date. */
+  startDate: string;
+  /** `YYYY-MM-DD`, inclusive. */
+  endDate: string;
+  type: LeaveType;
+  status: LeaveStatus;
+  halfDay: HalfDay;
+  note?: string;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp. */
+  updatedAt: string;
+}
+
+export interface PlannerSettings {
+  /** Days at or above this concurrent-leave count are flagged as peak/coverage risk. */
+  maxConcurrentLeave: number;
+}

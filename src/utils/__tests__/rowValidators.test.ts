@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { isEmployeeRow, isPolicyRow } from '../rowValidators';
+import {
+  isEmployeeRow,
+  isPolicyRow,
+  isLeavePlanRow,
+  isPlannerSettingsRow,
+} from '../rowValidators';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
 import { INITIAL_POLICIES } from '../../data/initialPolicies';
+import { createInitialLeavePlans } from '../../data/initialLeavePlans';
+import type { LeavePlan } from '../../types';
 
 const employee = () => ({ ...INITIAL_EMPLOYEES[0] });
 
@@ -131,5 +138,118 @@ describe('isPolicyRow', () => {
 
   it.each([null, 42, 'POL-MAT', []])('rejects the non-object %s', (row) => {
     expect(isPolicyRow(row)).toBe(false);
+  });
+});
+
+describe('isLeavePlanRow', () => {
+  const leavePlan = (): LeavePlan => ({
+    ...createInitialLeavePlans(new Date(2026, 0, 15))[0],
+  });
+
+  it('accepts a plan from the seeded demo data', () => {
+    expect(isLeavePlanRow(leavePlan())).toBe(true);
+  });
+
+  it('accepts every seeded plan', () => {
+    for (const plan of createInitialLeavePlans(new Date(2026, 0, 15))) {
+      expect(isLeavePlanRow(plan)).toBe(true);
+    }
+  });
+
+  it.each(['id', 'employeeId'] as const)('rejects a row whose %s is empty or not a string', (field) => {
+    expect(isLeavePlanRow({ ...leavePlan(), [field]: '' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), [field]: 42 })).toBe(false);
+    const missing = leavePlan() as unknown as Record<string, unknown>;
+    delete missing[field];
+    expect(isLeavePlanRow(missing)).toBe(false);
+  });
+
+  it('rejects an impossible or malformed start or end date', () => {
+    for (const field of ['startDate', 'endDate'] as const) {
+      expect(isLeavePlanRow({ ...leavePlan(), [field]: '2024-02-30' })).toBe(false);
+      expect(isLeavePlanRow({ ...leavePlan(), [field]: '2023-02-29' })).toBe(false);
+      expect(isLeavePlanRow({ ...leavePlan(), [field]: '15/01/2026' })).toBe(false);
+      expect(isLeavePlanRow({ ...leavePlan(), [field]: 20260115 })).toBe(false);
+      expect(isLeavePlanRow({ ...leavePlan(), [field]: null })).toBe(false);
+    }
+  });
+
+  it('rejects an end date before the start date', () => {
+    expect(
+      isLeavePlanRow({ ...leavePlan(), startDate: '2026-01-20', endDate: '2026-01-19' }),
+    ).toBe(false);
+  });
+
+  it('accepts a single-day half-day', () => {
+    expect(
+      isLeavePlanRow({ ...leavePlan(), startDate: '2026-01-20', endDate: '2026-01-20', halfDay: 'AM' }),
+    ).toBe(true);
+    expect(
+      isLeavePlanRow({ ...leavePlan(), startDate: '2026-01-20', endDate: '2026-01-20', halfDay: 'PM' }),
+    ).toBe(true);
+  });
+
+  it('rejects a half-day on a multi-day plan', () => {
+    expect(
+      isLeavePlanRow({ ...leavePlan(), startDate: '2026-01-20', endDate: '2026-01-21', halfDay: 'AM' }),
+    ).toBe(false);
+  });
+
+  it('rejects an unknown half-day marker', () => {
+    expect(isLeavePlanRow({ ...leavePlan(), halfDay: 'FULL' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), halfDay: undefined })).toBe(false);
+  });
+
+  it('rejects unknown leave types and statuses', () => {
+    expect(isLeavePlanRow({ ...leavePlan(), type: 'Vacation' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), type: null })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), status: 'Pending' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), status: 1 })).toBe(false);
+  });
+
+  it('treats the note as optional but rejects a non-string one', () => {
+    const withoutNote = leavePlan() as unknown as Record<string, unknown>;
+    delete withoutNote.note;
+    expect(isLeavePlanRow(withoutNote)).toBe(true);
+    expect(isLeavePlanRow({ ...leavePlan(), note: 'Family function' })).toBe(true);
+    expect(isLeavePlanRow({ ...leavePlan(), note: 42 })).toBe(false);
+  });
+
+  it('rejects unparseable created/updated timestamps', () => {
+    expect(isLeavePlanRow({ ...leavePlan(), createdAt: 'not-a-date' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), updatedAt: 'not-a-date' })).toBe(false);
+    expect(isLeavePlanRow({ ...leavePlan(), updatedAt: 0 })).toBe(false);
+  });
+
+  it.each([null, undefined, 42, 'leave-1', ['x'], true])('rejects the non-object %s', (row) => {
+    expect(isLeavePlanRow(row)).toBe(false);
+  });
+
+  it('rejects an empty object', () => {
+    expect(isLeavePlanRow({})).toBe(false);
+  });
+});
+
+describe('isPlannerSettingsRow', () => {
+  it('accepts the default settings', () => {
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: 3 })).toBe(true);
+  });
+
+  it('rejects a missing or non-numeric threshold', () => {
+    expect(isPlannerSettingsRow({})).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: '3' })).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: null })).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: NaN })).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: Infinity })).toBe(false);
+  });
+
+  it('rejects a threshold that cannot describe a coverage limit', () => {
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: 0 })).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: -2 })).toBe(false);
+    expect(isPlannerSettingsRow({ maxConcurrentLeave: 1.5 })).toBe(false);
+  });
+
+  it.each([null, 42, 'settings', [], true])('rejects the non-object %s', (row) => {
+    expect(isPlannerSettingsRow(row)).toBe(false);
   });
 });
