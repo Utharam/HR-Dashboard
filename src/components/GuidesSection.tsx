@@ -421,7 +421,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-warning-soft">• Restoring Factory Demo Data:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Click <strong>Reset Demo State</strong> at the bottom of the sidebar. This clears your local browser storage and resets the roster back to the original 200 corporate staff records.
+                    Click <strong>Reset Demo State</strong> at the bottom of the sidebar. This resets all four business datasets: the roster returns to the original 200 corporate staff records, and HR policies, leave plans and planner settings return to their demo defaults.
                   </p>
                 </div>
               </div>
@@ -528,7 +528,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                   <strong className="text-bright">Upload to Excel Hub</strong>
                 </div>
                 <p className="prose">
-                  Navigate to the Excel Data Hub. Drag and drop your file into the dashed ingestion zone, or click to browse files.
+                  Navigate to the <strong>Admin</strong> page and open the <strong>Excel Hub</strong> card. Drag and drop your file into the dashed ingestion zone, or click to browse files.
                 </p>
               </div>
 
@@ -548,7 +548,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                   <strong className="text-bright">Sync into Dashboard</strong>
                 </div>
                 <p className="prose">
-                  Click <strong>Sync into Live Dashboard</strong>. Your records update in <code>localStorage</code> and directory, charts, and payslips immediately update.
+                  Click <strong>Sync into Live Dashboard</strong>. Your records update in the app's data store (IndexedDB, with <code>localStorage</code> as the fallback) and the directory, charts, and payslips immediately update.
                 </p>
               </div>
             </div>

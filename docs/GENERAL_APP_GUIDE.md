@@ -20,7 +20,7 @@ This manual provides an exhaustive operational reference for HR administrators, 
    - [3.6 Talent Acquisition & Hiring Pipeline](#36-talent-acquisition--hiring-pipeline)
    - [3.7 Statutory EOSB & Gratuity Calculator](#37-statutory-eosb--gratuity-calculator)
    - [3.8 33-Month Financial & Headcount Analytics](#38-33-month-financial--headcount-analytics)
-   - [3.9 Excel Data Hub & Synchronization](#39-excel-data-hub--synchronization)
+   - [3.9 Excel Hub & Synchronization](#39-excel-hub--synchronization)
    - [3.10 Corporate HR Policy & Benefits Hub](#310-corporate-hr-policy--benefits-hub)
    - [3.11 Leave Planner & Coverage Calendar](#311-leave-planner--coverage-calendar)
    - [3.12 Admin & Data Exchange (Excel Hub)](#312-admin--data-exchange-excel-hub)
@@ -64,7 +64,7 @@ The OmniHR interface is divided into two primary zones:
   12. `User Guides & Manual` — In-app documentation and Excel handling guide.
 - **Quick Action Buttons:**
   - `Export Roster (Excel)`: Instant download of the current filtered employee roster.
-  - `Reset Demo State`: Restores the application to the pristine 200-employee master demo data.
+  - `Reset Demo State`: Resets all four business datasets - the 200-employee register, HR policies, leave plans and planner settings - back to the pristine demo data.
 
 ### 2.2 Global Top Header
 - **Dynamic Context Header:** Displays the title and subtitle of the currently active view.
@@ -218,7 +218,7 @@ Historical macro workforce analytics spanning **January 2024 through September 2
 
 ---
 
-### 3.9 Excel Data Hub & Synchronization
+### 3.9 Excel Hub & Synchronization
 The central data interchange module, now rendered inside the **Admin** page (see [3.12](#312-admin--data-exchange-excel-hub)):
 - **Ingestion:** Drag-and-drop parsing of `.xlsx`, `.xls`, and `.csv` files.
 - **Live Preview:** Displays recognized column mappings, warnings, and table preview before committing.
@@ -367,7 +367,7 @@ OmniHR implements the following Indian statutory regulations:
 - **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and the Admin page reports that they exist.
 - **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
 - **Snapshot Backups:** Export the full business-data JSON snapshot from **Admin** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation.
-- **Restoring Default State:** If you wish to restore the factory 200-employee corporate dataset at any time, click **Reset Demo State** in the sidebar.
+- **Restoring Default State:** If you wish to restore the factory demo state at any time, click **Reset Demo State** in the sidebar. It resets all four business datasets: the register returns to the 200-employee corporate dataset, and HR policies, leave plans and planner settings return to their defaults.
 
 ---
 

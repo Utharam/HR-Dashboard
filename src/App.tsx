@@ -36,6 +36,7 @@ import {
   INITIAL_REQUISITIONS 
 } from './data/initialData';
 import { INITIAL_POLICIES } from './data/initialPolicies';
+import { createInitialLeavePlans } from './data/initialLeavePlans';
 import { computePayroll, isActive } from './utils/payroll';
 import { buildStaffRosterRows, STAFF_ROSTER_COLUMNS } from './utils/excelSchema';
 import { loadPersisted, savePersisted, clearPersisted } from './utils/storage';
@@ -97,7 +98,8 @@ type NoticeScope = 'employees' | 'policies' | 'leave';
 
 type AppNotice =
   | { kind: 'discarded'; scope: NoticeScope }
-  | { kind: 'not-saved'; scope: NoticeScope; reason: 'quota' | 'unavailable' };
+  | { kind: 'not-saved'; scope: NoticeScope; reason: 'quota' | 'unavailable' }
+  | { kind: 'reload-failed' };
 
 const GENERIC_SAVE_QUOTA =
   'Your change is on screen but was NOT saved: this browser has run out of storage space for OmniHR. It will be lost when you close the tab. Remove staff, or close other OmniHR tabs, then make the change again.';
@@ -123,6 +125,16 @@ const DISCARDED_NOTICE_COPY: Record<NoticeScope, string> = {
   leave:
     'The leave plans saved in this browser could not be read and have been set aside. The planner is empty in their place - any leave you recorded earlier is gone. Re-enter the leave to continue.',
 };
+
+/**
+ * A confirmed snapshot import was written into the store, but reading it back to
+ * refresh the screen failed. The store now holds the imported data while the screen
+ * still shows the pre-import state - a divergence the user has to be told about,
+ * because the next edit they make is persisted from the screen and would silently
+ * overwrite part of the import they were told had succeeded.
+ */
+const RELOAD_FAILED_NOTICE_COPY =
+  'The snapshot import was saved, but reading it back to refresh the screen failed. What you see may still be the data from before the import. Close and reopen OmniHR to load the imported data before making further changes.';
 
 export const App: React.FC<{
   onSignOut?: () => void;
@@ -335,15 +347,33 @@ export const App: React.FC<{
    *
    * The subsequent save effects write the reloaded datasets straight back; a
    * round-trip of data the store already holds is harmless.
+   *
+   * Once the reload succeeds, the Excel import's Undo is destroyed along with its
+   * backup: it restores only the pre-import EMPLOYEES, and pressing it after a
+   * snapshot import would write that stale roster over a store the snapshot has
+   * since replaced in all four datasets. A rejected load is caught and reported -
+   * an unhandled rejection leaves the stale screen AND the stale Undo banner in
+   * place, which is the worse half of the same bug.
    */
   const handleSnapshotImported = () => {
     if (!dataStore) return;
-    void dataStore.load().then((loaded) => {
-      setEmployees(loaded.snapshot.employees);
-      setPolicies(loaded.snapshot.policies);
-      setLeavePlans(loaded.snapshot.leavePlans);
-      setPlannerSettings(loaded.snapshot.settings);
-    });
+    void dataStore
+      .load()
+      .then((loaded) => {
+        setEmployees(loaded.snapshot.employees);
+        setPolicies(loaded.snapshot.policies);
+        setLeavePlans(loaded.snapshot.leavePlans);
+        setPlannerSettings(loaded.snapshot.settings);
+        setConfirmation(null);
+        clearPersisted(EMPLOYEES_BACKUP_KEY);
+      })
+      .catch(() => {
+        // The screen never saw the imported data, so the confirmation it may still
+        // be showing (and any Undo riding on it) describes a change that did not
+        // land the way it claimed. Both go; the banner below tells the user.
+        setConfirmation(null);
+        setNotice({ kind: 'reload-failed' });
+      });
   };
 
   // Sync to storage. Two targets, one contract: the change on screen is either
@@ -547,17 +577,41 @@ export const App: React.FC<{
   const handleResetData = () => setIsResetRequested(true);
 
   const handleConfirmResetData = () => {
+    // ALL FOUR business datasets reset, not just the register. A reset that restored
+    // employees but kept a half-edited policy set or a threshold someone had pushed to
+    // 9 would not be the demo state the dialog promises, and the next person demoing
+    // the app inherits the leftovers.
     setEmployees(INITIAL_EMPLOYEES);
+    setPolicies(INITIAL_POLICIES);
+    setLeavePlans(createInitialLeavePlans());
+    setPlannerSettings({ ...DEFAULT_PLANNER_SETTINGS });
     setIsResetRequested(false);
     setConfirmation({
-      text: 'Demo data reset: the register is back to the 200 staff Master Dataset.',
+      text:
+        'Demo data reset: the register is back to the 200 staff Master Dataset, and HR policies, leave plans and planner settings are back to their defaults.',
     });
   };
 
+  /**
+   * The modal derives a new hire's ID from the register size (`EMP-1201 + count`),
+   * which is only unique while IDs stay dense. An imported roster that already
+   * occupies the next number would otherwise add a second record with the same ID -
+   * and duplicate IDs are the one shape the stores and snapshots reject, so the hire
+   * would be visible on screen but silently unpersistable. Suffixing (`-2`, `-3`,
+   * ...) keeps the derived base readable and makes the record savable.
+   */
   const handleAddEmployee = (newEmp: Employee) => {
-    setEmployees(prev => [newEmp, ...prev]);
+    const existingIds = new Set(employees.map(e => e.id));
+    let id = newEmp.id;
+    let suffix = 2;
+    while (existingIds.has(id)) {
+      id = `${newEmp.id}-${suffix}`;
+      suffix += 1;
+    }
+    const record: Employee = id === newEmp.id ? newEmp : { ...newEmp, id };
+    setEmployees(prev => [record, ...prev]);
     setConfirmation({
-      text: `${newEmp.name} (${newEmp.id}) was added to the employee register.`,
+      text: `${record.name} (${record.id}) was added to the employee register.`,
     });
   };
 
@@ -566,23 +620,68 @@ export const App: React.FC<{
    * `ExcelHubSection`, and the answer arrives as a MODE rather than as an implicit
    * "and you meant destroy everything".
    *
-   * The snapshot is written HERE, before `setEmployees`, in the same tick as the caller's
-   * click. Waiting for the persistence effect to take one would capture the register
-   * AFTER the replacement and make the Undo a no-op that reports success.
+   * Duplicate IDs are resolved HERE, at the boundary, because everything downstream
+   * rejects them: the stores refuse a save that carries duplicate IDs, and a roster
+   * that slipped through would overwrite itself row by row in any keyed store.
+   * Append skips rows whose ID is already in the register and later repeats within
+   * the file; replace keeps the FIRST row per ID and skips later repeats. Either
+   * way the skipped count is reported - rows that silently vanish are
+   * indistinguishable from a parser bug.
+   *
+   * The snapshot is written HERE, before `setEmployees`, in the same tick as the
+   * caller's click. Waiting for the persistence effect to take one would capture the
+   * register AFTER the replacement and make the Undo a no-op that reports success.
+   * And if that write cannot be made, the import still happens but Undo is
+   * withheld: an undo button with nothing behind it is the same lie wearing a
+   * different button.
    */
   const handleImportEmployees = (
     newEmps: Employee[],
     mode: 'replace' | 'append',
   ) => {
-    savePersisted(EMPLOYEES_BACKUP_KEY, employees);
-    setEmployees(mode === 'replace' ? newEmps : [...employees, ...newEmps]);
+    const registerIds = new Set(employees.map(e => e.id));
+    const fileIds = new Set<string>();
+    const accepted: Employee[] = [];
+    let skipped = 0;
+    for (const emp of newEmps) {
+      const duplicate =
+        fileIds.has(emp.id) || (mode === 'append' && registerIds.has(emp.id));
+      if (duplicate) {
+        skipped += 1;
+        continue;
+      }
+      fileIds.add(emp.id);
+      accepted.push(emp);
+    }
+
+    if (accepted.length === 0) {
+      // Every row was a duplicate: nothing changed, so there is no backup to take
+      // and nothing to undo. Writing one here would arm an Undo button for a no-op.
+      setActiveTab('directory');
+      setConfirmation({
+        text:
+          'Nothing was added: every imported row was skipped because its staff ID is already in the register or is repeated within the file.',
+      });
+      return;
+    }
+
+    const recordNoun = `${accepted.length} imported staff record${accepted.length === 1 ? '' : 's'}`;
+    const skipNote =
+      skipped > 0
+        ? ` ${skipped} duplicate ${skipped === 1 ? 'row was' : 'rows were'} skipped.`
+        : '';
+    const verb =
+      mode === 'replace'
+        ? `Replaced the register with ${recordNoun}.`
+        : `Added ${recordNoun} to the register.`;
+    const undoable = savePersisted(EMPLOYEES_BACKUP_KEY, employees).ok;
+    setEmployees(mode === 'replace' ? accepted : [...employees, ...accepted]);
     setActiveTab('directory');
     setConfirmation({
-      text:
-        mode === 'replace'
-          ? `Replaced the register with ${newEmps.length} imported staff records.`
-          : `Added ${newEmps.length} imported staff records to the register.`,
-      undoable: true,
+      text: undoable
+        ? `${verb}${skipNote}`
+        : `${verb}${skipNote} This import cannot be undone: the pre-import backup could not be written to this browser's storage.`,
+      undoable,
     });
   };
 
@@ -615,9 +714,16 @@ export const App: React.FC<{
   const noticeCopy = notice
     ? notice.kind === 'not-saved'
       ? SAVE_NOTICE_COPY[notice.scope][notice.reason]
-      : DISCARDED_NOTICE_COPY[notice.scope]
+      : notice.kind === 'reload-failed'
+        ? RELOAD_FAILED_NOTICE_COPY
+        : DISCARDED_NOTICE_COPY[notice.scope]
     : '';
-  const noticeTitle = notice?.kind === 'discarded' ? 'Saved data could not be read' : 'Change not saved';
+  const noticeTitle =
+    notice?.kind === 'discarded'
+      ? 'Saved data could not be read'
+      : notice?.kind === 'reload-failed'
+        ? 'Import could not be loaded'
+        : 'Change not saved';
 
   return (
     <div className="app-shell" data-nav-open={isSidebarOpen}>
@@ -663,7 +769,10 @@ export const App: React.FC<{
           the `--tone-*` tokens in index.css - no inline hex, no blocking browser dialog.
         */}
         {notice && (
-          <div className="alert tone-warning" role="alert">
+          <div
+            className={`alert ${notice.kind === 'reload-failed' ? 'tone-danger' : 'tone-warning'}`}
+            role="alert"
+          >
             <AlertTriangle size={16} aria-hidden="true" />
             <div className="section-stack" style={{ flex: 1 }}>
               <strong>{noticeTitle}</strong>
@@ -854,7 +963,7 @@ export const App: React.FC<{
       <ConfirmDialog
         isOpen={isResetRequested}
         title="Reset application to the Master Demo state?"
-        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset. This cannot be undone."
+        message="Every staff record you imported or added will be replaced by the 200-person Master Demo Dataset, and HR policies, leave plans and planner settings return to their defaults. This cannot be undone."
         confirmLabel="Reset demo data"
         onConfirm={handleConfirmResetData}
         onCancel={() => setIsResetRequested(false)}

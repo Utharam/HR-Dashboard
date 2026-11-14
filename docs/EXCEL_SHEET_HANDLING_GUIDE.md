@@ -133,7 +133,7 @@ Spreadsheets originate from diverse operating systems (Windows, macOS, Linux) an
 
 ```mermaid
 flowchart TD
-    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to Admin > Excel Data Hub"]
+    A["Prepare Spreadsheet (.xlsx, .xls, .csv)"] --> B["Navigate to the Admin page (Excel Hub card)"]
     B --> C["Drag & Drop or Click to Select File"]
     C --> D["SheetJS Parses First Sheet into Memory"]
     D --> E["Column Alias Mapping & Type Coercion"]
@@ -148,7 +148,7 @@ flowchart TD
 - Tip: Download the **Standard Template** from OmniHR to review an ideal pre-formatted structure.
 
 ### Step 2: Upload Workbook
-- Navigate to the **Admin** page in the sidebar (or click the **Admin** header button) and locate the **Excel Data Hub** card.
+- Navigate to the **Admin** page in the sidebar (or click the **Admin** header button) and locate the **Excel Hub** card.
 - Drag your spreadsheet file into the upload dropzone, or click the dropzone to browse your local filesystem.
 
 ### Step 3: Review Pre-Sync Preview
@@ -189,6 +189,7 @@ OmniHR provides three standardized Excel export capabilities:
 
 | Edge Case Scenario | OmniHR Ingestion Handling |
 | :--- | :--- |
+| **Duplicate Employee IDs** | Resolved at import: **Append** skips rows whose Staff ID is already in the register or repeats within the file; **Replace** keeps the first row per ID and skips later repeats. The confirmation reports how many rows were skipped. |
 | **Missing Employee ID** | Generates an auto-incremented ID formatted as `EMP-1201`, `EMP-1202`, etc. |
 | **Missing Employee Name** | Assigns `Staff Member {row_number}` to prevent null reference exceptions. |
 | **Missing Salary Values** | Default monthly CTC of `₹1,20,000` is assigned, and a warning is surfaced in the preview. |

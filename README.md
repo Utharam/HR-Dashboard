@@ -44,7 +44,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 
 1. **[General Application Guide](docs/GENERAL_APP_GUIDE.md)**:
    - Complete architectural overview and local-first data privacy model.
-   - Deep dive into all 12 functional HR modules (Directory, Attendance, Leave Planner, Payroll, Performance, Hiring, Gratuity, Trends, Admin & Data Exchange).
+   - Deep dive into all 13 functional HR modules (Directory, Attendance, Leave Planner, Payroll, Performance, Hiring, Gratuity, Trends, Excel Hub, Admin & Data Exchange).
    - Strict Indian statutory compliance formulations: EPF (Employees' Provident Fund Act 1952) ₹15,000 wage ceiling calculation, Payment of Gratuity Act 1972 (15/26 formula, 6-month rounding rule, ₹20 Lakhs statutory cap), Industrial Disputes Act Section 25F retrenchment compensation, and 26-day working month Loss of Pay (LOP) calculations.
    - Step-by-step administrative workflows (Adding staff, viewing & printing payslips, calculating final separation settlements).
 
@@ -123,7 +123,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
    - 3-year historical trend line chart comparing Consolidated Payroll Spend (₹ Crores) with Headcount Growth.
    - Historical monthly turnover, hiring, and exit ledger.
 
-10. **Excel Data Hub (inside Admin):**
+10. **Excel Hub (inside Admin):**
    - **Spreadsheet Ingestion:** Drag-and-drop any Excel spreadsheet (`.xlsx`, `.xls`, `.csv`). Auto-detects columns whether from Workday, SAP, BambooHR, Darwinbox, or custom spreadsheets.
    - **Download Standard Template:** Generates a pre-formatted Excel template with recognized column headers.
    - **Export Master Roster:** Downloads the complete 200 employee directory as an Excel file with all 24 columns, including the canonical department ID, the reporting line, PF UANs and leave balances. The file round-trips: importing it reproduces the register it came from.
@@ -133,7 +133,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
     - **Data snapshot card:** record counts, the active storage backend (IndexedDB or the localStorage fallback), whether the pre-migration legacy `localStorage` backup exists, and the last exported/imported timestamps for this browser.
     - **Export snapshot:** one versioned JSON file (`omnihr-snapshot-YYYY-MM-DD.json`) containing every business dataset — employees, policies, leave plans and planner settings. Save it to Google Drive, OneDrive or any shared drive; the snapshot is the backup.
     - **Import snapshot:** the file is validated (format version and row schema) and confirmed with record counts before it replaces all business data; a malformed or wrong-version file changes nothing. An imported snapshot is a local copy of this browser — changes made from it do not propagate back to HR.
-    - The Excel Data Hub and its guide link are unchanged inside this page.
+    - The Excel Hub and its guide link are unchanged inside this page.
 
 12. **HR Policy & Benefits Hub:**
     - **Maternal Provisions:** 182-day (26-week) paid maternity leave complying with Maternity Benefit Act 2017, pre/post-natal splits, nursing breaks, creche allowance, and full list of corporate newborn welcome gift hampers.
