@@ -104,6 +104,12 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
   const monthLabel = describeFinanceMonth(selectedMonthKey);
   const generatedLabel = GENERATED_LABEL.format(generatedAt);
   const structure = payStructure ?? FALLBACK_STRUCTURE;
+  // EPF is effective-dated (₹15k ceiling until 2026-09-17, ₹25k after). A
+  // historical statement must price the schedule in force at that month's end,
+  // not today's.
+  const monthEndAsOf = `${selectedMonthKey}-${String(
+    new Date(year, monthIndex + 1, 0).getDate(),
+  ).padStart(2, '0')}`;
 
   const changeMonth = (nextKey: string) => {
     if (!parseMonthKey(nextKey) || nextKey === selectedMonthKey) return;
@@ -139,9 +145,10 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
           overrides: payOverrides,
           bonuses: payrollBonuses,
           monthKey: selectedMonthKey,
+          asOf: monthEndAsOf,
         }),
       })),
-    [reportEmployees, structure, payOverrides, payrollBonuses, selectedMonthKey],
+    [reportEmployees, structure, payOverrides, payrollBonuses, selectedMonthKey, monthEndAsOf],
   );
 
   const model = useMemo(

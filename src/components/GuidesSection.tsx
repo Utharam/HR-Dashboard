@@ -27,7 +27,7 @@ const ALIAS_TITLE = 'Excel column header aliases';
  * into rows, with the count read off it rather than typed a second time.
  */
 const STATUTE_ROWS: [string, string, string][] = [
-  ['Employees\' Provident Fund (EPF)', '₹15,000 monthly basic ceiling', 'Math.min(Basic, 15000) * 0.12 (= max ₹1,800/mo)'],
+  ['Employees\' Provident Fund (EPF)', '₹15,000 ceiling until 17 Sep 2026; ₹25,000 after', 'Math.min(Basic, ceiling(asOf)) * 0.12 (max ₹1,800 then ₹3,000/mo)'],
   ['Payment of Gratuity Act 1972', '₹20,00,000 (20 Lakhs) statutory cap', 'min(2000000, (15 * Basic * RoundedTenure) / 26)'],
   ['Gratuity Tenure Rounding', 'Fraction ≥ 6 months (0.5 yrs)', 'fraction ≥ 0.5 ? ceil(tenure) : floor(tenure)'],
   ['Gratuity Eligibility', 'Minimum 5 completed continuous years', 'tenure < 5 ? ₹0 (Not eligible) : Gratuity Payable'],
@@ -289,7 +289,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                     <span className="badge badge-primary">Tab: Payroll</span>
                   </div>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    The default structure follows Indian statutory payroll practice: 50% Basic Salary, 25% HRA, 25% Special Allowance, with EPF (12% capped at ₹15,000 basic ceiling = ₹1,800/mo), Professional Tax (₹200/mo), LOP and Net Take-Home. HR can change the company template in <strong>Payslip Designer</strong>, add per-employee overrides, and apply performance or custom bonuses for the month. Every payslip and export uses that configured structure.
+                    The default structure follows Indian statutory payroll practice: 50% Basic Salary, 25% HRA, 25% Special Allowance, with EPF (12% capped at the effective-dated ceiling: ₹15,000 until 17 Sep 2026, ₹25,000 after), Professional Tax (₹200/mo), LOP and Net Take-Home. HR can change the company template in <strong>Payslip Designer</strong>, add per-employee overrides, and apply performance or custom bonuses for the month. Every payslip and export uses that configured structure.
                   </p>
                 </div>
 
@@ -443,7 +443,7 @@ export const GuidesSection: React.FC<GuidesSectionProps> = ({
                 <div className="inset-panel" style={{ padding: 'var(--space-3)' }}>
                   <strong className="text-warning-soft">• Restoring Factory Demo Data:</strong>
                   <p className="prose" style={{ marginTop: 'var(--gap-micro)' }}>
-                    Open <strong>Admin &amp; Settings</strong> and click <strong>Reset Demo State</strong> in the Workspace actions card. This resets all six business datasets and the planner settings: the roster returns to the original 200 corporate staff records, HR policies, leave plans, planner events and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list. The company pay structure returns to the default 50/25/25 template, and all per-employee overrides and monthly bonuses are cleared.
+                    Open <strong>Admin &amp; Settings</strong> and click <strong>Reset Demo State</strong> in the Workspace actions card. This resets all business datasets and the planner settings: the roster returns to the original 200 corporate staff records, HR policies, leave plans, planner events and planner settings return to their demo defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the company holiday calendar returns to the fixed 2026 national list. The company pay structure returns to the default 50/25/25 template, and all per-employee overrides and monthly bonuses are cleared.
                   </p>
                 </div>
               </div>

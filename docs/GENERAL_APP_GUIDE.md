@@ -141,8 +141,8 @@ Prices the payroll from the company pay structure, not a hard-coded split:
 - **Default structure:** Basic Salary 50% of monthly CTC, HRA 50% of Basic, Special Allowance as the remainder. A fresh install therefore pays the familiar 50/25/25 split.
 - **Configurable structure:** HR can change the company template in Payslip Designer. Each earning line is a percent of CTC, a percent of Basic, a fixed amount or the single remainder line. Basic is computed first; every line is rounded to the rupee.
 - **Statutory deductions:**
-  - **EPF (Employees' Provident Funds Act 1952):** 12% of eligible Basic, capped at the statutory wage ceiling of ₹15,000/month:
-    $$\text{EPF} = \min(\text{Basic Salary}, 15000) \times 12\% = \text{Maximum ₹1,800/month}$$
+  - **EPF (Employees' Provident Funds Act 1952):** 12% of eligible Basic, capped at the effective-dated statutory wage ceiling (₹15,000/month until 17 Sep 2026, ₹25,000/month thereafter):
+    $$\text{EPF} = \min(\text{Basic Salary}, \text{ceiling}) \times 12\% = \text{Maximum ₹1,800 then ₹3,000/month}$$
   - **Professional Tax (PT):** State statutory deduction of ₹200/month.
   - **Loss of Pay (LOP):** `(Basic / 26) × LOP days`, capped at 26 days.
   - EPF and PT are switches on the structure; LOP is always applied.
@@ -328,7 +328,7 @@ The **Admin & Settings** page owns the workspace actions, the business-data snap
 
 2. **Workspace Actions:**
    - `Export Roster (Excel)`, `Reset Demo State` and `Sign out` live here, not in the sidebar footer.
-   - `Reset Demo State` restores all six business datasets, the planner settings and the default pay structure, and clears overrides and monthly bonuses.
+   - `Reset Demo State` restores all business datasets, the planner settings and the default pay structure, and clears overrides and monthly bonuses.
 
 3. **Export Snapshot:**
    - Downloads `omnihr-snapshot-YYYY-MM-DD.json` — every business dataset (employees, policies, leave plans, planner settings, planner events, daily attendance, holidays, the company pay structure, per-employee overrides and monthly bonuses) in one versioned JSON file, snapshot format v4.
@@ -348,7 +348,7 @@ OmniHR implements the following Indian statutory regulations:
 | Regulation | Statutory Rule / Ceiling | OmniHR Mathematical Implementation |
 | :--- | :--- | :--- |
 | **Maternity Benefit (Amendment) Act, 2017** | 26 weeks (182 days) paid maternity leave, 4 daily nursing breaks, creche facility for establishments with $\ge 50$ staff. | 182 days 100% paid salary; nursing intervals until 15 months. |
-| **Employees' Provident Funds Act, 1952** | 12% employee contribution on eligible Basic salary capped at ₹15,000/mo. | `Math.round(Math.min(basicSalary, 15000) * 0.12)` |
+| **Employees' Provident Funds Act, 1952** | 12% employee contribution on eligible Basic salary capped at the effective-dated wage ceiling (₹15,000 until 17 Sep 2026, ₹25,000 thereafter). | `Math.round(Math.min(basicSalary, ceiling(asOf)) * 0.12)` |
 | **Payment of Gratuity Act, 1972** | 15 days wages per year of completed service based on a 26-day working month. Minimum 5 years service. Max ceiling ₹20 Lakhs. | `(15 * basicSalary * roundedTenure) / 26`, capped at `2000000` |
 | **Industrial Disputes Act, 1947 (Sec 25F)** | 1 month notice pay + 15 days average pay per completed year of service for retrenched workmen. | `Basic + (15 * Basic * Tenure / 30)` |
 | **State Professional Tax Acts** | Monthly state tax deduction on salaried income. | Standard `₹200 / month` |
@@ -405,7 +405,7 @@ OmniHR implements the following Indian statutory regulations:
 - **One-Time Migration:** On the first load, data under the legacy `omnihr_employees` / `omnihr_policies` `localStorage` keys is copied into IndexedDB in a single transaction. The legacy keys are kept untouched as a read-only backup, and Admin & Settings reports that they exist.
 - **`localStorage` Fallback:** If IndexedDB is unavailable (private mode or a blocked database), OmniHR saves to `localStorage` instead and shows a visible warning banner. Theme and session always stay in `localStorage`.
 - **Snapshot Backups:** Export the full business-data JSON snapshot (format v4, pay structure, overrides, bonuses, planner events, attendance and holidays included) from **Admin & Settings** and save it to Google Drive, OneDrive or any shared drive; import replaces all business data in that browser after a validated confirmation. v1 snapshots import with an empty attendance ledger and holiday calendar; v2 snapshots import with no planner events; v3 snapshots import with the default pay structure and no overrides or bonuses.
-- **Restoring Default State:** If you wish to restore the factory demo state at any time, open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. It resets all six business datasets and the planner settings: the register returns to the 200-employee corporate dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed. The pay structure returns to the default 50/25/25 template and all overrides and monthly bonuses are cleared.
+- **Restoring Default State:** If you wish to restore the factory demo state at any time, open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. It resets all business datasets and the planner settings: the register returns to the 200-employee corporate dataset, HR policies, leave plans, planner events and planner settings return to their defaults, the daily attendance ledger is re-seeded with the demo roster's current-month records, and the holiday calendar returns to the fixed 2026 national seed. The pay structure returns to the default 50/25/25 template and all overrides and monthly bonuses are cleared.
 
 ---
 

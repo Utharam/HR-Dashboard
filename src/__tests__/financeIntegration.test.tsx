@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../test/renderApp';
 import { MemoryStore } from '../data/MemoryStore';
@@ -97,5 +97,33 @@ describe('Finance Report navigation and App wiring', () => {
     expect(kpiValue('Employees paid')).toBe('1');
     expect(kpiValue('Bonuses')).toBe('₹2,500');
     expect(screen.getByText('Asha Finance')).toBeInTheDocument();
+  }, 20_000);
+
+  it('opens a historical report payslip with that month’s EPF ceiling and bonuses', async () => {
+    const user = userEvent.setup();
+    await renderApp({
+      dataStore: new MemoryStore({
+        employees: [EMPLOYEE],
+        attendance: [],
+        payrollBonuses: [],
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Finance Report' }));
+    fireEvent.change(screen.getByLabelText('Report month'), {
+      target: { value: '2026-08' },
+    });
+
+    // August 2026: the EPF ceiling was still ₹15,000, so Basic 1,79,166 is
+    // capped at ₹1,800 — not the ₹3,000 today's ₹25,000 ceiling would charge.
+    await user.click(
+      await screen.findByRole('button', {
+        name: `Open payslip for ${EMPLOYEE.name}`,
+      }),
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Employee Provident Fund (EPF 12%)');
+    expect(dialog).toHaveTextContent('−₹1,800');
   }, 20_000);
 });

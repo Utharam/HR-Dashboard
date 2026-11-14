@@ -470,6 +470,13 @@ export const App: React.FC<{
     setSelectedEmployee(employee);
     setSelectedEmployeeMonthKey(monthKey ?? null);
   };
+  // The EPF wage ceiling is effective-dated; a payslip opened from a historical
+  // Finance Report must use that month's end, not today.
+  const monthEndAsOf = (key: string): string => {
+    const [year, month] = key.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return `${key}-${String(lastDay).padStart(2, '0')}`;
+  };
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
 
@@ -1507,6 +1514,7 @@ export const App: React.FC<{
         {activeTab === 'payroll' && (
           <PayrollSection 
             employees={payrollEmployees}
+            bonusEmployees={payrollRoster}
             structure={payStructure}
             overrides={payOverrides}
             bonuses={payrollBonuses}
@@ -1666,6 +1674,7 @@ export const App: React.FC<{
           overrides: payOverrides,
           bonuses: payrollBonuses,
           monthKey: selectedEmployeeMonthKey ?? currentMonthKey,
+          ...(selectedEmployeeMonthKey ? { asOf: monthEndAsOf(selectedEmployeeMonthKey) } : {}),
         }}
       />
 

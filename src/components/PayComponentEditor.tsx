@@ -156,6 +156,7 @@ export const PayComponentEditor: React.FC<PayComponentEditorProps> = ({
                   checked={component.isBasic === true}
                   onChange={() => markBasic(index)}
                   title="Mark this component as the Basic component"
+                  aria-label={`Make ${component.name || 'this component'} the Basic component`}
                 />
               </div>
               <div className="omni-field designer-row__remove">

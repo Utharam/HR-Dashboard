@@ -87,7 +87,7 @@ $$\begin{aligned}
 
 ### Statutory Deductions Derived on Ingestion:
 1. **Employees' Provident Fund (EPF):**
-   $$\text{EPF} = \text{round}(\min(\text{Basic Salary}, 15000) \times 12\%) \quad (\text{Max ₹1,800/mo})$$
+   $$\text{EPF} = \text{round}(\min(\text{Basic Salary}, \text{ceiling(asOf)}) \times 12\%) \quad (\text{max ₹1,800 then ₹3,000/mo})$$
 2. **Professional Tax (PT):**
    $$\text{PT} = ₹200/\text{month (standard corporate slab)}$$
 3. **Loss of Pay (LOP) Wage Deduction:**

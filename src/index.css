@@ -3474,6 +3474,15 @@ button.attendance-cell:focus-visible {
   }
 }
 
+@page finance-report {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+.finance-report {
+  page: finance-report;
+}
+
 @media print {
   .finance-report {
     gap: var(--space-4);
@@ -3532,6 +3541,14 @@ button.attendance-cell:focus-visible {
   }
   .finance-report .omni-table {
     font-size: 8.5pt;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .finance-report .omni-table th,
+  .finance-report .omni-table td {
+    padding: 4px 5px;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   /* A long employee table repeats its header on every printed page, and a row
      never splits across two pages. */

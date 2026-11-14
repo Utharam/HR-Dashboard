@@ -45,7 +45,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 1. **[General Application Guide](docs/GENERAL_APP_GUIDE.md)**:
    - Complete architectural overview and local-first data privacy model.
    - Deep dive into all functional HR modules (Directory, Attendance, Planner, Payroll, Payslip Designer, Finance Report, Performance, Hiring, Gratuity, Trends, Excel Hub, Admin & Settings).
-   - Strict Indian statutory compliance formulations: EPF (Employees' Provident Fund Act 1952) ₹15,000 wage ceiling calculation, Payment of Gratuity Act 1972 (15/26 formula, 6-month rounding rule, ₹20 Lakhs statutory cap), Industrial Disputes Act Section 25F retrenchment compensation, and 26-day working month Loss of Pay (LOP) calculations.
+   - Strict Indian statutory compliance formulations: EPF (Employees' Provident Fund Act 1952) effective-dated wage ceiling (₹15,000 until 17 Sep 2026, ₹25,000 thereafter), Payment of Gratuity Act 1972 (15/26 formula, 6-month rounding rule, ₹20 Lakhs statutory cap), Industrial Disputes Act Section 25F retrenchment compensation, and 26-day working month Loss of Pay (LOP) calculations.
    - Step-by-step administrative workflows (Adding staff, viewing & printing payslips, calculating final separation settlements).
 
 2. **[Excel Sheet Handling Guide](docs/EXCEL_SHEET_HANDLING_GUIDE.md)**:
@@ -103,7 +103,7 @@ OmniHR includes two comprehensive operational guides accessible both **in-app vi
 
 5. **Payroll, Payslip Designer & Finance Report:**
    - Default Indian CTC breakdown: 50% Basic Salary, 25% House Rent Allowance (HRA), 25% Special Allowance — now a configurable company template.
-   - Statutory deductions: **EPF** 12% on eligible basic capped at the statutory ₹15,000 wage ceiling (= ₹1,800/mo) and **Professional Tax** (₹200/mo). Both can be switched off in a custom structure; LOP remains `(Basic / 26) × LOP days`.
+   - Statutory deductions: **EPF** 12% on eligible basic capped at the effective-dated wage ceiling (₹15,000 until 17 Sep 2026 = ₹1,800/mo; ₹25,000 thereafter = ₹3,000/mo) and **Professional Tax** (₹200/mo). Both can be switched off in a custom structure; LOP remains `(Basic / 26) × LOP days`.
    - **Payslip Designer:** one company pay-structure template plus optional per-employee overrides. Earning lines can be a percent of CTC, a percent of Basic, a fixed amount or the remainder. Performance-bonus rules map a 1–5 rating to a percent of Basic, with a live payslip preview.
    - **Monthly bonuses:** performance and custom one-off bonuses per employee and month, included in gross and net but never changing EPF, PT or LOP.
    - **Finance Report:** a month statement with company totals, department and employee breakups, employer EPF, total cost to company, Excel export (Summary / Departments / Employees) and a clean print layout.

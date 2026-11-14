@@ -47,6 +47,12 @@ interface PayrollSectionProps {
   bonuses?: PayrollBonus[];
   /** `YYYY-MM` the bonuses are scoped to. Absent = the current month. */
   monthKey?: string;
+  /**
+   * The register the bonus picker offers. Defaults to `employees`; App passes
+   * the full payroll roster so a header filter cannot hide an employee from the
+   * bonus form while the card still lists their bonus.
+   */
+  bonusEmployees?: Employee[];
   onSelectEmployee: (emp: Employee) => void;
   onSaveBonus?: (bonus: PayrollBonus) => void;
   onDeleteBonus?: (id: string) => void;
@@ -55,14 +61,18 @@ interface PayrollSectionProps {
 const MONTH_LABEL = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' });
 
 const describeMonth = (monthKey: string): string => {
-  const time = Date.parse(`${monthKey}-01`);
-  return Number.isNaN(time) ? monthKey : MONTH_LABEL.format(time);
+  // Parse the parts locally. `Date.parse('2026-11-01')` is UTC midnight, which
+  // renders as October in any timezone west of Greenwich.
+  const [year, month] = monthKey.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthKey;
+  return MONTH_LABEL.format(new Date(year, month - 1, 1));
 };
 
 type BonusModalState = { mode: 'add' } | { mode: 'edit'; bonus: PayrollBonus } | null;
 
 export const PayrollSection: React.FC<PayrollSectionProps> = ({
   employees,
+  bonusEmployees,
   structure,
   overrides = [],
   bonuses = [],
@@ -362,7 +372,7 @@ export const PayrollSection: React.FC<PayrollSectionProps> = ({
         isOpen={bonusModal !== null}
         onClose={() => setBonusModal(null)}
         onSave={(bonus) => onSaveBonus?.(bonus)}
-        employees={employees}
+        employees={bonusEmployees ?? employees}
         bonuses={bonuses}
         monthKey={effectiveMonthKey}
         structure={structure ?? createDefaultPayStructure()}

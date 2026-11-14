@@ -230,6 +230,19 @@ describe('Finance Report — summary and tables', () => {
     expect(within(departments).getByRole('row', { name: /^Total/ })).toHaveTextContent('2');
   });
 
+  it('prices EPF against the selected month, not today', () => {
+    // The EPF wage ceiling moved from ₹15,000 to ₹25,000 on 2026-09-17. August
+    // Basic 26,000 is capped at 15,000 → ₹1,800; September at 25,000 → ₹3,000.
+    const august = renderReport({ currentMonthKey: '2026-08' });
+    const augustRow = within(employeeTable()).getByRole('row', { name: /Asha Menon/ });
+    expect(augustRow).toHaveTextContent('−₹1,800');
+    august.unmount();
+
+    renderReport({ currentMonthKey: '2026-09' });
+    const septemberRow = within(employeeTable()).getByRole('row', { name: /Asha Menon/ });
+    expect(septemberRow).toHaveTextContent('−₹3,000');
+  });
+
   it('offers a payslip action that hands the employee back to App', async () => {
     const user = userEvent.setup();
     const onSelectEmployee = vi.fn();

@@ -23,6 +23,8 @@ export interface PayrollContext {
   bonuses?: PayrollBonus[];
   /** `YYYY-MM`; defaults to the month of today. */
   monthKey?: string;
+  /** ISO date for the effective-dated EPF ceiling; defaults to today. */
+  asOf?: string;
 }
 
 interface EmployeeModalProps {
@@ -56,6 +58,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
         overrides: payrollContext?.overrides ?? [],
         bonuses: payrollContext?.bonuses ?? [],
         ...(payrollContext?.monthKey ? { monthKey: payrollContext.monthKey } : {}),
+        ...(payrollContext?.asOf ? { asOf: payrollContext.asOf } : {}),
       })
     : null;
 
