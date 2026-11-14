@@ -61,7 +61,8 @@ export interface FinanceReportSectionProps {
   payrollBonuses?: PayrollBonus[];
   /** The default month; the report owns the selected month from then on. */
   currentMonthKey?: string;
-  onSelectEmployee: (employee: Employee) => void;
+  /** The selected month rides along so the payslip prices that month's bonuses. */
+  onSelectEmployee: (employee: Employee, monthKey: string) => void;
   /** Company name on the print header and the workbook summary. */
   companyName?: string;
 }
@@ -464,7 +465,7 @@ export const FinanceReportSection: React.FC<FinanceReportSectionProps> = ({
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm no-print"
-                          onClick={() => onSelectEmployee(employee)}
+                          onClick={() => onSelectEmployee(employee, selectedMonthKey)}
                           aria-label={`Open payslip for ${row.employeeName}`}
                         >
                           <FileText size={13} aria-hidden="true" /> Payslip

@@ -240,7 +240,7 @@ describe('Finance Report — summary and tables', () => {
         name: 'Open payslip for Asha Menon',
       }),
     );
-    expect(onSelectEmployee).toHaveBeenCalledWith(emp());
+    expect(onSelectEmployee).toHaveBeenCalledWith(emp(), MONTH);
   });
 });
 

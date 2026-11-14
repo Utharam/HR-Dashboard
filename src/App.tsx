@@ -461,6 +461,15 @@ export const App: React.FC<{
   };
 
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  // The Finance Report can open a payslip for a month other than the current one.
+  // The employee object already carries that month's present/LOP figures; this
+  // keeps the bonus month aligned with the report instead of silently using the
+  // running month's bonuses.
+  const [selectedEmployeeMonthKey, setSelectedEmployeeMonthKey] = useState<string | null>(null);
+  const openEmployee = (employee: Employee, monthKey?: string) => {
+    setSelectedEmployee(employee);
+    setSelectedEmployeeMonthKey(monthKey ?? null);
+  };
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [guideInitialSection, setGuideInitialSection] = useState<'general' | 'excel'>('general');
 
@@ -1406,7 +1415,7 @@ export const App: React.FC<{
           <OverviewSection
             employees={payrollEmployees}
             departments={departments}
-            onSelectEmployee={setSelectedEmployee}
+            onSelectEmployee={openEmployee}
             onClearFilters={handleClearFilters}
           />
         )}
@@ -1414,7 +1423,7 @@ export const App: React.FC<{
         {activeTab === 'directory' && (
           <DirectorySection 
             employees={filteredEmployees}
-            onSelectEmployee={setSelectedEmployee}
+            onSelectEmployee={openEmployee}
           />
         )}
 
@@ -1474,7 +1483,7 @@ export const App: React.FC<{
             overrides={payOverrides}
             bonuses={payrollBonuses}
             monthKey={currentMonthKey}
-            onSelectEmployee={setSelectedEmployee}
+            onSelectEmployee={openEmployee}
             onSaveBonus={handleSavePayrollBonus}
             onDeleteBonus={handleDeletePayrollBonus}
           />
@@ -1515,14 +1524,14 @@ export const App: React.FC<{
             payOverrides={payOverrides}
             payrollBonuses={payrollBonuses}
             currentMonthKey={currentMonthKey}
-            onSelectEmployee={setSelectedEmployee}
+            onSelectEmployee={openEmployee}
           />
         )}
 
         {activeTab === 'performance' && (
           <PerformanceSection 
             employees={filteredEmployees}
-            onSelectEmployee={setSelectedEmployee}
+            onSelectEmployee={openEmployee}
           />
         )}
 
@@ -1620,12 +1629,15 @@ export const App: React.FC<{
           overrides and this month's bonuses ride along. */}
       <EmployeeModal 
         employee={selectedEmployee} 
-        onClose={() => setSelectedEmployee(null)} 
+        onClose={() => {
+          setSelectedEmployee(null);
+          setSelectedEmployeeMonthKey(null);
+        }} 
         payrollContext={{
           structure: payStructure,
           overrides: payOverrides,
           bonuses: payrollBonuses,
-          monthKey: currentMonthKey,
+          monthKey: selectedEmployeeMonthKey ?? currentMonthKey,
         }}
       />
 
