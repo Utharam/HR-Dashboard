@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory as FakeIDBFactory, IDBObjectStore } from 'fake-indexeddb'
-import type { LeavePlan, PlannerSettings } from '../../types'
+import type { AttendanceRecord, Holiday, LeavePlan, PlannerSettings } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import { DEFAULT_PLANNER_SETTINGS, type DataSnapshot } from '../DataStore'
 import { IndexedDbStore } from '../IndexedDbStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
+import { createInitialHolidays } from '../initialHolidays'
+import { createInitialAttendance } from '../initialAttendance'
 
 const NOW = new Date('2026-11-14T09:30:00.000Z')
 const now = () => NOW
@@ -14,16 +16,20 @@ const now = () => NOW
 const EMPLOYEES = INITIAL_EMPLOYEES.slice(0, 3)
 const POLICIES = INITIAL_POLICIES.slice(0, 2)
 const LEAVE_PLANS: LeavePlan[] = createInitialLeavePlans(NOW).slice(0, 4)
+const HOLIDAYS: Holiday[] = createInitialHolidays(2026)
+const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(EMPLOYEES, HOLIDAYS, NOW).slice(0, 4)
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 5 }
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 1,
+    v: 2,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: NOW.toISOString(),
     employees: EMPLOYEES,
     policies: POLICIES,
     leavePlans: LEAVE_PLANS,
+    attendance: ATTENDANCE,
+    holidays: HOLIDAYS,
     settings: SETTINGS,
     ...overrides,
   }
@@ -33,6 +39,31 @@ function createStore(): IndexedDbStore {
   return new IndexedDbStore({ now })
 }
 
+/**
+ * Writes a row straight into the live database, bypassing the store's shape guards.
+ * A row written by an older build can still be present in IndexedDB even though
+ * today's predicates reject it; `save*` is the wrong seam to reproduce that.
+ */
+function putRaw(storeName: string, row: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open('omnihr')
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const transaction = db.transaction(storeName, 'readwrite')
+      transaction.objectStore(storeName).put(row)
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => {
+        db.close()
+        reject(transaction.error)
+      }
+    }
+  })
+}
+
 beforeEach(() => {
   // A fresh factory per test means no database survives into the next test. This is
   // the per-file setup the plan requires; the global test setup stays untouched.
@@ -40,6 +71,10 @@ beforeEach(() => {
     configurable: true,
     value: new FakeIDBFactory(),
   })
+  // The migration reads these envelopes; a leftover key from another test would
+  // change the seed this file is asserting. This file runs in the node environment,
+  // where Web Storage is legitimately absent.
+  globalThis.localStorage?.clear()
 })
 
 afterEach(() => {
@@ -47,32 +82,40 @@ afterEach(() => {
 })
 
 describe('IndexedDbStore', () => {
-  it('seeds employees, policies, leave plans and settings on an empty database', async () => {
+  it('seeds employees, policies, leave plans, attendance, holidays and settings on an empty database', async () => {
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.v).toBe(1)
+    expect(loaded.snapshot.v).toBe(2)
     expect(loaded.snapshot.dataVersion).toBe(DATA_SCHEMA_VERSION)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
   })
 
-  it('saves and reloads all four datasets', async () => {
+  it('saves and reloads all six datasets', async () => {
     const store = createStore()
     await store.load()
 
     await expect(store.saveEmployees(EMPLOYEES)).resolves.toEqual({ ok: true })
     await expect(store.savePolicies(POLICIES)).resolves.toEqual({ ok: true })
     await expect(store.saveLeavePlans(LEAVE_PLANS)).resolves.toEqual({ ok: true })
+    await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({ ok: true })
+    await expect(store.saveHolidays(HOLIDAYS)).resolves.toEqual({ ok: true })
     await expect(store.saveSettings(SETTINGS)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
     expect(loaded.snapshot.employees).toEqual(EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
+    expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
     expect(loaded.recovered).toBe(false)
   })
@@ -119,73 +162,123 @@ describe('IndexedDbStore', () => {
     expect((await store.load()).snapshot.leavePlans).toEqual(LEAVE_PLANS)
   })
 
-  it('replaces corrupt stored rows with demo data and reports recovery', async () => {
+  it('rejects duplicate attendance ids and malformed rows without writing the ledger', async () => {
+    const store = createStore()
+    await store.load()
+    await store.saveAttendance(ATTENDANCE)
+
+    await expect(
+      store.saveAttendance([ATTENDANCE[0], { ...ATTENDANCE[0], status: 'WFH' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.saveAttendance([{ ...ATTENDANCE[0], date: 'not-a-date' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    expect((await store.load()).snapshot.attendance).toEqual(ATTENDANCE)
+  })
+
+  it('rejects duplicate holiday ids and duplicate holiday dates without writing the calendar', async () => {
+    const store = createStore()
+    await store.load()
+    await store.saveHolidays(HOLIDAYS)
+
+    await expect(
+      store.saveHolidays([HOLIDAYS[0], { ...HOLIDAYS[0], name: 'Duplicate id' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.saveHolidays([HOLIDAYS[0], { ...HOLIDAYS[0], id: 'holiday-copy' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    expect((await store.load()).snapshot.holidays).toEqual(HOLIDAYS)
+  })
+
+  it('replaces corrupt stored rows with seed data and reports recovery', async () => {
     const store = createStore()
     await store.load()
 
-    // Bypass the shape guards through the typed save seam: a row written by an older
-    // build can still be present in IndexedDB even though today's predicates reject it.
-    await store.saveEmployees([{ id: 'broken' } as never])
-    await store.savePolicies([{ id: 'broken' } as never])
-    await store.saveLeavePlans([{ id: 'broken' } as never])
+    await putRaw('employees', { id: 'broken' })
+    await putRaw('policies', { id: 'broken' })
+    await putRaw('leavePlans', { id: 'broken' })
+    await putRaw('attendance', { id: 'broken' })
+    await putRaw('holidays', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
   })
 
-  it('does not seed demo leave plans onto a custom roster with invalid leave rows', async () => {
+  it('does not seed demo leave plans or demo attendance onto a custom roster with invalid rows', async () => {
     const store = createStore()
     await store.load()
 
-    // The roster is a valid custom set (not the demo roster), while the leave store
-    // holds a row today's predicate rejects. Recovery must not invent leave for
-    // employees the demo seed does not describe.
+    // The roster is a valid custom set (not the demo roster), while the leave and
+    // attendance stores hold rows today's predicates reject. Recovery must not invent
+    // leave or presence for employees the demo seed does not describe.
     await store.saveEmployees(EMPLOYEES)
-    await store.saveLeavePlans([{ id: 'broken' } as never])
+    await putRaw('leavePlans', { id: 'broken' })
+    await putRaw('attendance', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
     expect(loaded.snapshot.employees).toEqual(EMPLOYEES)
     expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.attendance).toEqual([])
   })
 
-  it('seeds demo leave plans when the demo roster has invalid leave rows', async () => {
+  it('seeds demo leave plans and attendance when the demo roster has invalid rows', async () => {
     const store = createStore()
     await store.load()
 
     await store.saveEmployees(INITIAL_EMPLOYEES)
-    await store.saveLeavePlans([{ id: 'broken' } as never])
+    await putRaw('leavePlans', { id: 'broken' })
+    await putRaw('attendance', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
   })
 
-  it('treats a saved empty array as an empty dataset instead of reseeding it', async () => {
+  it('treats a saved empty array as a deliberate empty dataset instead of reseeding it', async () => {
     const store = createStore()
     await store.load()
 
     await store.saveEmployees([])
     await store.savePolicies([])
     await store.saveLeavePlans([])
+    await store.saveAttendance([])
+    await store.saveHolidays([])
 
     const loaded = await store.load()
     expect(loaded.snapshot.employees).toEqual([])
     expect(loaded.snapshot.policies).toEqual([])
     expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual([])
   })
 
   it('exports the currently stored snapshot', async () => {
     const store = createStore()
     await store.load()
     await store.saveEmployees(EMPLOYEES)
+    await store.saveAttendance(ATTENDANCE)
+    await store.saveHolidays(HOLIDAYS)
     await store.saveSettings(SETTINGS)
 
     const exported = await store.exportSnapshot()
     expect(exported.employees).toEqual(EMPLOYEES)
+    expect(exported.attendance).toEqual(ATTENDANCE)
+    expect(exported.holidays).toEqual(HOLIDAYS)
     expect(exported.settings).toEqual(SETTINGS)
   })
 
@@ -200,7 +293,33 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.employees).toEqual(EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
+    expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
+  })
+
+  it('imports a v1 snapshot with empty attendance and holidays', async () => {
+    const store = createStore()
+    await store.load()
+
+    const legacy = {
+      v: 1,
+      dataVersion: DATA_SCHEMA_VERSION,
+      exportedAt: NOW.toISOString(),
+      employees: EMPLOYEES,
+      policies: POLICIES,
+      leavePlans: LEAVE_PLANS,
+      settings: SETTINGS,
+    } as unknown as DataSnapshot
+
+    await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual([])
+    // The imported empty stores are deliberate: a later load must not reseed them.
+    expect((await createStore().load()).snapshot.attendance).toEqual([])
   })
 
   it('rejects a wrong snapshot version without changing stored data', async () => {
@@ -208,7 +327,7 @@ describe('IndexedDbStore', () => {
     await store.load()
     await store.saveEmployees(EMPLOYEES)
 
-    const wrongVersion = { ...makeSnapshot(), v: 2 } as unknown as DataSnapshot
+    const wrongVersion = { ...makeSnapshot(), v: 3 } as unknown as DataSnapshot
     await expect(store.importSnapshot(wrongVersion)).resolves.toEqual({
       ok: false,
       reason: 'version',
@@ -247,6 +366,8 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.employees).toEqual([])
     expect(loaded.snapshot.policies).toEqual([])
     expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
   })
 
@@ -259,6 +380,10 @@ describe('IndexedDbStore', () => {
 
     await expect(store.load()).rejects.toThrow()
     await expect(store.saveEmployees(EMPLOYEES)).resolves.toEqual({
+      ok: false,
+      reason: 'unavailable',
+    })
+    await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({
       ok: false,
       reason: 'unavailable',
     })

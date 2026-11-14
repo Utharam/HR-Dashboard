@@ -21,10 +21,19 @@
  * import path, so neither can half-write data that the other expects to be valid.
  */
 
-import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
+import type {
+  AttendanceRecord,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  PlannerSettings,
+} from '../types'
 import { DATA_SCHEMA_VERSION } from '../utils/storage'
 import {
+  isAttendanceRecordRow,
   isEmployeeRow,
+  isHolidayRow,
   isLeavePlanRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -44,8 +53,14 @@ export type StoreFailure = 'quota' | 'unavailable' | 'invalid' | 'version'
 export type StoreResult = { ok: true } | { ok: false; reason: StoreFailure }
 
 export interface DataSnapshot {
-  /** Snapshot format version. Separate from the row schema version below. */
-  v: 1
+  /**
+   * Snapshot format version. Separate from the row schema version below.
+   *
+   * Version 2 adds the daily attendance ledger and the company holiday calendar.
+   * Version 1 snapshots are still accepted by `validateDataSnapshot`/`parseSnapshot`
+   * and are normalised to v2 with empty arrays, so an old backup stays restorable.
+   */
+  v: 2
   /** The `DATA_SCHEMA_VERSION` row schema the snapshot was produced against. */
   dataVersion: number
   /** ISO timestamp of when the snapshot was produced. */
@@ -53,6 +68,8 @@ export interface DataSnapshot {
   employees: Employee[]
   policies: HRPolicy[]
   leavePlans: LeavePlan[]
+  attendance: AttendanceRecord[]
+  holidays: Holiday[]
   settings: PlannerSettings
 }
 
@@ -83,6 +100,8 @@ export interface DataStore {
   saveEmployees(rows: Employee[]): Promise<StoreResult>
   savePolicies(rows: HRPolicy[]): Promise<StoreResult>
   saveLeavePlans(rows: LeavePlan[]): Promise<StoreResult>
+  saveAttendance(rows: AttendanceRecord[]): Promise<StoreResult>
+  saveHolidays(rows: Holiday[]): Promise<StoreResult>
   saveSettings(settings: PlannerSettings): Promise<StoreResult>
   exportSnapshot(): Promise<DataSnapshot>
   importSnapshot(snapshot: DataSnapshot): Promise<StoreResult>
@@ -98,6 +117,8 @@ export const STORAGE_KEYS = {
   employees: 'omnihr_employees',
   policies: 'omnihr_policies',
   leavePlans: 'omnihr_leave_plans',
+  attendance: 'omnihr_attendance',
+  holidays: 'omnihr_holidays',
   settings: 'omnihr_planner_settings',
 } as const
 
@@ -121,6 +142,24 @@ export function hasUniqueIds(rows: { id: string }[]): boolean {
 }
 
 /**
+ * True when every holiday falls on a distinct date.
+ *
+ * Holidays are company-wide and looked up BY DATE in the matrix and the working-day
+ * math, so two differently-id'd rows for the same day are one holiday with two names.
+ * A keyed store would keep both and quietly count the day twice or show whichever name
+ * happened to render last, so the row guard deliberately leaves this to the store and
+ * snapshot boundary where the sibling rows are visible.
+ */
+export function hasUniqueHolidayDates(rows: { date: string }[]): boolean {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (seen.has(row.date)) return false
+    seen.add(row.date)
+  }
+  return true
+}
+
+/**
  * Keeps the first row for each `id`, reporting whether anything was dropped.
  *
  * `loadPersisted` validates the SHAPE of a stored envelope, not the uniqueness of its
@@ -138,6 +177,20 @@ export function dedupeById<T extends { id: string }>(
   for (const row of rows) {
     if (seen.has(row.id)) continue
     seen.add(row.id)
+    unique.push(row)
+  }
+  return { rows: unique, repaired: unique.length !== rows.length }
+}
+
+/** Same repair rule as `dedupeById`, for the holiday date key the calendar uses. */
+export function dedupeByDate<T extends { date: string }>(
+  rows: readonly T[],
+): { rows: T[]; repaired: boolean } {
+  const seen = new Set<string>()
+  const unique: T[] = []
+  for (const row of rows) {
+    if (seen.has(row.date)) continue
+    seen.add(row.date)
     unique.push(row)
   }
   return { rows: unique, repaired: unique.length !== rows.length }
@@ -178,12 +231,27 @@ export function validateDataSnapshot(
     return { ok: false, reason: 'invalid' }
   }
 
-  const candidate = raw as Partial<DataSnapshot>
+  const candidate = raw as {
+    v?: unknown
+    dataVersion?: unknown
+    exportedAt?: unknown
+    employees?: unknown
+    policies?: unknown
+    leavePlans?: unknown
+    attendance?: unknown
+    holidays?: unknown
+    settings?: unknown
+  }
 
   // Both version fields protect different things: `v` is the snapshot format and
   // `dataVersion` is the row schema. A mismatch in either means this file was made
   // against a shape this build does not understand.
-  if (candidate.v !== 1 || candidate.dataVersion !== DATA_SCHEMA_VERSION) {
+  //
+  // Version 1 is still accepted: it predates the daily attendance datasets, so it is
+  // normalised to v2 with empty arrays below instead of being rejected. Restoring an
+  // old backup must not strand the user's existing roster and leave data.
+  const version = candidate.v
+  if ((version !== 1 && version !== 2) || candidate.dataVersion !== DATA_SCHEMA_VERSION) {
     return { ok: false, reason: 'version' }
   }
 
@@ -194,6 +262,12 @@ export function validateDataSnapshot(
     return { ok: false, reason: 'invalid' }
   }
 
+  // A v1 file has no attendance/holidays fields at all. Any fields that happen to be
+  // present on a v1 payload are ignored rather than trusted, because that format never
+  // defined them.
+  const attendance = version === 1 ? [] : candidate.attendance
+  const holidays = version === 1 ? [] : candidate.holidays
+
   if (
     !Array.isArray(candidate.employees) ||
     !candidate.employees.every(isEmployeeRow) ||
@@ -201,6 +275,10 @@ export function validateDataSnapshot(
     !candidate.policies.every(isPolicyRow) ||
     !Array.isArray(candidate.leavePlans) ||
     !candidate.leavePlans.every(isLeavePlanRow) ||
+    !Array.isArray(attendance) ||
+    !attendance.every(isAttendanceRecordRow) ||
+    !Array.isArray(holidays) ||
+    !holidays.every(isHolidayRow) ||
     !isPlannerSettingsRow(candidate.settings)
   ) {
     return { ok: false, reason: 'invalid' }
@@ -208,14 +286,31 @@ export function validateDataSnapshot(
 
   // Shape-valid rows are not enough: duplicate ids would silently collapse when the
   // snapshot is written to a keyed store, shortening the register the user thought
-  // they imported. Reject the whole file rather than write a lossy one.
+  // they imported. A duplicate holiday date is the same lossy write in calendar terms.
+  // Reject the whole file rather than write a lossy one.
   if (
     !hasUniqueIds(candidate.employees) ||
     !hasUniqueIds(candidate.policies) ||
-    !hasUniqueIds(candidate.leavePlans)
+    !hasUniqueIds(candidate.leavePlans) ||
+    !hasUniqueIds(attendance) ||
+    !hasUniqueIds(holidays) ||
+    !hasUniqueHolidayDates(holidays)
   ) {
     return { ok: false, reason: 'invalid' }
   }
 
-  return { ok: true, snapshot: candidate as DataSnapshot }
+  return {
+    ok: true,
+    snapshot: {
+      v: 2,
+      dataVersion: DATA_SCHEMA_VERSION,
+      exportedAt: candidate.exportedAt,
+      employees: candidate.employees,
+      policies: candidate.policies,
+      leavePlans: candidate.leavePlans,
+      attendance: attendance as AttendanceRecord[],
+      holidays: holidays as Holiday[],
+      settings: candidate.settings,
+    },
+  }
 }

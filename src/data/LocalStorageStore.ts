@@ -14,12 +14,21 @@
  * throws.
  */
 
-import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
+import type {
+  AttendanceRecord,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  PlannerSettings,
+} from '../types'
 import {
   DEFAULT_PLANNER_SETTINGS,
   STORAGE_KEYS,
   dedupeById,
+  dedupeByDate,
   hasStoredValue,
+  hasUniqueHolidayDates,
   hasUniqueIds,
   type DataSnapshot,
   type DataStore,
@@ -30,7 +39,9 @@ import {
 } from './DataStore'
 import { DATA_SCHEMA_VERSION, loadPersisted, savePersisted } from '../utils/storage'
 import {
+  isAttendanceRecordRow,
   isEmployeeRow,
+  isHolidayRow,
   isLeavePlanRow,
   isPlannerSettingsRow,
   isPolicyRow,
@@ -38,6 +49,8 @@ import {
 import { INITIAL_EMPLOYEES } from './initialData'
 import { INITIAL_POLICIES } from './initialPolicies'
 import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
+import { createInitialHolidays } from './initialHolidays'
+import { createInitialAttendance } from './initialAttendance'
 
 type LegacyKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
 
@@ -116,15 +129,33 @@ export class LocalStorageStore implements DataStore {
     // below only when the roster is exactly the demo set and the stored leave payload
     // is unusable (absent or corrupt).
     const leavePlansResult = loadPersisted(STORAGE_KEYS.leavePlans, isLeavePlanRow, [])
+    // Holidays have a fixed, roster-independent seed, so an absent or corrupt key can
+    // safely fall back to it. Attendance does not: only an ABSENT key plus the exact
+    // demo roster is a first-run signal (D11). A corrupt key is a lost ledger and is
+    // replaced with an empty one, then reported.
+    const attendanceResult = loadPersisted(
+      STORAGE_KEYS.attendance,
+      isAttendanceRecordRow,
+      [],
+    )
+    const holidaysResult = loadPersisted(
+      STORAGE_KEYS.holidays,
+      isHolidayRow,
+      createInitialHolidays(2026),
+    )
     const settingsResult = loadSettings()
 
     // Shape validation accepts a repeated id; this backend would then load the whole
     // dataset but reject every later save as invalid, which looks like a storage
     // failure with no explanation. Repair the duplicates here (first row wins) and
-    // report it through `recovered`, matching the IndexedDB migration.
+    // report it through `recovered`, matching the IndexedDB migration. Holidays are
+    // also repaired by date, since the calendar addresses them that way.
     const employees = dedupeById(employeesResult.rows)
     const policies = dedupeById(policiesResult.rows)
     const leavePlansDeduped = dedupeById(leavePlansResult.rows)
+    const attendanceDeduped = dedupeById(attendanceResult.rows)
+    const holidaysById = dedupeById(holidaysResult.rows)
+    const holidaysDeduped = dedupeByDate(holidaysById.rows)
     const leavePlansUnusable =
       !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
     const leavePlans = leavePlansUnusable
@@ -132,31 +163,43 @@ export class LocalStorageStore implements DataStore {
         ? createInitialLeavePlans()
         : []
       : leavePlansDeduped.rows
+    const holidays = holidaysDeduped.rows
+    const attendance =
+      !hasStoredValue(STORAGE_KEYS.attendance) && isDemoEmployeeSet(employees.rows)
+        ? createInitialAttendance(employees.rows, holidays)
+        : attendanceDeduped.rows
 
     return {
       snapshot: {
-        v: 1,
+        v: 2,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         employees: employees.rows,
         policies: policies.rows,
         leavePlans,
+        attendance,
+        holidays,
         settings: settingsResult.settings,
       },
       // In this backend the legacy keys ARE the live store, so there is no separate
       // read-only backup to advertise.
       legacyBackup: false,
-      // A corrupt envelope was replaced, or a repeated id was repaired, above. The
-      // fallback backend still has to admit that the saved copy it found was unusable
-      // or malformed.
+      // A corrupt envelope was replaced, or a repeated id/date was repaired, above.
+      // The fallback backend still has to admit that the saved copy it found was
+      // unusable or malformed.
       recovered:
         employeesResult.status === 'recovered' ||
         policiesResult.status === 'recovered' ||
         leavePlansResult.status === 'recovered' ||
+        attendanceResult.status === 'recovered' ||
+        holidaysResult.status === 'recovered' ||
         settingsResult.recovered ||
         employees.repaired ||
         policies.repaired ||
-        leavePlansDeduped.repaired,
+        leavePlansDeduped.repaired ||
+        attendanceDeduped.repaired ||
+        holidaysById.repaired ||
+        holidaysDeduped.repaired,
     }
   }
 
@@ -170,6 +213,24 @@ export class LocalStorageStore implements DataStore {
 
   async saveLeavePlans(rows: LeavePlan[]): Promise<StoreResult> {
     return saveRows(STORAGE_KEYS.leavePlans, rows)
+  }
+
+  async saveAttendance(rows: AttendanceRecord[]): Promise<StoreResult> {
+    if (!rows.every(isAttendanceRecordRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return savePersisted(STORAGE_KEYS.attendance, rows)
+  }
+
+  async saveHolidays(rows: Holiday[]): Promise<StoreResult> {
+    if (
+      !rows.every(isHolidayRow) ||
+      !hasUniqueIds(rows) ||
+      !hasUniqueHolidayDates(rows)
+    ) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return savePersisted(STORAGE_KEYS.holidays, rows)
   }
 
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
@@ -192,6 +253,8 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.employees, readRaw(STORAGE_KEYS.employees)],
       [STORAGE_KEYS.policies, readRaw(STORAGE_KEYS.policies)],
       [STORAGE_KEYS.leavePlans, readRaw(STORAGE_KEYS.leavePlans)],
+      [STORAGE_KEYS.attendance, readRaw(STORAGE_KEYS.attendance)],
+      [STORAGE_KEYS.holidays, readRaw(STORAGE_KEYS.holidays)],
       [STORAGE_KEYS.settings, readRaw(STORAGE_KEYS.settings)],
     ])
 
@@ -199,6 +262,8 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.employees, valid.employees],
       [STORAGE_KEYS.policies, valid.policies],
       [STORAGE_KEYS.leavePlans, valid.leavePlans],
+      [STORAGE_KEYS.attendance, valid.attendance],
+      [STORAGE_KEYS.holidays, valid.holidays],
       [STORAGE_KEYS.settings, [valid.settings]],
     ]
 
@@ -223,6 +288,8 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.employees, []],
       [STORAGE_KEYS.policies, []],
       [STORAGE_KEYS.leavePlans, []],
+      [STORAGE_KEYS.attendance, []],
+      [STORAGE_KEYS.holidays, []],
       [STORAGE_KEYS.settings, [{ ...DEFAULT_PLANNER_SETTINGS }]],
     ]
 

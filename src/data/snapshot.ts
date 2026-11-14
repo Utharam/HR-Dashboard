@@ -7,8 +7,9 @@
  * Admin page lets HR download a single JSON file and load it back on another machine,
  * or hand it to an executive as a read-only local copy. That file is the only artefact
  * that leaves the browser, so it has to carry everything the console needs and nothing
- * device-specific: employees, policies, leave plans and planner settings. Theme and
- * session are deliberately absent - they belong to a browser, not to the organisation.
+ * device-specific: employees, policies, leave plans, daily attendance, holidays and
+ * planner settings. Theme and session are deliberately absent - they belong to a
+ * browser, not to the organisation.
  *
  * Two versions are recorded for different failure modes. `v` is the snapshot FORMAT;
  * `dataVersion` is the row schema (`DATA_SCHEMA_VERSION`). A file is only accepted when
@@ -19,7 +20,14 @@
  * the other.
  */
 
-import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../types'
+import type {
+  AttendanceRecord,
+  Employee,
+  Holiday,
+  HRPolicy,
+  LeavePlan,
+  PlannerSettings,
+} from '../types'
 import { toDateKey } from '../utils/leavePlanner'
 import { DATA_SCHEMA_VERSION } from '../utils/storage'
 import { type DataSnapshot, validateDataSnapshot } from './DataStore'
@@ -30,14 +38,22 @@ import { type DataSnapshot, validateDataSnapshot } from './DataStore'
  * Mirrors the `v` literal in `DataSnapshot` and the check in `validateDataSnapshot`.
  * It is separate from `DATA_SCHEMA_VERSION` because the two change for different
  * reasons: adding a dataset changes the snapshot format, while reshaping a row changes
- * the schema.
+ * the schema. Version 2 adds `attendance` and `holidays`; version 1 files are still
+ * readable and are normalised to v2 with empty arrays.
  */
-export const SNAPSHOT_VERSION = 1
+export const SNAPSHOT_VERSION = 2
 
 export interface SnapshotInput {
   employees: Employee[]
   policies: HRPolicy[]
   leavePlans: LeavePlan[]
+  /**
+   * Optional so call sites that predate the daily attendance feature can keep
+   * building a valid v2 snapshot; an absent dataset means an empty one, never a
+   * half-written snapshot.
+   */
+  attendance?: AttendanceRecord[]
+  holidays?: Holiday[]
   settings: PlannerSettings
   /** Testing/handoff seam; defaults to the current time. */
   exportedAt?: string
@@ -62,6 +78,8 @@ export function createSnapshot(input: SnapshotInput): DataSnapshot {
     employees: input.employees,
     policies: input.policies,
     leavePlans: input.leavePlans,
+    attendance: input.attendance ?? [],
+    holidays: input.holidays ?? [],
     settings: input.settings,
   }
 }
@@ -74,6 +92,10 @@ export function createSnapshot(input: SnapshotInput): DataSnapshot {
  * file is malformed or holds a bad row. Either way nothing is written. The row and
  * timestamp checks themselves live in `validateDataSnapshot`, so the store boundary and
  * the file boundary cannot drift apart.
+ *
+ * Version 1 is accepted on purpose: it predates daily attendance and holidays, and
+ * `validateDataSnapshot` returns it as v2 with empty arrays, so an old backup remains
+ * a complete restore rather than being refused by the build that added the datasets.
  */
 export function parseSnapshot(raw: unknown): SnapshotParseResult {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -82,7 +104,8 @@ export function parseSnapshot(raw: unknown): SnapshotParseResult {
 
   // Check the snapshot format here so the exported constant is the authority on the
   // Admin import path; `validateDataSnapshot` then covers the data schema and rows.
-  if ((raw as { v?: unknown }).v !== SNAPSHOT_VERSION) {
+  const version = (raw as { v?: unknown }).v
+  if (version !== 1 && version !== SNAPSHOT_VERSION) {
     return { ok: false, reason: 'version' }
   }
 

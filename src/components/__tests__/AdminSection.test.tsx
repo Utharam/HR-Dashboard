@@ -57,6 +57,8 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveEmployees: vi.fn(async () => OK),
     savePolicies: vi.fn(async () => OK),
     saveLeavePlans: vi.fn(async () => OK),
+    saveAttendance: vi.fn(async () => OK),
+    saveHolidays: vi.fn(async () => OK),
     saveSettings: vi.fn(async () => OK),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(async () => OK),
@@ -73,12 +75,14 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   leavePlans: [PLAN],
   settings: { maxConcurrentLeave: 3 },
   store: makeMockStore({
-    v: 1,
+    v: 2,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: EMPLOYEES,
     policies: [POLICY],
     leavePlans: [PLAN],
+    attendance: [],
+    holidays: [],
     settings: { maxConcurrentLeave: 3 },
   }),
   backend: 'indexeddb',
@@ -89,7 +93,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
 
 /** The snapshot a "good" import file holds: three employees replace the local two. */
 const IMPORTED_SNAPSHOT: DataSnapshot = {
-  v: 1,
+  v: 2,
   dataVersion: DATA_SCHEMA_VERSION,
   exportedAt: '2026-11-14T09:30:00.000Z',
   employees: [
@@ -99,6 +103,8 @@ const IMPORTED_SNAPSHOT: DataSnapshot = {
   ],
   policies: [{ ...INITIAL_POLICIES[0], id: 'POL-IMPORT-1' }],
   leavePlans: [PLAN],
+  attendance: [],
+  holidays: [],
   settings: { maxConcurrentLeave: 4 },
 };
 
@@ -234,7 +240,7 @@ describe('Admin snapshot card — export', () => {
     const text = await downloadedBlob().text();
     expect(JSON.parse(text)).toEqual(
       expect.objectContaining({
-        v: 1,
+        v: 2,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -296,7 +302,7 @@ describe('Admin snapshot card — export', () => {
     const parsed = JSON.parse(text);
     expect(parsed).toEqual(
       expect.objectContaining({
-        v: 1,
+        v: 2,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -330,7 +336,7 @@ describe('Admin snapshot card — import', () => {
     await waitFor(() => expect(props.store?.importSnapshot).toHaveBeenCalledTimes(1));
     expect(props.store?.importSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        v: 1,
+        v: 2,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-IMPORT-1' }),
         ]),
@@ -378,7 +384,7 @@ describe('Admin snapshot card — import', () => {
     render(<AdminSection {...props} />);
 
     await chooseFile(
-      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 2 }),
+      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 3 }),
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/different version/i);

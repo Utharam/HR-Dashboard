@@ -48,12 +48,14 @@ const CUSTOM_PLAN: LeavePlan = {
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 1,
+    v: 2,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
     policies: [ONE_POLICY],
     leavePlans: [],
+    attendance: [],
+    holidays: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   }
@@ -84,6 +86,8 @@ function makeFailingStore(): DataStore {
     saveEmployees: async () => ({ ok: true }),
     savePolicies: async () => ({ ok: true }),
     saveLeavePlans: async () => ({ ok: true }),
+    saveAttendance: async () => ({ ok: true }),
+    saveHolidays: async () => ({ ok: true }),
     saveSettings: async () => ({ ok: true }),
     exportSnapshot: () => Promise.reject(failure),
     importSnapshot: async () => ({ ok: true }),
@@ -102,6 +106,8 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveEmployees: vi.fn(okResult),
     savePolicies: vi.fn(okResult),
     saveLeavePlans: vi.fn(okResult),
+    saveAttendance: vi.fn(okResult),
+    saveHolidays: vi.fn(okResult),
     saveSettings: vi.fn(okResult),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(okResult),
@@ -118,6 +124,12 @@ function GateProbe() {
       {`${store.backend}:${snapshot.employees.length}:${legacyBackup ? 'backup' : 'no-backup'}:${recovered ? 'recovered' : 'clean'}`}
     </div>
   )
+}
+
+/** Reads the v2 datasets specifically; the older probe only reports the roster. */
+function DatasetProbe() {
+  const { snapshot } = useDataGate()
+  return <div data-testid="dataset-probe">{`${snapshot.attendance.length}:${snapshot.holidays.length}`}</div>
 }
 
 const storeLegacyEmployees = () =>
@@ -154,6 +166,32 @@ describe('DataGate', () => {
     expect(probe).toHaveTextContent('memory:5:no-backup:clean')
     // A healthy backend raises no warning.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('publishes the v2 attendance and holiday datasets through the snapshot', async () => {
+    const snapshot = makeSnapshot({
+      attendance: [
+        {
+          id: `${ONE_EMPLOYEE.id}|2026-11-02`,
+          employeeId: ONE_EMPLOYEE.id,
+          date: '2026-11-02',
+          status: 'Present',
+          source: 'manual',
+          updatedAt: '2026-11-02T09:30:00.000Z',
+        },
+      ],
+      holidays: [{ id: 'holiday-2026-01-01', date: '2026-01-01', name: 'New Year' }],
+    })
+    const store = makeMockStore(snapshot)
+
+    render(
+      <DataGate store={store}>
+        <DatasetProbe />
+      </DataGate>,
+    )
+
+    expect(await screen.findByTestId('dataset-probe')).toHaveTextContent('1:1')
+    expect(snapshot.v).toBe(2)
   })
 
   it('warns that saved data was replaced when the store reports recovery', async () => {
@@ -250,6 +288,8 @@ describe('App through the data seam', () => {
     expect(localStorage.getItem(STORAGE_KEYS.employees)).toBeNull()
     expect(localStorage.getItem(STORAGE_KEYS.policies)).toBeNull()
     expect(localStorage.getItem(STORAGE_KEYS.leavePlans)).toBeNull()
+    expect(localStorage.getItem(STORAGE_KEYS.attendance)).toBeNull()
+    expect(localStorage.getItem(STORAGE_KEYS.holidays)).toBeNull()
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull()
 
     // And no banner: a store load that seeded is not a "discarded" recovery.

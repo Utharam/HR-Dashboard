@@ -40,12 +40,14 @@ const ONE_POLICY = { ...INITIAL_POLICIES[0], id: 'POL-SEED-1', title: 'Seed poli
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 1,
+    v: 2,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
     policies: [ONE_POLICY],
     leavePlans: [],
+    attendance: [],
+    holidays: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   };
@@ -64,6 +66,8 @@ function makeSpyStore() {
     saveEmployees: (rows) => inner.saveEmployees(rows),
     savePolicies: (rows) => inner.savePolicies(rows),
     saveLeavePlans: (rows) => inner.saveLeavePlans(rows),
+    saveAttendance: (rows) => inner.saveAttendance(rows),
+    saveHolidays: (rows) => inner.saveHolidays(rows),
     saveSettings: (settings) => inner.saveSettings(settings),
     exportSnapshot,
     importSnapshot,
@@ -239,7 +243,7 @@ describe('Admin integration', () => {
 
     await userEvent.upload(
       screen.getByLabelText('Choose snapshot file'),
-      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 2 }),
+      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 3 }),
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/different version/i);

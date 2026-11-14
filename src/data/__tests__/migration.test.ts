@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory as FakeIDBFactory, IDBObjectStore } from 'fake-indexeddb'
-import type { PlannerSettings } from '../../types'
+import type { Employee, HRPolicy, LeavePlan, PlannerSettings } from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import { DEFAULT_PLANNER_SETTINGS } from '../DataStore'
 import { IndexedDbStore } from '../IndexedDbStore'
 import { INITIAL_EMPLOYEES } from '../initialData'
 import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
+import { createInitialHolidays } from '../initialHolidays'
+import { createInitialAttendance } from '../initialAttendance'
 
 const NOW = new Date('2026-11-14T09:30:00.000Z')
 const now = () => NOW
@@ -14,6 +16,8 @@ const now = () => NOW
 const LEGACY_EMPLOYEES = INITIAL_EMPLOYEES.slice(0, 2)
 const LEGACY_POLICIES = INITIAL_POLICIES.slice(0, 2)
 const LEGACY_LEAVE_PLANS = createInitialLeavePlans(NOW).slice(0, 3)
+const LEGACY_HOLIDAYS = createInitialHolidays(2026)
+const LEGACY_ATTENDANCE = createInitialAttendance(LEGACY_EMPLOYEES, LEGACY_HOLIDAYS, NOW).slice(0, 3)
 const LEGACY_SETTINGS: PlannerSettings = { maxConcurrentLeave: 7 }
 
 function envelope(rows: unknown[]): string {
@@ -54,6 +58,61 @@ function createStore(): IndexedDbStore {
   return new IndexedDbStore({ now })
 }
 
+/**
+ * Builds a real version-1 database with the four stores that version shipped, so the
+ * upgrade under test is the browser's own `onupgradeneeded` path rather than a mock.
+ */
+async function createV1Database(options: {
+  employees: Employee[]
+  policies?: HRPolicy[]
+  leavePlans?: LeavePlan[]
+  settings?: PlannerSettings
+}): Promise<void> {
+  const factory = new FakeIDBFactory()
+  Object.defineProperty(globalThis, 'indexedDB', {
+    configurable: true,
+    value: factory,
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.open('omnihr', 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      db.createObjectStore('employees', { keyPath: 'id' })
+      db.createObjectStore('policies', { keyPath: 'id' })
+      db.createObjectStore('leavePlans', { keyPath: 'id' })
+      db.createObjectStore('meta', { keyPath: 'key' })
+    }
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const transaction = db.transaction(
+        ['employees', 'policies', 'leavePlans', 'meta'],
+        'readwrite',
+      )
+      for (const row of options.employees) transaction.objectStore('employees').put(row)
+      for (const row of options.policies ?? []) transaction.objectStore('policies').put(row)
+      for (const row of options.leavePlans ?? []) transaction.objectStore('leavePlans').put(row)
+      transaction.objectStore('meta').put({ key: 'initialized', value: true })
+      transaction
+        .objectStore('meta')
+        .put({ key: 'settings', value: options.settings ?? DEFAULT_PLANNER_SETTINGS })
+      transaction.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      transaction.onerror = () => {
+        db.close()
+        reject(transaction.error)
+      }
+      transaction.onabort = () => {
+        db.close()
+        reject(transaction.error)
+      }
+    }
+  })
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'indexedDB', {
     configurable: true,
@@ -70,15 +129,20 @@ describe('IndexedDB migration from localStorage', () => {
   it('seeds every dataset when there is no legacy data', async () => {
     const loaded = await createStore().load()
 
+    expect(loaded.snapshot.v).toBe(2)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
   })
 
-  it('seeds demo leave plans when the migrated roster is the exact demo set', async () => {
+  it('seeds demo leave plans and attendance when the migrated roster is the exact demo set', async () => {
     installLocalStorage({
       omnihr_employees: envelope(INITIAL_EMPLOYEES),
     })
@@ -86,9 +150,12 @@ describe('IndexedDB migration from localStorage', () => {
     const loaded = await createStore().load()
 
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
   })
 
-  it('does not seed demo leave plans onto a custom migrated roster', async () => {
+  it('does not seed demo leave plans or demo attendance onto a custom migrated roster', async () => {
     installLocalStorage({
       omnihr_employees: envelope(LEGACY_EMPLOYEES),
     })
@@ -97,6 +164,8 @@ describe('IndexedDB migration from localStorage', () => {
 
     expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
     expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
   })
 
   it('migrates legacy v2 envelopes exactly and leaves the keys untouched', async () => {
@@ -104,6 +173,8 @@ describe('IndexedDB migration from localStorage', () => {
       omnihr_employees: envelope(LEGACY_EMPLOYEES),
       omnihr_policies: envelope(LEGACY_POLICIES),
       omnihr_leave_plans: envelope(LEGACY_LEAVE_PLANS),
+      omnihr_attendance: envelope(LEGACY_ATTENDANCE),
+      omnihr_holidays: envelope(LEGACY_HOLIDAYS),
       omnihr_planner_settings: envelope([LEGACY_SETTINGS]),
     })
 
@@ -112,6 +183,8 @@ describe('IndexedDB migration from localStorage', () => {
     expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
+    expect(loaded.snapshot.attendance).toEqual(LEGACY_ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(LEGACY_HOLIDAYS)
     expect(loaded.snapshot.settings).toEqual(LEGACY_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
     expect(loaded.recovered).toBe(false)
@@ -120,6 +193,8 @@ describe('IndexedDB migration from localStorage', () => {
     expect(storage.getItem('omnihr_employees')).toBe(envelope(LEGACY_EMPLOYEES))
     expect(storage.getItem('omnihr_policies')).toBe(envelope(LEGACY_POLICIES))
     expect(storage.getItem('omnihr_leave_plans')).toBe(envelope(LEGACY_LEAVE_PLANS))
+    expect(storage.getItem('omnihr_attendance')).toBe(envelope(LEGACY_ATTENDANCE))
+    expect(storage.getItem('omnihr_holidays')).toBe(envelope(LEGACY_HOLIDAYS))
     expect(storage.getItem('omnihr_planner_settings')).toBe(envelope([LEGACY_SETTINGS]))
   })
 
@@ -149,6 +224,8 @@ describe('IndexedDB migration from localStorage', () => {
       omnihr_employees: '{not json',
       omnihr_policies: '42',
       omnihr_leave_plans: '[null,null]',
+      omnihr_attendance: '[null,null]',
+      omnihr_holidays: 'not json',
       omnihr_planner_settings: JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ nope: true }] }),
     })
 
@@ -161,6 +238,10 @@ describe('IndexedDB migration from localStorage', () => {
     // rule as first-run seeding: the demo roster gets the demo planner, and the loss
     // is still reported.
     expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
+    // A corrupt attendance key is a lost ledger, not an absent first-run key; the
+    // fixed holiday seed is safe regardless of what the roster looks like.
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
     expect(loaded.recovered).toBe(true)
@@ -189,7 +270,7 @@ describe('IndexedDB migration from localStorage', () => {
     expect(reloaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
   })
 
-  it('repairs duplicated policy and leave ids instead of collapsing them', async () => {
+  it('repairs duplicated policy, leave and attendance ids plus duplicate holiday dates', async () => {
     installLocalStorage({
       omnihr_employees: envelope(LEGACY_EMPLOYEES),
       omnihr_policies: envelope([LEGACY_POLICIES[0], LEGACY_POLICIES[0], LEGACY_POLICIES[1]]),
@@ -198,38 +279,52 @@ describe('IndexedDB migration from localStorage', () => {
         LEGACY_LEAVE_PLANS[0],
         LEGACY_LEAVE_PLANS[1],
       ]),
+      omnihr_attendance: envelope([
+        LEGACY_ATTENDANCE[0],
+        LEGACY_ATTENDANCE[0],
+        LEGACY_ATTENDANCE[1],
+      ]),
+      omnihr_holidays: envelope([
+        LEGACY_HOLIDAYS[0],
+        { ...LEGACY_HOLIDAYS[0], id: 'holiday-copy' },
+        LEGACY_HOLIDAYS[1],
+      ]),
     })
 
     const loaded = await createStore().load()
 
     expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS.slice(0, 2))
+    expect(loaded.snapshot.attendance).toEqual(LEGACY_ATTENDANCE.slice(0, 2))
+    expect(loaded.snapshot.holidays).toEqual(LEGACY_HOLIDAYS.slice(0, 2))
     expect(loaded.recovered).toBe(true)
   })
 
-  it('does not seed demo leave plans onto a custom roster when the leave payload is corrupt', async () => {
+  it('repairs a duplicate holiday id even when the dates differ', async () => {
     installLocalStorage({
       omnihr_employees: envelope(LEGACY_EMPLOYEES),
-      omnihr_leave_plans: '[null,null]',
+      omnihr_holidays: envelope([
+        LEGACY_HOLIDAYS[0],
+        { ...LEGACY_HOLIDAYS[1], id: LEGACY_HOLIDAYS[0].id },
+      ]),
     })
 
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
-    expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual([LEGACY_HOLIDAYS[0]])
     expect(loaded.recovered).toBe(true)
   })
 
-  it('seeds demo leave plans onto the demo roster when the leave payload is corrupt', async () => {
+  it('does not seed demo attendance when the attendance key was deliberately emptied', async () => {
     installLocalStorage({
       omnihr_employees: envelope(INITIAL_EMPLOYEES),
-      omnihr_leave_plans: '[null,null]',
+      omnihr_attendance: envelope([]),
     })
 
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.leavePlans).toEqual(createInitialLeavePlans(NOW))
-    expect(loaded.recovered).toBe(true)
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.recovered).toBe(false)
   })
 
   it('preserves a valid empty dataset instead of replacing it with seed data', async () => {
@@ -241,10 +336,12 @@ describe('IndexedDB migration from localStorage', () => {
 
     expect(loaded.snapshot.employees).toEqual([])
     // Absent policies are still seeded: an empty register is a deliberate state, not
-    // a reason to leave the rest of the app blank. Leave is different: an empty
-    // register is not the demo roster, so no demo planner is invented for it.
+    // a reason to leave the rest of the app blank. Leave and attendance are different:
+    // an empty register is not the demo roster, so neither demo seed is invented.
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(loaded.snapshot.leavePlans).toEqual([])
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(true)
     expect(loaded.recovered).toBe(false)
@@ -269,5 +366,80 @@ describe('IndexedDB migration from localStorage', () => {
     const loaded = await createStore().load()
     expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
+  })
+})
+
+describe('IndexedDB v1 database upgrade', () => {
+  it('upgrades in place, preserves every v1 dataset and seeds the new ones', async () => {
+    await createV1Database({
+      employees: INITIAL_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
+    expect(loaded.snapshot.policies).toEqual(LEGACY_POLICIES)
+    expect(loaded.snapshot.leavePlans).toEqual(LEGACY_LEAVE_PLANS)
+    expect(loaded.snapshot.settings).toEqual(LEGACY_SETTINGS)
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
+    expect(loaded.snapshot.attendance).toEqual(
+      createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
+    )
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('does not seed demo attendance onto a custom roster during the upgrade', async () => {
+    await createV1Database({
+      employees: LEGACY_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const loaded = await createStore().load()
+
+    expect(loaded.snapshot.employees).toEqual(LEGACY_EMPLOYEES)
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
+    expect(loaded.recovered).toBe(false)
+  })
+
+  it('does not reseed attendance or holidays after a deliberate clear', async () => {
+    await createV1Database({
+      employees: INITIAL_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const store = createStore()
+    await store.load()
+    await expect(store.clearBusinessData()).resolves.toEqual({ ok: true })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.holidays).toEqual([])
+  })
+
+  it('keeps newly saved attendance and holidays across a reload', async () => {
+    await createV1Database({
+      employees: INITIAL_EMPLOYEES,
+      policies: LEGACY_POLICIES,
+      leavePlans: LEGACY_LEAVE_PLANS,
+      settings: LEGACY_SETTINGS,
+    })
+
+    const store = createStore()
+    await store.load()
+    await store.saveAttendance(LEGACY_ATTENDANCE)
+    await store.saveHolidays([LEGACY_HOLIDAYS[0]])
+
+    const loaded = await createStore().load()
+    expect(loaded.snapshot.attendance).toEqual(LEGACY_ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual([LEGACY_HOLIDAYS[0]])
   })
 })
