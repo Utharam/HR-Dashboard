@@ -32,11 +32,11 @@ describe('in-app copy matches the parser behaviour', () => {
     expect(sub).toHaveTextContent(/will be rejected/i);
   });
 
-  it('states that the master-roster export covers the current filter', () => {
+  it('states that the master-roster export covers the full register, not a filter', () => {
     renderHub();
 
-    expect(screen.getByText(/Download a multi-column Excel spreadsheet/i)).toHaveTextContent(
-      /current filters/i,
-    );
+    const copy = screen.getByText(/Download a multi-column Excel spreadsheet/i);
+    expect(copy).toHaveTextContent(/in the register/i);
+    expect(copy).not.toHaveTextContent(/current filters/i);
   });
 });

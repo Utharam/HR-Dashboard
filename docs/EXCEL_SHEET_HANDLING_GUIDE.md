@@ -257,4 +257,4 @@ OmniHR has been verified with export formats from popular HRIS tools:
 - **Answer:** Yes. The matrix carries its month in `B2`, and a confirmed import replaces only that month's records. Other months — and every other dataset — are untouched.
 
 ### Question: "How do I revert to the original 200 employee demo state?"
-- **Answer:** Click the **Reset Demo State** button in the lower left of the sidebar. This restores the factory initial dataset (employees, policies, leave plans, planner settings, the current-month demo attendance ledger and the 2026 holiday calendar) through the app's data store, replacing what this browser holds.
+- **Answer:** Open **Admin & Settings** and click **Reset Demo State** in the Workspace actions card. This restores the factory initial dataset (employees, policies, leave plans, planner settings, planner events, the current-month demo attendance ledger and the 2026 holiday calendar) through the app's data store, replacing what this browser holds.

@@ -214,7 +214,7 @@ Historical macro workforce analytics spanning **January 2024 through September 2
 ---
 
 ### 3.9 Excel Hub & Synchronization
-The central data interchange module, now rendered inside the **Admin** page (see [3.12](#312-admin--data-exchange-excel-hub)):
+The central data interchange module, now rendered inside **Admin & Settings** (see [3.12](#312-admin--settings-excel-hub)):
 - **Ingestion:** Drag-and-drop parsing of `.xlsx`, `.xls`, and `.csv` files.
 - **Live Preview:** Displays recognized column mappings, warnings, and table preview before committing.
 - **Export Master Roster:** Downloads the complete 200-employee directory with all 24 columns, including the canonical department ID and reporting line; the workbook can be re-imported without losing either.

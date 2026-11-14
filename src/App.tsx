@@ -838,7 +838,12 @@ export const App: React.FC<{
     // inline literal omitted `reportsTo` and `deptId` while emitting the joining date as
     // text, so the file this app produced could not be read back as the register it came
     // from.
-    const data = buildStaffRosterRows(filteredEmployees);
+    //
+    // This is the master roster, not a filtered view: Export Roster lives on Admin &
+    // Settings, which has no toolbar, so a search left on Directory must not silently
+    // shrink the backup. The Payroll export below is the one that follows the payroll
+    // filters, because that screen shows them.
+    const data = buildStaffRosterRows(employees);
 
     const ws = XLSX.utils.json_to_sheet(data, {
       header: STAFF_ROSTER_COLUMNS.map((column) => column.header),
@@ -1258,10 +1263,12 @@ export const App: React.FC<{
         {/*
           The Admin & Settings page composes the workspace actions card, the
           snapshot exchange card and the existing Excel Hub. The card deliberately
-          receives the FULL datasets - its counts and its export describe the
-          store, which is not narrowed by the toolbar's filters, while the Excel
-          Hub below keeps its filter-aware exports. The workspace actions ride
-          the same handlers the sidebar footer used to bind.
+          receives the FULL datasets - its counts and its exports describe the
+          store, which is not narrowed by the toolbar's filters. Export Roster is
+          the master-list backup, so it ignores a search left on another page;
+          the payroll export follows the filters on the Payroll screen that shows
+          them. The workspace actions ride the same handlers the sidebar footer
+          used to bind.
         */}
         {activeTab === 'admin' && (
           <>
@@ -1282,7 +1289,7 @@ export const App: React.FC<{
               onSignOut={onSignOut}
             />
             <ExcelHubSection
-              employees={filteredEmployees}
+              employees={employees}
               registerSize={employees.length}
               onImportEmployees={handleImportEmployees}
               onExportEmployees={handleExportEmployees}

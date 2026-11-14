@@ -64,15 +64,15 @@ const describeImportError = (err: unknown): { title: string; hint: string } => {
 };
 
 interface ExcelHubSectionProps {
-  /** The rows the exports will write - the CURRENT FILTER, not the whole register. */
+  /** The full register the exports will write. */
   employees: Employee[];
   /**
    * How many records the whole register holds, unfiltered.
    *
-   * Deliberately separate from `employees`: the confirmation has to say how much is about
-   * to be destroyed, and a number that silently became "3" because a search box was filled
-   * in would understate the loss by two orders of magnitude on the one screen where the
-   * user is deciding whether to lose it.
+   * Kept separate from `employees` so the confirmation can never understate the loss
+   * if a future caller passes a narrower list for display: on the one screen where the
+   * user is deciding whether to destroy the register, "3" instead of "200" would be a
+   * lie.
    */
   registerSize: number;
   onImportEmployees: (newEmps: Employee[], mode: 'replace' | 'append') => void;
@@ -410,7 +410,7 @@ const [statusMessage, setStatusMessage] = useState<
             <h4 className="omni-card-title">Export Complete Master Roster</h4>
           </div>
           <p className="omni-card-sub" style={{ marginBottom: 'var(--space-4)' }}>
-            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles matching the current filters, with reporting managers, PF UANs, and leave balances.
+            Download a multi-column Excel spreadsheet containing all {employees.length} employee profiles in the register, with reporting managers, PF UANs, and leave balances.
           </p>
           <button onClick={onExportEmployees} className="btn btn-primary btn-block">
             <Download size={16} /> Download Employee Master (.xlsx)

@@ -415,7 +415,7 @@ export const AdminSection: React.FC<AdminSectionProps> = ({
             type="button"
             className="btn btn-secondary"
             onClick={onExportRoster}
-            title="Export the staff roster to Excel"
+            title={`Export all ${employees.length} employees to Excel`}
           >
             <Download size={15} aria-hidden="true" /> Export Roster (Excel)
           </button>
