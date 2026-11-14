@@ -91,6 +91,7 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveLeavePlans: vi.fn(async () => OK),
     saveAttendance: vi.fn(async () => OK),
     saveHolidays: vi.fn(async () => OK),
+    savePlannerEvents: vi.fn(async () => OK),
     saveSettings: vi.fn(async () => OK),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(async () => OK),
@@ -109,7 +110,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
   holidays: HOLIDAYS,
   settings: { maxConcurrentLeave: 3 },
   store: makeMockStore({
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: EMPLOYEES,
@@ -117,6 +118,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
     leavePlans: [PLAN],
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
+    plannerEvents: [],
     settings: { maxConcurrentLeave: 3 },
   }),
   backend: 'indexeddb',
@@ -127,7 +129,7 @@ const baseProps = (overrides: Partial<AdminProps> = {}): AdminProps => ({
 
 /** The snapshot a "good" import file holds: three employees replace the local two. */
 const IMPORTED_SNAPSHOT: DataSnapshot = {
-  v: 2,
+  v: 3,
   dataVersion: DATA_SCHEMA_VERSION,
   exportedAt: '2026-11-14T09:30:00.000Z',
   employees: [
@@ -141,6 +143,7 @@ const IMPORTED_SNAPSHOT: DataSnapshot = {
     record('EMP-IMPORT-1', '2026-12-01', 'Present', { source: 'excel' }),
   ],
   holidays: [{ id: 'holiday-2026-12-24', date: '2026-12-24', name: 'Foundation Day' }],
+  plannerEvents: [],
   settings: { maxConcurrentLeave: 4 },
 };
 
@@ -287,7 +290,7 @@ describe('Admin snapshot card — export', () => {
     const text = await downloadedBlob().text();
     expect(JSON.parse(text)).toEqual(
       expect.objectContaining({
-        v: 2,
+        v: 3,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -295,12 +298,14 @@ describe('Admin snapshot card — export', () => {
         ]),
         policies: [expect.objectContaining({ id: 'POL-LOCAL-1' })],
         leavePlans: [expect.objectContaining({ id: 'plan-local-1' })],
-        // The daily ledger and the holiday calendar travel in the snapshot too,
-        // or the backup would quietly lose them while claiming to be complete.
+        // The daily ledger, the holiday calendar and the event calendar travel in
+        // the snapshot too, or the backup would quietly lose them while claiming
+        // to be complete.
         attendance: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1|2026-11-10' }),
         ]),
         holidays: [expect.objectContaining({ id: 'holiday-2026-12-25' })],
+        plannerEvents: [],
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -355,7 +360,7 @@ describe('Admin snapshot card — export', () => {
     const parsed = JSON.parse(text);
     expect(parsed).toEqual(
       expect.objectContaining({
-        v: 2,
+        v: 3,
         dataVersion: DATA_SCHEMA_VERSION,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-LOCAL-1' }),
@@ -363,6 +368,7 @@ describe('Admin snapshot card — export', () => {
         ]),
         policies: [expect.objectContaining({ id: 'POL-LOCAL-1' })],
         leavePlans: [expect.objectContaining({ id: 'plan-local-1' })],
+        plannerEvents: [],
         settings: { maxConcurrentLeave: 3 },
       }),
     );
@@ -393,7 +399,7 @@ describe('Admin snapshot card — import', () => {
     await waitFor(() => expect(props.store?.importSnapshot).toHaveBeenCalledTimes(1));
     expect(props.store?.importSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        v: 2,
+        v: 3,
         employees: expect.arrayContaining([
           expect.objectContaining({ id: 'EMP-IMPORT-1' }),
         ]),
@@ -441,7 +447,7 @@ describe('Admin snapshot card — import', () => {
     render(<AdminSection {...props} />);
 
     await chooseFile(
-      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 3 }),
+      snapshotFile({ ...IMPORTED_SNAPSHOT, v: 4 }),
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/different version/i);

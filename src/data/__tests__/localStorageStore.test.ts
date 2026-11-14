@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { IDBFactory as FakeIDBFactory } from 'fake-indexeddb'
-import type { AttendanceRecord, Holiday, LeavePlan, PlannerSettings } from '../../types'
+import type {
+  AttendanceRecord,
+  Holiday,
+  LeavePlan,
+  PlannerEvent,
+  PlannerSettings,
+} from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import { DEFAULT_PLANNER_SETTINGS, STORAGE_KEYS, type DataSnapshot } from '../DataStore'
 import { LocalStorageStore } from '../LocalStorageStore'
@@ -10,6 +16,7 @@ import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
 import { createInitialHolidays } from '../initialHolidays'
 import { createInitialAttendance } from '../initialAttendance'
+import { createInitialPlannerEvents } from '../initialPlannerEvents'
 
 const NOW = new Date('2026-11-14T09:30:00.000Z')
 const EMPLOYEES = INITIAL_EMPLOYEES.slice(0, 4)
@@ -17,6 +24,7 @@ const POLICIES = INITIAL_POLICIES.slice(0, 3)
 const LEAVE_PLANS: LeavePlan[] = createInitialLeavePlans(NOW).slice(0, 2)
 const HOLIDAYS: Holiday[] = createInitialHolidays(2026)
 const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(EMPLOYEES, HOLIDAYS, NOW).slice(0, 4)
+const PLANNER_EVENTS: PlannerEvent[] = createInitialPlannerEvents(NOW)
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 4 }
 
 function installLocalStorage(entries: Record<string, string> = {}): Storage {
@@ -55,7 +63,7 @@ function envelope(rows: unknown[]): string {
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: EMPLOYEES,
@@ -63,6 +71,7 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     leavePlans: LEAVE_PLANS,
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
+    plannerEvents: PLANNER_EVENTS,
     settings: SETTINGS,
     ...overrides,
   }
@@ -99,10 +108,10 @@ beforeEach(() => {
 })
 
 describe('LocalStorageStore', () => {
-  it('seeds an empty store with the demo datasets, attendance and holidays', async () => {
+  it('seeds an empty store with the demo datasets, attendance, holidays and events', async () => {
     const loaded = await new LocalStorageStore().load()
 
-    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.v).toBe(3)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
     expect(leavePlanContent(loaded.snapshot.leavePlans)).toEqual(
@@ -112,12 +121,15 @@ describe('LocalStorageStore', () => {
     expect(attendanceSignature(loaded.snapshot.attendance)).toEqual(
       attendanceSignature(DEMO_ATTENDANCE()),
     )
+    expect(loaded.snapshot.plannerEvents.map((event) => event.id)).toEqual(
+      createInitialPlannerEvents().map((event) => event.id),
+    )
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
   })
 
-  it('saves and reloads all six datasets through the versioned envelopes', async () => {
+  it('saves and reloads all seven datasets through the versioned envelopes', async () => {
     const store = new LocalStorageStore()
     await store.load()
 
@@ -126,6 +138,7 @@ describe('LocalStorageStore', () => {
     await expect(store.saveLeavePlans(LEAVE_PLANS)).resolves.toEqual({ ok: true })
     await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({ ok: true })
     await expect(store.saveHolidays(HOLIDAYS)).resolves.toEqual({ ok: true })
+    await expect(store.savePlannerEvents(PLANNER_EVENTS)).resolves.toEqual({ ok: true })
     await expect(store.saveSettings(SETTINGS)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
@@ -134,10 +147,11 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
   })
 
-  it('seeds demo leave plans and attendance when the roster is exactly the demo set and no key exists', async () => {
+  it('seeds demo leave plans, attendance and events when the roster is exactly the demo set and no key exists', async () => {
     localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES))
 
     const loaded = await new LocalStorageStore().load()
@@ -148,9 +162,12 @@ describe('LocalStorageStore', () => {
     expect(attendanceSignature(loaded.snapshot.attendance)).toEqual(
       attendanceSignature(DEMO_ATTENDANCE()),
     )
+    expect(loaded.snapshot.plannerEvents.map((event) => event.id)).toEqual(
+      createInitialPlannerEvents().map((event) => event.id),
+    )
   })
 
-  it('does not seed demo leave plans or demo attendance onto a custom roster', async () => {
+  it('does not seed demo leave plans, demo attendance or demo events onto a custom roster', async () => {
     localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES.slice(0, 3)))
 
     const loaded = await new LocalStorageStore().load()
@@ -158,31 +175,36 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.employees).toHaveLength(3)
     expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
   })
 
-  it('preserves valid attendance, holiday and leave keys even when the roster is custom', async () => {
+  it('preserves valid attendance, holiday, leave and event keys even when the roster is custom', async () => {
     localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES.slice(0, 3)))
     localStorage.setItem(STORAGE_KEYS.leavePlans, envelope(LEAVE_PLANS))
     localStorage.setItem(STORAGE_KEYS.attendance, envelope(ATTENDANCE))
     localStorage.setItem(STORAGE_KEYS.holidays, envelope([HOLIDAYS[0]]))
+    localStorage.setItem(STORAGE_KEYS.plannerEvents, envelope(PLANNER_EVENTS))
 
     const loaded = await new LocalStorageStore().load()
 
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual([HOLIDAYS[0]])
+    expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
   })
 
-  it('keeps a valid empty attendance or holiday envelope empty instead of reseeding it', async () => {
+  it('keeps a valid empty attendance, holiday or event envelope empty instead of reseeding it', async () => {
     localStorage.setItem(STORAGE_KEYS.employees, envelope(INITIAL_EMPLOYEES))
     localStorage.setItem(STORAGE_KEYS.attendance, envelope([]))
     localStorage.setItem(STORAGE_KEYS.holidays, envelope([]))
+    localStorage.setItem(STORAGE_KEYS.plannerEvents, envelope([]))
 
     const loaded = await new LocalStorageStore().load()
 
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     expect(loaded.recovered).toBe(false)
   })
 
@@ -193,6 +215,7 @@ describe('LocalStorageStore', () => {
       omnihr_leave_plans: '[null]',
       omnihr_attendance: '[null]',
       omnihr_holidays: '42',
+      omnihr_planner_events: '[null]',
       omnihr_planner_settings: JSON.stringify({ v: DATA_SCHEMA_VERSION, rows: [{ maxConcurrentLeave: 0 }] }),
     })
 
@@ -207,9 +230,11 @@ describe('LocalStorageStore', () => {
       leavePlanContent(createInitialLeavePlans()),
     )
     // A corrupt attendance payload is a lost ledger, not an absent first-run key:
-    // it is replaced with an empty ledger rather than invented presence. The holiday
-    // calendar is safe to seed because its fallback is fixed and roster-independent.
+    // it is replaced with an empty ledger rather than invented presence. The event
+    // calendar follows the same rule, while the holiday calendar is safe to seed
+    // because its fallback is fixed and roster-independent.
     expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     expect(loaded.snapshot.holidays).toEqual(createInitialHolidays(2026))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.recovered).toBe(true)
@@ -230,7 +255,7 @@ describe('LocalStorageStore', () => {
     expect(loaded.recovered).toBe(true)
   })
 
-  it('repairs duplicated policy, leave and attendance ids plus duplicate holiday dates', async () => {
+  it('repairs duplicated policy, leave, attendance and event ids plus duplicate holiday dates', async () => {
     localStorage.setItem(
       STORAGE_KEYS.employees,
       envelope(INITIAL_EMPLOYEES.slice(0, 4)),
@@ -251,6 +276,10 @@ describe('LocalStorageStore', () => {
       STORAGE_KEYS.holidays,
       envelope([HOLIDAYS[0], { ...HOLIDAYS[0], id: 'holiday-copy' }, HOLIDAYS[1]]),
     )
+    localStorage.setItem(
+      STORAGE_KEYS.plannerEvents,
+      envelope([PLANNER_EVENTS[0], PLANNER_EVENTS[0], PLANNER_EVENTS[1]]),
+    )
 
     const loaded = await new LocalStorageStore().load()
 
@@ -258,6 +287,7 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual([LEAVE_PLANS[0], LEAVE_PLANS[1]])
     expect(loaded.snapshot.attendance).toEqual([ATTENDANCE[0], ATTENDANCE[1]])
     expect(loaded.snapshot.holidays).toEqual([HOLIDAYS[0], HOLIDAYS[1]])
+    expect(loaded.snapshot.plannerEvents).toEqual([PLANNER_EVENTS[0], PLANNER_EVENTS[1]])
     expect(loaded.recovered).toBe(true)
   })
 
@@ -316,6 +346,25 @@ describe('LocalStorageStore', () => {
     expect((await store.load()).snapshot.leavePlans).toEqual(LEAVE_PLANS)
   })
 
+  it('rejects duplicate planner-event ids and malformed rows without writing the calendar', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+    await store.savePlannerEvents(PLANNER_EVENTS)
+
+    await expect(
+      store.savePlannerEvents([
+        PLANNER_EVENTS[0],
+        { ...PLANNER_EVENTS[0], title: 'Duplicate id' },
+      ]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.savePlannerEvents([{ ...PLANNER_EVENTS[0], endDate: '2026-01-01' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    expect((await store.load()).snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+  })
+
   it('rejects duplicate attendance ids, malformed rows and duplicate holiday dates', async () => {
     const store = new LocalStorageStore()
     await store.load()
@@ -339,13 +388,14 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
   })
 
-  it('exports and imports a v2 snapshot', async () => {
+  it('exports and imports a v3 snapshot', async () => {
     const store = new LocalStorageStore()
     await store.load()
     await store.saveEmployees(EMPLOYEES)
     await store.saveSettings(SETTINGS)
 
     const exported = await store.exportSnapshot()
+    expect(exported.v).toBe(3)
     expect(exported.employees).toEqual(EMPLOYEES)
     expect(exported.settings).toEqual(SETTINGS)
 
@@ -357,10 +407,11 @@ describe('LocalStorageStore', () => {
     expect(imported.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(imported.snapshot.attendance).toEqual(ATTENDANCE)
     expect(imported.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(imported.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(imported.snapshot.settings).toEqual(SETTINGS)
   })
 
-  it('imports a v1 snapshot as v2 with empty attendance and holidays', async () => {
+  it('imports a v1 snapshot as v3 with empty attendance, holidays and planner events', async () => {
     const store = new LocalStorageStore()
     await store.load()
 
@@ -377,9 +428,29 @@ describe('LocalStorageStore', () => {
     await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
-    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.v).toBe(3)
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
+  })
+
+  it('imports a v2 snapshot as v3 with empty planner events', async () => {
+    const store = new LocalStorageStore()
+    await store.load()
+
+    const legacy = {
+      ...makeSnapshot(),
+      v: 2,
+      plannerEvents: undefined,
+    } as unknown as DataSnapshot
+
+    await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual([])
   })
 
   it('leaves existing data untouched when an import is invalid', async () => {
@@ -393,7 +464,7 @@ describe('LocalStorageStore', () => {
       reason: 'invalid',
     })
 
-    const wrongVersion = { ...makeSnapshot(), v: 3 } as unknown as DataSnapshot
+    const wrongVersion = { ...makeSnapshot(), v: 4 } as unknown as DataSnapshot
     await expect(store.importSnapshot(wrongVersion)).resolves.toEqual({
       ok: false,
       reason: 'version',
@@ -417,6 +488,7 @@ describe('LocalStorageStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
   })
 
@@ -428,6 +500,7 @@ describe('LocalStorageStore', () => {
     await store.saveLeavePlans(LEAVE_PLANS)
     await store.saveAttendance(ATTENDANCE)
     await store.saveHolidays(HOLIDAYS)
+    await store.savePlannerEvents(PLANNER_EVENTS)
 
     const storage = globalThis.localStorage
     const originalSetItem = storage.setItem.bind(storage)
@@ -472,6 +545,10 @@ describe('LocalStorageStore', () => {
       reason: 'unavailable',
     })
     await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({
+      ok: false,
+      reason: 'unavailable',
+    })
+    await expect(store.savePlannerEvents(PLANNER_EVENTS)).resolves.toEqual({
       ok: false,
       reason: 'unavailable',
     })

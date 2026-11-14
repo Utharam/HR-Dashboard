@@ -197,6 +197,33 @@ export interface PlannerSettings {
 }
 
 /**
+ * The Planner's general-event domain.
+ *
+ * An event is a range of local calendar days, like a leave plan, but it belongs to
+ * the company rather than to one employee: a review, a training day, a meeting or a
+ * company holiday. `department`/`location` narrow who it concerns; their absence
+ * means "everyone" rather than "unknown". `notes` is free text and never parsed.
+ */
+export type PlannerEventType = 'Event' | 'Training' | 'Meeting' | 'Holiday' | 'Other';
+
+export interface PlannerEvent {
+  id: string;
+  title: string;
+  /** `YYYY-MM-DD`, local calendar date. */
+  startDate: string;
+  /** `YYYY-MM-DD`, inclusive. */
+  endDate: string;
+  type: PlannerEventType;
+  department?: string;
+  location?: string;
+  notes?: string;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp. */
+  updatedAt: string;
+}
+
+/**
  * Daily attendance domain.
  *
  * A record is keyed by employee + date (the id is `${employeeId}|${date}`), and a date is

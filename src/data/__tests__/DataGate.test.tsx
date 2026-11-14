@@ -50,7 +50,7 @@ const CUSTOM_PLAN: LeavePlan = {
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
@@ -58,6 +58,7 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     leavePlans: [],
     attendance: [],
     holidays: [],
+    plannerEvents: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   }
@@ -90,6 +91,7 @@ function makeFailingStore(): DataStore {
     saveLeavePlans: async () => ({ ok: true }),
     saveAttendance: async () => ({ ok: true }),
     saveHolidays: async () => ({ ok: true }),
+    savePlannerEvents: async () => ({ ok: true }),
     saveSettings: async () => ({ ok: true }),
     exportSnapshot: () => Promise.reject(failure),
     importSnapshot: async () => ({ ok: true }),
@@ -110,6 +112,7 @@ function makeMockStore(snapshot: DataSnapshot, overrides: Partial<DataStore> = {
     saveLeavePlans: vi.fn(okResult),
     saveAttendance: vi.fn(okResult),
     saveHolidays: vi.fn(okResult),
+    savePlannerEvents: vi.fn(okResult),
     saveSettings: vi.fn(okResult),
     exportSnapshot: vi.fn(async () => snapshot),
     importSnapshot: vi.fn(okResult),
@@ -128,10 +131,14 @@ function GateProbe() {
   )
 }
 
-/** Reads the v2 datasets specifically; the older probe only reports the roster. */
+/** Reads the v3 datasets specifically; the older probe only reports the roster. */
 function DatasetProbe() {
   const { snapshot } = useDataGate()
-  return <div data-testid="dataset-probe">{`${snapshot.attendance.length}:${snapshot.holidays.length}`}</div>
+  return (
+    <div data-testid="dataset-probe">
+      {`${snapshot.attendance.length}:${snapshot.holidays.length}:${snapshot.plannerEvents.length}`}
+    </div>
+  )
 }
 
 const storeLegacyEmployees = () =>
@@ -170,7 +177,7 @@ describe('DataGate', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('publishes the v2 attendance and holiday datasets through the snapshot', async () => {
+  it('publishes the v3 attendance, holiday and planner-event datasets through the snapshot', async () => {
     const snapshot = makeSnapshot({
       attendance: [
         {
@@ -183,6 +190,17 @@ describe('DataGate', () => {
         },
       ],
       holidays: [{ id: 'holiday-2026-01-01', date: '2026-01-01', name: 'New Year' }],
+      plannerEvents: [
+        {
+          id: 'event-gate-1',
+          title: 'Gate Training Day',
+          startDate: '2026-11-18',
+          endDate: '2026-11-18',
+          type: 'Training',
+          createdAt: '2026-11-01T09:30:00.000Z',
+          updatedAt: '2026-11-01T09:30:00.000Z',
+        },
+      ],
     })
     const store = makeMockStore(snapshot)
 
@@ -192,8 +210,8 @@ describe('DataGate', () => {
       </DataGate>,
     )
 
-    expect(await screen.findByTestId('dataset-probe')).toHaveTextContent('1:1')
-    expect(snapshot.v).toBe(2)
+    expect(await screen.findByTestId('dataset-probe')).toHaveTextContent('1:1:1')
+    expect(snapshot.v).toBe(3)
   })
 
   it('warns that saved data was replaced when the store reports recovery', async () => {

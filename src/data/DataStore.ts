@@ -27,6 +27,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types'
 import { DATA_SCHEMA_VERSION } from '../utils/storage'
@@ -35,6 +36,7 @@ import {
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
 } from '../utils/rowValidators'
@@ -57,10 +59,12 @@ export interface DataSnapshot {
    * Snapshot format version. Separate from the row schema version below.
    *
    * Version 2 adds the daily attendance ledger and the company holiday calendar.
-   * Version 1 snapshots are still accepted by `validateDataSnapshot`/`parseSnapshot`
-   * and are normalised to v2 with empty arrays, so an old backup stays restorable.
+   * Version 3 adds the Planner's general events. Older snapshots are still accepted
+   * by `validateDataSnapshot`/`parseSnapshot` and are normalised to v3 with empty
+   * arrays for the datasets their format did not define, so an old backup stays
+   * restorable.
    */
-  v: 2
+  v: 3
   /** The `DATA_SCHEMA_VERSION` row schema the snapshot was produced against. */
   dataVersion: number
   /** ISO timestamp of when the snapshot was produced. */
@@ -70,6 +74,7 @@ export interface DataSnapshot {
   leavePlans: LeavePlan[]
   attendance: AttendanceRecord[]
   holidays: Holiday[]
+  plannerEvents: PlannerEvent[]
   settings: PlannerSettings
 }
 
@@ -102,6 +107,7 @@ export interface DataStore {
   saveLeavePlans(rows: LeavePlan[]): Promise<StoreResult>
   saveAttendance(rows: AttendanceRecord[]): Promise<StoreResult>
   saveHolidays(rows: Holiday[]): Promise<StoreResult>
+  savePlannerEvents(rows: PlannerEvent[]): Promise<StoreResult>
   saveSettings(settings: PlannerSettings): Promise<StoreResult>
   exportSnapshot(): Promise<DataSnapshot>
   importSnapshot(snapshot: DataSnapshot): Promise<StoreResult>
@@ -119,6 +125,7 @@ export const STORAGE_KEYS = {
   leavePlans: 'omnihr_leave_plans',
   attendance: 'omnihr_attendance',
   holidays: 'omnihr_holidays',
+  plannerEvents: 'omnihr_planner_events',
   settings: 'omnihr_planner_settings',
 } as const
 
@@ -261,6 +268,7 @@ export function validateDataSnapshot(
     leavePlans?: unknown
     attendance?: unknown
     holidays?: unknown
+    plannerEvents?: unknown
     settings?: unknown
   }
 
@@ -268,11 +276,14 @@ export function validateDataSnapshot(
   // `dataVersion` is the row schema. A mismatch in either means this file was made
   // against a shape this build does not understand.
   //
-  // Version 1 is still accepted: it predates the daily attendance datasets, so it is
-  // normalised to v2 with empty arrays below instead of being rejected. Restoring an
-  // old backup must not strand the user's existing roster and leave data.
+  // Versions 1 and 2 are still accepted: they predate some datasets, so they are
+  // normalised to v3 with empty arrays below instead of being rejected. Restoring an
+  // old backup must not strand the user's existing roster and planner data.
   const version = candidate.v
-  if ((version !== 1 && version !== 2) || candidate.dataVersion !== DATA_SCHEMA_VERSION) {
+  if (
+    (version !== 1 && version !== 2 && version !== 3) ||
+    candidate.dataVersion !== DATA_SCHEMA_VERSION
+  ) {
     return { ok: false, reason: 'version' }
   }
 
@@ -283,11 +294,12 @@ export function validateDataSnapshot(
     return { ok: false, reason: 'invalid' }
   }
 
-  // A v1 file has no attendance/holidays fields at all. Any fields that happen to be
-  // present on a v1 payload are ignored rather than trusted, because that format never
-  // defined them.
+  // A v1 file has no attendance/holidays fields, and a v2 file has no planner events.
+  // Any fields that happen to be present on an older payload are ignored rather than
+  // trusted, because that format never defined them.
   const attendance = version === 1 ? [] : candidate.attendance
   const holidays = version === 1 ? [] : candidate.holidays
+  const plannerEvents = version === 3 ? candidate.plannerEvents : []
 
   if (
     !Array.isArray(candidate.employees) ||
@@ -300,6 +312,8 @@ export function validateDataSnapshot(
     !attendance.every(isAttendanceRecordRow) ||
     !Array.isArray(holidays) ||
     !holidays.every(isHolidayRow) ||
+    !Array.isArray(plannerEvents) ||
+    !plannerEvents.every(isPlannerEventRow) ||
     !isPlannerSettingsRow(candidate.settings)
   ) {
     return { ok: false, reason: 'invalid' }
@@ -319,7 +333,8 @@ export function validateDataSnapshot(
     !hasUniqueIds(attendance) ||
     !hasUniqueAttendanceDates(attendance) ||
     !hasUniqueIds(holidays) ||
-    !hasUniqueHolidayDates(holidays)
+    !hasUniqueHolidayDates(holidays) ||
+    !hasUniqueIds(plannerEvents)
   ) {
     return { ok: false, reason: 'invalid' }
   }
@@ -327,7 +342,7 @@ export function validateDataSnapshot(
   return {
     ok: true,
     snapshot: {
-      v: 2,
+      v: 3,
       dataVersion: DATA_SCHEMA_VERSION,
       exportedAt: candidate.exportedAt,
       employees: candidate.employees,
@@ -335,6 +350,7 @@ export function validateDataSnapshot(
       leavePlans: candidate.leavePlans,
       attendance: attendance as AttendanceRecord[],
       holidays: holidays as Holiday[],
+      plannerEvents: plannerEvents as PlannerEvent[],
       settings: candidate.settings,
     },
   }

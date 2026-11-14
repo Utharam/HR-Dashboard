@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { AttendanceRecord, Holiday, LeavePlan, PlannerSettings } from '../../types'
+import type {
+  AttendanceRecord,
+  Holiday,
+  LeavePlan,
+  PlannerEvent,
+  PlannerSettings,
+} from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import {
   hasUniqueAttendanceDates,
@@ -13,6 +19,7 @@ import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
 import { createInitialHolidays } from '../initialHolidays'
 import { createInitialAttendance } from '../initialAttendance'
+import { createInitialPlannerEvents } from '../initialPlannerEvents'
 import {
   SNAPSHOT_VERSION,
   createSnapshot,
@@ -31,11 +38,12 @@ const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(
   HOLIDAYS,
   new Date(EXPORTED_AT),
 ).slice(0, 6)
+const PLANNER_EVENTS: PlannerEvent[] = createInitialPlannerEvents(new Date(EXPORTED_AT))
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 6 }
 
 function baseSnapshot(): DataSnapshot {
   return {
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: EXPORTED_AT,
     employees: EMPLOYEES,
@@ -43,6 +51,7 @@ function baseSnapshot(): DataSnapshot {
     leavePlans: LEAVE_PLANS,
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
+    plannerEvents: PLANNER_EVENTS,
     settings: SETTINGS,
   }
 }
@@ -60,8 +69,30 @@ function legacySnapshot(): Record<string, unknown> {
   }
 }
 
+/** A pre-events snapshot: v2 carried attendance and holidays but no planner events. */
+function legacyV2Snapshot(): Record<string, unknown> {
+  return {
+    v: 2,
+    dataVersion: DATA_SCHEMA_VERSION,
+    exportedAt: EXPORTED_AT,
+    employees: EMPLOYEES,
+    policies: POLICIES,
+    leavePlans: LEAVE_PLANS,
+    attendance: ATTENDANCE,
+    holidays: HOLIDAYS,
+    settings: SETTINGS,
+  }
+}
+
 function rawWithout(
-  field: 'employees' | 'policies' | 'leavePlans' | 'attendance' | 'holidays' | 'settings',
+  field:
+    | 'employees'
+    | 'policies'
+    | 'leavePlans'
+    | 'attendance'
+    | 'holidays'
+    | 'plannerEvents'
+    | 'settings',
 ): Record<string, unknown> {
   const raw = { ...baseSnapshot() } as unknown as Record<string, unknown>
   delete raw[field]
@@ -118,18 +149,19 @@ describe('hasUniqueAttendanceDates', () => {
 })
 
 describe('createSnapshot', () => {
-  it('stamps the v2 snapshot format and the data schema version', () => {
+  it('stamps the v3 snapshot format and the data schema version', () => {
     const snapshot = createSnapshot({
       employees: EMPLOYEES,
       policies: POLICIES,
       leavePlans: LEAVE_PLANS,
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
+      plannerEvents: PLANNER_EVENTS,
       settings: SETTINGS,
       exportedAt: EXPORTED_AT,
     })
 
-    expect(SNAPSHOT_VERSION).toBe(2)
+    expect(SNAPSHOT_VERSION).toBe(3)
     expect(snapshot).toEqual({
       v: SNAPSHOT_VERSION,
       dataVersion: DATA_SCHEMA_VERSION,
@@ -139,11 +171,12 @@ describe('createSnapshot', () => {
       leavePlans: LEAVE_PLANS,
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
+      plannerEvents: PLANNER_EVENTS,
       settings: SETTINGS,
     })
   })
 
-  it('defaults an omitted attendance/holiday dataset to an empty array, never a missing key', () => {
+  it('defaults an omitted attendance, holiday or planner-event dataset to an empty array, never a missing key', () => {
     const snapshot = createSnapshot({
       employees: EMPLOYEES,
       policies: POLICIES,
@@ -152,9 +185,10 @@ describe('createSnapshot', () => {
       exportedAt: EXPORTED_AT,
     })
 
-    expect(snapshot.v).toBe(2)
+    expect(snapshot.v).toBe(3)
     expect(snapshot.attendance).toEqual([])
     expect(snapshot.holidays).toEqual([])
+    expect(snapshot.plannerEvents).toEqual([])
     expect(parseSnapshot(snapshot)).toEqual({ ok: true, snapshot })
   })
 
@@ -183,6 +217,7 @@ describe('snapshot round-trip', () => {
       leavePlans: LEAVE_PLANS,
       attendance: ATTENDANCE,
       holidays: HOLIDAYS,
+      plannerEvents: PLANNER_EVENTS,
       settings: SETTINGS,
       exportedAt: EXPORTED_AT,
     })
@@ -199,6 +234,7 @@ describe('snapshot round-trip', () => {
     expect(result.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(result.snapshot.attendance).toEqual(ATTENDANCE)
     expect(result.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(result.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(result.snapshot.settings).toEqual(SETTINGS)
   })
 
@@ -209,6 +245,7 @@ describe('snapshot round-trip', () => {
       leavePlans: [],
       attendance: [],
       holidays: [],
+      plannerEvents: [],
       settings: { maxConcurrentLeave: 1 },
       exportedAt: EXPORTED_AT,
     })
@@ -233,19 +270,32 @@ describe('parseSnapshot', () => {
     'leavePlans',
     'attendance',
     'holidays',
+    'plannerEvents',
     'settings',
-  ] as const)('rejects a v2 snapshot without %s', (field) => {
+  ] as const)('rejects a v3 snapshot without %s', (field) => {
     expect(parseSnapshot(rawWithout(field))).toEqual({ ok: false, reason: 'invalid' })
   })
 
-  it('accepts a v1 snapshot and returns v2 with empty attendance and holidays', () => {
+  it('accepts a v1 snapshot and returns v3 with empty attendance, holidays and planner events', () => {
     expect(parseSnapshot(legacySnapshot())).toEqual({
       ok: true,
       snapshot: {
         ...legacySnapshot(),
-        v: 2,
+        v: 3,
         attendance: [],
         holidays: [],
+        plannerEvents: [],
+      },
+    })
+  })
+
+  it('accepts a v2 snapshot and returns v3 with empty planner events', () => {
+    expect(parseSnapshot(legacyV2Snapshot())).toEqual({
+      ok: true,
+      snapshot: {
+        ...legacyV2Snapshot(),
+        v: 3,
+        plannerEvents: [],
       },
     })
   })
@@ -279,7 +329,7 @@ describe('parseSnapshot', () => {
     })
   })
 
-  it('rejects invalid employee, policy, leave, attendance, holiday and settings rows', () => {
+  it('rejects invalid employee, policy, leave, attendance, holiday, planner-event and settings rows', () => {
     const base = baseSnapshot()
 
     expect(
@@ -325,6 +375,36 @@ describe('parseSnapshot', () => {
       }),
     ).toEqual({ ok: false, reason: 'invalid' })
 
+    expect(
+      parseSnapshot({
+        ...base,
+        plannerEvents: [{ ...PLANNER_EVENTS[0], title: '   ' }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        plannerEvents: [
+          { ...PLANNER_EVENTS[0], startDate: '2026-11-20', endDate: '2026-11-19' },
+        ],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        plannerEvents: [{ ...PLANNER_EVENTS[0], type: 'Conference' }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        plannerEvents: [{ ...PLANNER_EVENTS[0], department: 42 }],
+      }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
     expect(parseSnapshot({ ...base, settings: { maxConcurrentLeave: 0 } })).toEqual({
       ok: false,
       reason: 'invalid',
@@ -352,6 +432,16 @@ describe('parseSnapshot', () => {
 
     expect(
       parseSnapshot({ ...base, holidays: [HOLIDAYS[0], { ...HOLIDAYS[0], name: 'Duplicate' }] }),
+    ).toEqual({ ok: false, reason: 'invalid' })
+
+    expect(
+      parseSnapshot({
+        ...base,
+        plannerEvents: [
+          PLANNER_EVENTS[0],
+          { ...PLANNER_EVENTS[0], title: 'Duplicate' },
+        ],
+      }),
     ).toEqual({ ok: false, reason: 'invalid' })
   })
 
@@ -397,6 +487,7 @@ describe('parseSnapshot', () => {
       leavePlans: [],
       attendance: [],
       holidays: [],
+      plannerEvents: [],
       settings: { maxConcurrentLeave: 2 },
       exportedAt: EXPORTED_AT,
     })

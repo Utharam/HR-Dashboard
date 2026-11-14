@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory as FakeIDBFactory, IDBObjectStore } from 'fake-indexeddb'
-import type { AttendanceRecord, Holiday, LeavePlan, PlannerSettings } from '../../types'
+import type {
+  AttendanceRecord,
+  Holiday,
+  LeavePlan,
+  PlannerEvent,
+  PlannerSettings,
+} from '../../types'
 import { DATA_SCHEMA_VERSION } from '../../utils/storage'
 import { DEFAULT_PLANNER_SETTINGS, type DataSnapshot } from '../DataStore'
 import { IndexedDbStore } from '../IndexedDbStore'
@@ -9,6 +15,7 @@ import { INITIAL_POLICIES } from '../initialPolicies'
 import { createInitialLeavePlans } from '../initialLeavePlans'
 import { createInitialHolidays } from '../initialHolidays'
 import { createInitialAttendance } from '../initialAttendance'
+import { createInitialPlannerEvents } from '../initialPlannerEvents'
 
 const NOW = new Date('2026-11-14T09:30:00.000Z')
 const now = () => NOW
@@ -18,11 +25,12 @@ const POLICIES = INITIAL_POLICIES.slice(0, 2)
 const LEAVE_PLANS: LeavePlan[] = createInitialLeavePlans(NOW).slice(0, 4)
 const HOLIDAYS: Holiday[] = createInitialHolidays(2026)
 const ATTENDANCE: AttendanceRecord[] = createInitialAttendance(EMPLOYEES, HOLIDAYS, NOW).slice(0, 4)
+const PLANNER_EVENTS: PlannerEvent[] = createInitialPlannerEvents(NOW)
 const SETTINGS: PlannerSettings = { maxConcurrentLeave: 5 }
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: NOW.toISOString(),
     employees: EMPLOYEES,
@@ -30,6 +38,7 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     leavePlans: LEAVE_PLANS,
     attendance: ATTENDANCE,
     holidays: HOLIDAYS,
+    plannerEvents: PLANNER_EVENTS,
     settings: SETTINGS,
     ...overrides,
   }
@@ -82,10 +91,10 @@ afterEach(() => {
 })
 
 describe('IndexedDbStore', () => {
-  it('seeds employees, policies, leave plans, attendance, holidays and settings on an empty database', async () => {
+  it('seeds employees, policies, leave plans, attendance, holidays, planner events and settings on an empty database', async () => {
     const loaded = await createStore().load()
 
-    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.v).toBe(3)
     expect(loaded.snapshot.dataVersion).toBe(DATA_SCHEMA_VERSION)
     expect(loaded.snapshot.employees).toEqual(INITIAL_EMPLOYEES)
     expect(loaded.snapshot.policies).toEqual(INITIAL_POLICIES)
@@ -94,12 +103,13 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.attendance).toEqual(
       createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
     )
+    expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
     expect(loaded.legacyBackup).toBe(false)
     expect(loaded.recovered).toBe(false)
   })
 
-  it('saves and reloads all six datasets', async () => {
+  it('saves and reloads all seven datasets', async () => {
     const store = createStore()
     await store.load()
 
@@ -108,6 +118,7 @@ describe('IndexedDbStore', () => {
     await expect(store.saveLeavePlans(LEAVE_PLANS)).resolves.toEqual({ ok: true })
     await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({ ok: true })
     await expect(store.saveHolidays(HOLIDAYS)).resolves.toEqual({ ok: true })
+    await expect(store.savePlannerEvents(PLANNER_EVENTS)).resolves.toEqual({ ok: true })
     await expect(store.saveSettings(SETTINGS)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
@@ -116,6 +127,7 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
     expect(loaded.recovered).toBe(false)
   })
@@ -194,6 +206,25 @@ describe('IndexedDbStore', () => {
     expect((await store.load()).snapshot.holidays).toEqual(HOLIDAYS)
   })
 
+  it('rejects duplicate planner-event ids and malformed rows without writing the calendar', async () => {
+    const store = createStore()
+    await store.load()
+    await store.savePlannerEvents(PLANNER_EVENTS)
+
+    await expect(
+      store.savePlannerEvents([
+        PLANNER_EVENTS[0],
+        { ...PLANNER_EVENTS[0], title: 'Duplicate id' },
+      ]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    await expect(
+      store.savePlannerEvents([{ ...PLANNER_EVENTS[0], startDate: '2026-02-30' }]),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' })
+
+    expect((await store.load()).snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
+  })
+
   it('replaces corrupt stored rows with seed data and reports recovery', async () => {
     const store = createStore()
     await store.load()
@@ -203,6 +234,7 @@ describe('IndexedDbStore', () => {
     await putRaw('leavePlans', { id: 'broken' })
     await putRaw('attendance', { id: 'broken' })
     await putRaw('holidays', { id: 'broken' })
+    await putRaw('plannerEvents', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
@@ -213,33 +245,37 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.attendance).toEqual(
       createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
     )
+    expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
   })
 
-  it('does not seed demo leave plans or demo attendance onto a custom roster with invalid rows', async () => {
+  it('does not seed demo leave plans, demo attendance or demo events onto a custom roster with invalid rows', async () => {
     const store = createStore()
     await store.load()
 
-    // The roster is a valid custom set (not the demo roster), while the leave and
-    // attendance stores hold rows today's predicates reject. Recovery must not invent
-    // leave or presence for employees the demo seed does not describe.
+    // The roster is a valid custom set (not the demo roster), while the leave,
+    // attendance and event stores hold rows today's predicates reject. Recovery must
+    // not invent data for employees the demo seed does not describe.
     await store.saveEmployees(EMPLOYEES)
     await putRaw('leavePlans', { id: 'broken' })
     await putRaw('attendance', { id: 'broken' })
+    await putRaw('plannerEvents', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
     expect(loaded.snapshot.employees).toEqual(EMPLOYEES)
     expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.attendance).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
   })
 
-  it('seeds demo leave plans and attendance when the demo roster has invalid rows', async () => {
+  it('seeds demo leave plans, attendance and events when the demo roster has invalid rows', async () => {
     const store = createStore()
     await store.load()
 
     await store.saveEmployees(INITIAL_EMPLOYEES)
     await putRaw('leavePlans', { id: 'broken' })
     await putRaw('attendance', { id: 'broken' })
+    await putRaw('plannerEvents', { id: 'broken' })
 
     const loaded = await store.load()
     expect(loaded.recovered).toBe(true)
@@ -247,6 +283,7 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.attendance).toEqual(
       createInitialAttendance(INITIAL_EMPLOYEES, createInitialHolidays(2026), NOW),
     )
+    expect(loaded.snapshot.plannerEvents).toEqual(createInitialPlannerEvents(NOW))
   })
 
   it('treats a saved empty array as a deliberate empty dataset instead of reseeding it', async () => {
@@ -258,6 +295,7 @@ describe('IndexedDbStore', () => {
     await store.saveLeavePlans([])
     await store.saveAttendance([])
     await store.saveHolidays([])
+    await store.savePlannerEvents([])
 
     const loaded = await store.load()
     expect(loaded.snapshot.employees).toEqual([])
@@ -265,6 +303,7 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
   })
 
   it('exports the currently stored snapshot', async () => {
@@ -273,12 +312,14 @@ describe('IndexedDbStore', () => {
     await store.saveEmployees(EMPLOYEES)
     await store.saveAttendance(ATTENDANCE)
     await store.saveHolidays(HOLIDAYS)
+    await store.savePlannerEvents(PLANNER_EVENTS)
     await store.saveSettings(SETTINGS)
 
     const exported = await store.exportSnapshot()
     expect(exported.employees).toEqual(EMPLOYEES)
     expect(exported.attendance).toEqual(ATTENDANCE)
     expect(exported.holidays).toEqual(HOLIDAYS)
+    expect(exported.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(exported.settings).toEqual(SETTINGS)
   })
 
@@ -295,10 +336,11 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual(LEAVE_PLANS)
     expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
     expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual(PLANNER_EVENTS)
     expect(loaded.snapshot.settings).toEqual(SETTINGS)
   })
 
-  it('imports a v1 snapshot with empty attendance and holidays', async () => {
+  it('imports a v1 snapshot with empty attendance, holidays and planner events', async () => {
     const store = createStore()
     await store.load()
 
@@ -315,11 +357,32 @@ describe('IndexedDbStore', () => {
     await expect(store.importSnapshot(legacy)).resolves.toEqual({ ok: true })
 
     const loaded = await store.load()
-    expect(loaded.snapshot.v).toBe(2)
+    expect(loaded.snapshot.v).toBe(3)
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     // The imported empty stores are deliberate: a later load must not reseed them.
     expect((await createStore().load()).snapshot.attendance).toEqual([])
+    expect((await createStore().load()).snapshot.plannerEvents).toEqual([])
+  })
+
+  it('imports a v2 snapshot with empty planner events', async () => {
+    const store = createStore()
+    await store.load()
+
+    const legacyV2 = {
+      ...makeSnapshot(),
+      v: 2,
+      plannerEvents: undefined,
+    } as unknown as DataSnapshot
+
+    await expect(store.importSnapshot(legacyV2)).resolves.toEqual({ ok: true })
+
+    const loaded = await store.load()
+    expect(loaded.snapshot.v).toBe(3)
+    expect(loaded.snapshot.attendance).toEqual(ATTENDANCE)
+    expect(loaded.snapshot.holidays).toEqual(HOLIDAYS)
+    expect(loaded.snapshot.plannerEvents).toEqual([])
   })
 
   it('rejects a wrong snapshot version without changing stored data', async () => {
@@ -327,7 +390,7 @@ describe('IndexedDbStore', () => {
     await store.load()
     await store.saveEmployees(EMPLOYEES)
 
-    const wrongVersion = { ...makeSnapshot(), v: 3 } as unknown as DataSnapshot
+    const wrongVersion = { ...makeSnapshot(), v: 4 } as unknown as DataSnapshot
     await expect(store.importSnapshot(wrongVersion)).resolves.toEqual({
       ok: false,
       reason: 'version',
@@ -368,6 +431,7 @@ describe('IndexedDbStore', () => {
     expect(loaded.snapshot.leavePlans).toEqual([])
     expect(loaded.snapshot.attendance).toEqual([])
     expect(loaded.snapshot.holidays).toEqual([])
+    expect(loaded.snapshot.plannerEvents).toEqual([])
     expect(loaded.snapshot.settings).toEqual(DEFAULT_PLANNER_SETTINGS)
   })
 
@@ -384,6 +448,10 @@ describe('IndexedDbStore', () => {
       reason: 'unavailable',
     })
     await expect(store.saveAttendance(ATTENDANCE)).resolves.toEqual({
+      ok: false,
+      reason: 'unavailable',
+    })
+    await expect(store.savePlannerEvents(PLANNER_EVENTS)).resolves.toEqual({
       ok: false,
       reason: 'unavailable',
     })

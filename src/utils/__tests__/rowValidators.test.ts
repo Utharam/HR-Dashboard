@@ -5,6 +5,7 @@ import {
   isLeavePlanRow,
   isAttendanceRecordRow,
   isHolidayRow,
+  isPlannerEventRow,
   isPlannerSettingsRow,
 } from '../rowValidators';
 import { INITIAL_EMPLOYEES } from '../../data/initialData';
@@ -12,8 +13,15 @@ import { INITIAL_POLICIES } from '../../data/initialPolicies';
 import { createInitialLeavePlans } from '../../data/initialLeavePlans';
 import { createInitialHolidays } from '../../data/initialHolidays';
 import { createInitialAttendance } from '../../data/initialAttendance';
+import { createInitialPlannerEvents } from '../../data/initialPlannerEvents';
 import { codeToRecord } from '../attendance';
-import type { AttendanceRecord, Holiday, LeavePlan, LeaveType } from '../../types';
+import type {
+  AttendanceRecord,
+  Holiday,
+  LeavePlan,
+  LeaveType,
+  PlannerEvent,
+} from '../../types';
 
 const employee = () => ({ ...INITIAL_EMPLOYEES[0] });
 
@@ -356,6 +364,99 @@ describe('isAttendanceRecordRow', () => {
 
   it('rejects an empty object', () => {
     expect(isAttendanceRecordRow({})).toBe(false);
+  });
+});
+
+describe('isPlannerEventRow', () => {
+  const event = (): PlannerEvent => ({
+    ...createInitialPlannerEvents(new Date(2026, 0, 15))[0],
+  });
+
+  it('accepts a seeded demo event', () => {
+    expect(isPlannerEventRow(event())).toBe(true);
+  });
+
+  it('accepts every seeded event', () => {
+    for (const row of createInitialPlannerEvents(new Date(2026, 0, 15))) {
+      expect(isPlannerEventRow(row)).toBe(true);
+    }
+  });
+
+  it('rejects an empty or non-string id', () => {
+    expect(isPlannerEventRow({ ...event(), id: '' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), id: 42 })).toBe(false);
+    const missing = event() as unknown as Record<string, unknown>;
+    delete missing.id;
+    expect(isPlannerEventRow(missing)).toBe(false);
+  });
+
+  it('requires a non-blank title', () => {
+    expect(isPlannerEventRow({ ...event(), title: '' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), title: '   ' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), title: 42 })).toBe(false);
+    const missing = event() as unknown as Record<string, unknown>;
+    delete missing.title;
+    expect(isPlannerEventRow(missing)).toBe(false);
+  });
+
+  it('rejects an impossible or malformed start or end date', () => {
+    for (const field of ['startDate', 'endDate'] as const) {
+      expect(isPlannerEventRow({ ...event(), [field]: '2024-02-30' })).toBe(false);
+      expect(isPlannerEventRow({ ...event(), [field]: '2023-02-29' })).toBe(false);
+      expect(isPlannerEventRow({ ...event(), [field]: '15/01/2026' })).toBe(false);
+      expect(isPlannerEventRow({ ...event(), [field]: 20260115 })).toBe(false);
+      expect(isPlannerEventRow({ ...event(), [field]: null })).toBe(false);
+    }
+  });
+
+  it('rejects an end date before the start date', () => {
+    expect(
+      isPlannerEventRow({ ...event(), startDate: '2026-01-20', endDate: '2026-01-19' }),
+    ).toBe(false);
+  });
+
+  it('accepts every event type this build renders', () => {
+    for (const type of ['Event', 'Training', 'Meeting', 'Holiday', 'Other'] as const) {
+      expect(isPlannerEventRow({ ...event(), type })).toBe(true);
+    }
+    expect(isPlannerEventRow({ ...event(), type: 'Conference' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), type: null })).toBe(false);
+  });
+
+  it('treats department, location and notes as optional but rejects non-strings', () => {
+    const withoutOptional = event() as unknown as Record<string, unknown>;
+    delete withoutOptional.department;
+    delete withoutOptional.location;
+    delete withoutOptional.notes;
+    expect(isPlannerEventRow(withoutOptional)).toBe(true);
+    expect(isPlannerEventRow({ ...event(), department: 'Finance & Operations' })).toBe(true);
+    expect(isPlannerEventRow({ ...event(), location: 'Mumbai Hub' })).toBe(true);
+    expect(isPlannerEventRow({ ...event(), notes: 'Bring the deck.' })).toBe(true);
+    expect(isPlannerEventRow({ ...event(), department: 42 })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), location: null })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), notes: ['x'] })).toBe(false);
+  });
+
+  it('rejects unparseable created/updated timestamps', () => {
+    expect(isPlannerEventRow({ ...event(), createdAt: 'not-a-date' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), updatedAt: 'not-a-date' })).toBe(false);
+    expect(isPlannerEventRow({ ...event(), updatedAt: 0 })).toBe(false);
+  });
+
+  it('does not enforce store-level id uniqueness on a single row', () => {
+    // Uniqueness needs the whole dataset and belongs to the store/snapshot layer.
+    expect(isPlannerEventRow({ ...event(), id: 'event-copy' })).toBe(true);
+  });
+
+  it.each([null, undefined, 42, 'event-1', ['x'], true])(
+    'rejects the non-object %s',
+    (row) => {
+      expect(isPlannerEventRow(row)).toBe(false);
+    },
+  );
+
+  it('rejects an empty object', () => {
+    expect(isPlannerEventRow({})).toBe(false);
   });
 });
 

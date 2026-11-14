@@ -38,7 +38,7 @@ const BACKUP_KEY = 'omnihr_employees_backup';
 const ONE_EMPLOYEE: Employee = { ...INITIAL_EMPLOYEES[0], id: 'EMP-SNAP-1', name: 'Nina Snapshot' };
 
 const SNAPSHOT: DataSnapshot = {
-  v: 2,
+  v: 3,
   dataVersion: DATA_SCHEMA_VERSION,
   exportedAt: '2026-11-14T09:30:00.000Z',
   employees: [ONE_EMPLOYEE],
@@ -46,6 +46,7 @@ const SNAPSHOT: DataSnapshot = {
   leavePlans: [],
   attendance: [],
   holidays: [],
+  plannerEvents: [],
   settings: { ...DEFAULT_PLANNER_SETTINGS },
 };
 
@@ -149,6 +150,7 @@ describe('snapshot import clears the stale Excel Undo', () => {
       saveLeavePlans: (rows) => inner.saveLeavePlans(rows),
       saveAttendance: (rows) => inner.saveAttendance(rows),
       saveHolidays: (rows) => inner.saveHolidays(rows),
+      savePlannerEvents: (rows) => inner.savePlannerEvents(rows),
       saveSettings: (settings) => inner.saveSettings(settings),
       exportSnapshot: () => inner.exportSnapshot(),
       importSnapshot: (snapshot) => inner.importSnapshot(snapshot),

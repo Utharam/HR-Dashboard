@@ -1,28 +1,29 @@
 /**
  * IndexedDB implementation of `DataStore`.
  *
- * Database layout (version 2):
- *   employees  keyPath `id`
- *   policies   keyPath `id`
- *   leavePlans keyPath `id`
- *   attendance keyPath `id`
- *   holidays   keyPath `id`
- *   meta       keyPath `key`
+ * Database layout (version 3):
+ *   employees     keyPath `id`
+ *   policies      keyPath `id`
+ *   leavePlans    keyPath `id`
+ *   attendance    keyPath `id`
+ *   holidays      keyPath `id`
+ *   plannerEvents keyPath `id`
+ *   meta          keyPath `key`
  *
- * Version 2 adds the daily attendance ledger and the holiday calendar. An existing
- * version-1 database is upgraded in place: the two stores are created by
- * `onupgradeneeded`, every existing row is preserved, and the first load after the
- * upgrade seeds the new datasets under the same rules as a fresh migration.
+ * Version 2 adds the daily attendance ledger and the holiday calendar. Version 3 adds
+ * the Planner's general events. An existing database is upgraded in place: the new
+ * stores are created by `onupgradeneeded`, every existing row is preserved, and the
+ * first load after the upgrade seeds the new datasets under the same rules as a fresh
+ * migration.
  *
  * The first `load()` on a fresh database is also the migration point. It reads the
- * four legacy localStorage envelopes through `loadPersisted`, which means a valid
- * old dataset is carried over, a valid-but-empty dataset stays empty, and a corrupt
- * one is replaced by the app seed instead of throwing. Duplicate ids inside a valid
- * envelope are repaired (first occurrence kept) before the keyed stores see them,
- * and the load reports `recovered` for both repairs and substitutions. The same
- * transaction writes all six datasets, the planner settings and the `initialized`
- * marker, so a failure cannot leave a half-migrated database that later looks
- * initialized.
+ * legacy localStorage envelopes through `loadPersisted`, which means a valid old
+ * dataset is carried over, a valid-but-empty dataset stays empty, and a corrupt one is
+ * replaced by the app seed instead of throwing. Duplicate ids inside a valid envelope
+ * are repaired (first occurrence kept) before the keyed stores see them, and the load
+ * reports `recovered` for both repairs and substitutions. The same transaction writes
+ * every dataset, the planner settings and the `initialized` marker, so a failure
+ * cannot leave a half-migrated database that later looks initialized.
  *
  * The legacy keys are never removed. They are the user's only backup if this
  * migration had a bug, and tooling can inspect them. `legacyBackup` in meta records
@@ -39,6 +40,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types'
 import {
@@ -61,22 +63,25 @@ import { INITIAL_POLICIES } from './initialPolicies'
 import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
 import { createInitialHolidays } from './initialHolidays'
 import { createInitialAttendance } from './initialAttendance'
+import { createInitialPlannerEvents } from './initialPlannerEvents'
 import { loadPersisted, DATA_SCHEMA_VERSION } from '../utils/storage'
 import {
   isAttendanceRecordRow,
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
 } from '../utils/rowValidators'
 
-const DB_VERSION = 2
+const DB_VERSION = 3
 const EMPLOYEES_STORE = 'employees'
 const POLICIES_STORE = 'policies'
 const LEAVE_PLANS_STORE = 'leavePlans'
 const ATTENDANCE_STORE = 'attendance'
 const HOLIDAYS_STORE = 'holidays'
+const PLANNER_EVENTS_STORE = 'plannerEvents'
 const META_STORE = 'meta'
 
 const ALL_STORES = [
@@ -85,6 +90,7 @@ const ALL_STORES = [
   LEAVE_PLANS_STORE,
   ATTENDANCE_STORE,
   HOLIDAYS_STORE,
+  PLANNER_EVENTS_STORE,
   META_STORE,
 ]
 
@@ -214,6 +220,15 @@ export class IndexedDbStore implements DataStore {
     return this.replaceRows(HOLIDAYS_STORE, rows)
   }
 
+  async savePlannerEvents(rows: PlannerEvent[]): Promise<StoreResult> {
+    // The event calendar is a whole-dataset render, so a malformed row is rejected
+    // here rather than written and discovered by the next load's recovery pass.
+    if (!rows.every(isPlannerEventRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return this.replaceRows(PLANNER_EVENTS_STORE, rows)
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     try {
       await this.withDb((db) =>
@@ -248,12 +263,14 @@ export class IndexedDbStore implements DataStore {
           replaceStore(transaction, LEAVE_PLANS_STORE, valid.leavePlans)
           replaceStore(transaction, ATTENDANCE_STORE, valid.attendance)
           replaceStore(transaction, HOLIDAYS_STORE, valid.holidays)
+          replaceStore(transaction, PLANNER_EVENTS_STORE, valid.plannerEvents)
           putMeta(transaction, 'settings', { ...valid.settings })
           putMeta(transaction, 'initialized', true)
           // The import is a complete, deliberate state: the new stores must not be
           // treated as "absent" and reseeded on the next load.
           putMeta(transaction, 'attendanceInitialized', true)
           putMeta(transaction, 'holidaysInitialized', true)
+          putMeta(transaction, 'plannerEventsInitialized', true)
           putMeta(transaction, 'importedAt', this.now().toISOString())
         }),
       )
@@ -272,15 +289,17 @@ export class IndexedDbStore implements DataStore {
           transaction.objectStore(LEAVE_PLANS_STORE).clear()
           transaction.objectStore(ATTENDANCE_STORE).clear()
           transaction.objectStore(HOLIDAYS_STORE).clear()
+          transaction.objectStore(PLANNER_EVENTS_STORE).clear()
           // Settings are business data too, but the app always needs a threshold.
           // Reset to the documented default rather than leaving an absent value.
           putMeta(transaction, 'settings', { ...DEFAULT_PLANNER_SETTINGS })
           // Keep `initialized` true: clearing is a deliberate empty state, not the
-          // first run, and a later load must not resurrect the demo seed. The two
-          // new markers say the same for the attendance and holiday stores.
+          // first run, and a later load must not resurrect the demo seed. The three
+          // new markers say the same for the attendance, holiday and event stores.
           putMeta(transaction, 'initialized', true)
           putMeta(transaction, 'attendanceInitialized', true)
           putMeta(transaction, 'holidaysInitialized', true)
+          putMeta(transaction, 'plannerEventsInitialized', true)
         }),
       )
       return { ok: true }
@@ -316,7 +335,8 @@ export class IndexedDbStore implements DataStore {
    * The holiday seed is likewise roster-independent, while demo attendance is only
    * invented for the exact demo roster AND an absent attendance key. Corrupt
    * attendance is replaced with an empty ledger (and reported), never with invented
-   * presence for a roster we cannot trust.
+   * presence for a roster we cannot trust. Demo planner events follow the same rule
+   * as demo leave: exact demo roster plus an absent event key.
    *
    * Duplicate ids are repaired before the write. `loadPersisted` checks shapes only,
    * and this is the one load that feeds keyed stores directly: writing a repeated id
@@ -346,6 +366,14 @@ export class IndexedDbStore implements DataStore {
       isHolidayRow,
       createInitialHolidays(2026),
     )
+    // Demo events, like demo leave, belong to the demo roster: only an ABSENT key
+    // plus that exact roster is a first-run signal. A corrupt key is a lost calendar
+    // and starts empty instead of inventing company events.
+    const plannerEventsResult = loadPersisted(
+      STORAGE_KEYS.plannerEvents,
+      isPlannerEventRow,
+      [],
+    )
     const settingsResult = loadPersisted(
       STORAGE_KEYS.settings,
       isPlannerSettingsRow,
@@ -358,6 +386,7 @@ export class IndexedDbStore implements DataStore {
     const attendanceDeduped = dedupeById(attendanceResult.rows)
     const holidaysById = dedupeById(holidaysResult.rows)
     const holidaysDeduped = dedupeByDate(holidaysById.rows)
+    const plannerEventsDeduped = dedupeById(plannerEventsResult.rows)
     const leavePlansUnusable =
       !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
     const leavePlans = leavePlansUnusable
@@ -373,6 +402,10 @@ export class IndexedDbStore implements DataStore {
         ? createInitialAttendance(employees.rows, holidaysDeduped.rows, this.now())
         : attendanceDeduped.rows
     const holidays = holidaysDeduped.rows
+    const plannerEvents =
+      !hasStoredValue(STORAGE_KEYS.plannerEvents) && isDemoEmployeeSet(employees.rows)
+        ? createInitialPlannerEvents(this.now())
+        : plannerEventsDeduped.rows
     const settings = settingsResult.rows[0] ?? { ...DEFAULT_PLANNER_SETTINGS }
     const legacyBackup = hasLegacyLocalStorage()
     // Any corrupt legacy envelope was discarded by `loadPersisted` above, and any
@@ -384,13 +417,15 @@ export class IndexedDbStore implements DataStore {
       leavePlansResult.status === 'recovered' ||
       attendanceResult.status === 'recovered' ||
       holidaysResult.status === 'recovered' ||
+      plannerEventsResult.status === 'recovered' ||
       settingsResult.status === 'recovered' ||
       employees.repaired ||
       policies.repaired ||
       leavePlansDeduped.repaired ||
       attendanceDeduped.repaired ||
       holidaysById.repaired ||
-      holidaysDeduped.repaired
+      holidaysDeduped.repaired ||
+      plannerEventsDeduped.repaired
 
     // The read transaction that discovered the missing marker has completed, so this
     // connection can start the one atomic write transaction. `withDb` closes it after
@@ -401,17 +436,19 @@ export class IndexedDbStore implements DataStore {
       replaceStore(transaction, LEAVE_PLANS_STORE, leavePlans)
       replaceStore(transaction, ATTENDANCE_STORE, attendance)
       replaceStore(transaction, HOLIDAYS_STORE, holidays)
+      replaceStore(transaction, PLANNER_EVENTS_STORE, plannerEvents)
       putMeta(transaction, 'settings', { ...settings })
       putMeta(transaction, 'initialized', true)
       putMeta(transaction, 'attendanceInitialized', true)
       putMeta(transaction, 'holidaysInitialized', true)
+      putMeta(transaction, 'plannerEventsInitialized', true)
       putMeta(transaction, 'migratedAt', this.now().toISOString())
       putMeta(transaction, 'legacyBackup', legacyBackup)
     })
 
     return {
       snapshot: {
-        v: 2,
+        v: 3,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: this.now().toISOString(),
         employees: employees.rows,
@@ -419,6 +456,7 @@ export class IndexedDbStore implements DataStore {
         leavePlans,
         attendance,
         holidays,
+        plannerEvents,
         settings,
       },
       legacyBackup,
@@ -438,23 +476,31 @@ export class IndexedDbStore implements DataStore {
    * reports `recovered` so DataGate can tell the user the truth. Employees and
    * policies fall back to their demo seeds; leave plans are demo-seeded only when
    * the roster is the demo set, so a custom register keeps an empty planner.
-   * Holidays always have a meaningful fixed seed; demo attendance, like demo leave,
-   * is invented only for the demo roster.
+   * Holidays always have a meaningful fixed seed; demo attendance and demo planner
+   * events, like demo leave, are invented only for the demo roster.
    *
-   * A database upgraded from version 1 has no attendance/holiday marker, and the two
-   * newly created stores are empty. That absent marker - not an empty dataset by
-   * itself - is the one-time signal to seed them. A deliberate clear writes both
-   * markers, so clearing does not resurrect the demo ledger on the next load.
+   * A database upgraded from an older version has no marker for the stores that
+   * version did not ship, and those newly created stores are empty. That absent
+   * marker - not an empty dataset by itself - is the one-time signal to seed them.
+   * A deliberate clear writes every marker, so clearing does not resurrect the demo
+   * data on the next load.
    */
   private async buildLoadedData(db: IDBDatabase, meta: MetaRecord[]): Promise<LoadedData> {
-    const [storedEmployees, storedPolicies, storedLeavePlans, storedAttendance, storedHolidays] =
-      await Promise.all([
-        readAll<Employee>(db, EMPLOYEES_STORE),
-        readAll<HRPolicy>(db, POLICIES_STORE),
-        readAll<LeavePlan>(db, LEAVE_PLANS_STORE),
-        readAll<AttendanceRecord>(db, ATTENDANCE_STORE),
-        readAll<Holiday>(db, HOLIDAYS_STORE),
-      ])
+    const [
+      storedEmployees,
+      storedPolicies,
+      storedLeavePlans,
+      storedAttendance,
+      storedHolidays,
+      storedPlannerEvents,
+    ] = await Promise.all([
+      readAll<Employee>(db, EMPLOYEES_STORE),
+      readAll<HRPolicy>(db, POLICIES_STORE),
+      readAll<LeavePlan>(db, LEAVE_PLANS_STORE),
+      readAll<AttendanceRecord>(db, ATTENDANCE_STORE),
+      readAll<Holiday>(db, HOLIDAYS_STORE),
+      readAll<PlannerEvent>(db, PLANNER_EVENTS_STORE),
+    ])
 
     const employeesAreValid = storedEmployees.every(isEmployeeRow)
     const policiesAreValid = storedPolicies.every(isPolicyRow)
@@ -465,6 +511,8 @@ export class IndexedDbStore implements DataStore {
       storedHolidays.every(isHolidayRow) &&
       hasUniqueIds(storedHolidays) &&
       hasUniqueHolidayDates(storedHolidays)
+    const plannerEventsAreValid =
+      storedPlannerEvents.every(isPlannerEventRow) && hasUniqueIds(storedPlannerEvents)
 
     const storedSettings = metaValue(meta, 'settings')
     const settings = isPlannerSettingsRow(storedSettings)
@@ -475,6 +523,8 @@ export class IndexedDbStore implements DataStore {
 
     const attendanceInitialized = metaValue(meta, 'attendanceInitialized') === true
     const holidaysInitialized = metaValue(meta, 'holidaysInitialized') === true
+    const plannerEventsInitialized =
+      metaValue(meta, 'plannerEventsInitialized') === true
 
     let holidays = holidaysAreValid ? storedHolidays : createInitialHolidays(2026)
     if (holidaysAreValid && !holidaysInitialized && storedHolidays.length === 0) {
@@ -494,26 +544,49 @@ export class IndexedDbStore implements DataStore {
       attendance = storedAttendance
     }
 
+    let plannerEvents: PlannerEvent[]
+    if (!plannerEventsAreValid) {
+      plannerEvents = isDemoEmployeeSet(employees)
+        ? createInitialPlannerEvents(this.now())
+        : []
+    } else if (!plannerEventsInitialized && storedPlannerEvents.length === 0) {
+      plannerEvents = isDemoEmployeeSet(employees)
+        ? createInitialPlannerEvents(this.now())
+        : []
+    } else {
+      plannerEvents = storedPlannerEvents
+    }
+
     // Repairing an invalid dataset has to write it back, even when the marker already
     // exists, or the next load would recover the same rows again.
     const replaceAttendance = !attendanceAreValid || !attendanceInitialized
     const replaceHolidays = !holidaysAreValid || !holidaysInitialized
-    if (replaceAttendance || replaceHolidays) {
+    const replacePlannerEvents = !plannerEventsAreValid || !plannerEventsInitialized
+    if (replaceAttendance || replaceHolidays || replacePlannerEvents) {
       await this.runWriteTransaction(
         db,
-        [ATTENDANCE_STORE, HOLIDAYS_STORE, META_STORE],
+        [
+          ATTENDANCE_STORE,
+          HOLIDAYS_STORE,
+          PLANNER_EVENTS_STORE,
+          META_STORE,
+        ],
         (transaction) => {
           if (replaceAttendance) replaceStore(transaction, ATTENDANCE_STORE, attendance)
           if (replaceHolidays) replaceStore(transaction, HOLIDAYS_STORE, holidays)
+          if (replacePlannerEvents) {
+            replaceStore(transaction, PLANNER_EVENTS_STORE, plannerEvents)
+          }
           putMeta(transaction, 'attendanceInitialized', true)
           putMeta(transaction, 'holidaysInitialized', true)
+          putMeta(transaction, 'plannerEventsInitialized', true)
         },
       )
     }
 
     return {
       snapshot: {
-        v: 2,
+        v: 3,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: this.now().toISOString(),
         employees,
@@ -528,6 +601,7 @@ export class IndexedDbStore implements DataStore {
             : [],
         attendance,
         holidays,
+        plannerEvents,
         settings,
       },
       legacyBackup: metaValue(meta, 'legacyBackup') === true,
@@ -536,7 +610,8 @@ export class IndexedDbStore implements DataStore {
         !policiesAreValid ||
         !leavePlansAreValid ||
         !attendanceAreValid ||
-        !holidaysAreValid,
+        !holidaysAreValid ||
+        !plannerEventsAreValid,
     }
   }
 
@@ -581,6 +656,9 @@ export class IndexedDbStore implements DataStore {
         }
         if (!db.objectStoreNames.contains(HOLIDAYS_STORE)) {
           db.createObjectStore(HOLIDAYS_STORE, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(PLANNER_EVENTS_STORE)) {
+          db.createObjectStore(PLANNER_EVENTS_STORE, { keyPath: 'id' })
         }
         if (!db.objectStoreNames.contains(META_STORE)) {
           db.createObjectStore(META_STORE, { keyPath: 'key' })

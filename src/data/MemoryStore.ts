@@ -17,6 +17,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types'
 import {
@@ -36,7 +37,12 @@ import { INITIAL_POLICIES } from './initialPolicies'
 import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
 import { createInitialHolidays } from './initialHolidays'
 import { createInitialAttendance } from './initialAttendance'
-import { isAttendanceRecordRow, isHolidayRow } from '../utils/rowValidators'
+import { createInitialPlannerEvents } from './initialPlannerEvents'
+import {
+  isAttendanceRecordRow,
+  isHolidayRow,
+  isPlannerEventRow,
+} from '../utils/rowValidators'
 
 function cloneSnapshot(snapshot: DataSnapshot): DataSnapshot {
   return {
@@ -50,6 +56,7 @@ function cloneSnapshot(snapshot: DataSnapshot): DataSnapshot {
     leavePlans: snapshot.leavePlans.map((row) => ({ ...row })),
     attendance: snapshot.attendance.map((row) => ({ ...row })),
     holidays: snapshot.holidays.map((row) => ({ ...row })),
+    plannerEvents: snapshot.plannerEvents.map((row) => ({ ...row })),
     settings: { ...snapshot.settings },
   }
 }
@@ -63,14 +70,18 @@ export class MemoryStore implements DataStore {
     // Mirror the application seed for every dataset the caller did not override.
     // Demo attendance is only meaningful for the exact demo roster (D11); a custom
     // roster starts with an empty daily ledger but keeps the fixed holiday calendar.
+    // The demo event calendar follows the same roster rule as demo leave.
     const employees = initial?.employees ?? INITIAL_EMPLOYEES
     const holidays = initial?.holidays ?? createInitialHolidays(2026)
     const attendance =
       initial?.attendance ??
       (isDemoEmployeeSet(employees) ? createInitialAttendance(employees, holidays) : [])
+    const plannerEvents =
+      initial?.plannerEvents ??
+      (isDemoEmployeeSet(employees) ? createInitialPlannerEvents() : [])
 
     this.snapshot = {
-      v: 2,
+      v: 3,
       dataVersion: DATA_SCHEMA_VERSION,
       exportedAt: initial?.exportedAt ?? new Date().toISOString(),
       employees,
@@ -78,6 +89,7 @@ export class MemoryStore implements DataStore {
       leavePlans: initial?.leavePlans ?? createInitialLeavePlans(),
       attendance,
       holidays,
+      plannerEvents,
       settings: initial?.settings ?? DEFAULT_PLANNER_SETTINGS,
     }
     this.snapshot = cloneSnapshot(this.snapshot)
@@ -129,6 +141,17 @@ export class MemoryStore implements DataStore {
     return { ok: true }
   }
 
+  async savePlannerEvents(rows: PlannerEvent[]): Promise<StoreResult> {
+    if (!rows.every(isPlannerEventRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      plannerEvents: rows.map((row) => ({ ...row })),
+    }
+    return { ok: true }
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     this.snapshot = { ...this.snapshot, settings: { ...settings } }
     return { ok: true }
@@ -154,6 +177,7 @@ export class MemoryStore implements DataStore {
       leavePlans: [],
       attendance: [],
       holidays: [],
+      plannerEvents: [],
       settings: { ...DEFAULT_PLANNER_SETTINGS },
     }
     return { ok: true }

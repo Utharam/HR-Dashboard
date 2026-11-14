@@ -26,6 +26,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types'
 import { toDateKey } from '../utils/leavePlanner'
@@ -38,10 +39,11 @@ import { type DataSnapshot, validateDataSnapshot } from './DataStore'
  * Mirrors the `v` literal in `DataSnapshot` and the check in `validateDataSnapshot`.
  * It is separate from `DATA_SCHEMA_VERSION` because the two change for different
  * reasons: adding a dataset changes the snapshot format, while reshaping a row changes
- * the schema. Version 2 adds `attendance` and `holidays`; version 1 files are still
- * readable and are normalised to v2 with empty arrays.
+ * the schema. Version 2 adds `attendance` and `holidays`; version 3 adds
+ * `plannerEvents`. Versions 1 and 2 are still readable and are normalised to v3 with
+ * empty arrays for the datasets they predate.
  */
-export const SNAPSHOT_VERSION = 2
+export const SNAPSHOT_VERSION = 3
 
 export interface SnapshotInput {
   employees: Employee[]
@@ -49,11 +51,13 @@ export interface SnapshotInput {
   leavePlans: LeavePlan[]
   /**
    * Optional so call sites that predate the daily attendance feature can keep
-   * building a valid v2 snapshot; an absent dataset means an empty one, never a
+   * building a valid snapshot; an absent dataset means an empty one, never a
    * half-written snapshot.
    */
   attendance?: AttendanceRecord[]
   holidays?: Holiday[]
+  /** Optional for the same reason: an absent event calendar means an empty one. */
+  plannerEvents?: PlannerEvent[]
   settings: PlannerSettings
   /** Testing/handoff seam; defaults to the current time. */
   exportedAt?: string
@@ -80,6 +84,7 @@ export function createSnapshot(input: SnapshotInput): DataSnapshot {
     leavePlans: input.leavePlans,
     attendance: input.attendance ?? [],
     holidays: input.holidays ?? [],
+    plannerEvents: input.plannerEvents ?? [],
     settings: input.settings,
   }
 }
@@ -94,7 +99,8 @@ export function createSnapshot(input: SnapshotInput): DataSnapshot {
  * the file boundary cannot drift apart.
  *
  * Version 1 is accepted on purpose: it predates daily attendance and holidays, and
- * `validateDataSnapshot` returns it as v2 with empty arrays, so an old backup remains
+ * version 2 predates planner events. `validateDataSnapshot` returns either as v3 with
+ * empty arrays for the datasets that format did not define, so an old backup remains
  * a complete restore rather than being refused by the build that added the datasets.
  */
 export function parseSnapshot(raw: unknown): SnapshotParseResult {
@@ -105,7 +111,7 @@ export function parseSnapshot(raw: unknown): SnapshotParseResult {
   // Check the snapshot format here so the exported constant is the authority on the
   // Admin import path; `validateDataSnapshot` then covers the data schema and rows.
   const version = (raw as { v?: unknown }).v
-  if (version !== 1 && version !== SNAPSHOT_VERSION) {
+  if (version !== 1 && version !== 2 && version !== SNAPSHOT_VERSION) {
     return { ok: false, reason: 'version' }
   }
 

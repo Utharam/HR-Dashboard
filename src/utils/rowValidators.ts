@@ -43,9 +43,11 @@ import type {
   LeavePlan,
   LeaveStatus,
   LeaveType,
+  PlannerEvent,
   PlannerSettings,
 } from '../types';
 import { isValidDateKey } from './leavePlanner';
+import { isPlannerEventType } from './plannerEvents';
 
 /** Fields `filteredEmployees` calls a string method on. */
 const EMPLOYEE_STRING_FIELDS = [
@@ -261,6 +263,47 @@ export function isHolidayRow(row: unknown): row is Holiday {
   if (typeof rec.id !== 'string' || rec.id.length === 0) return false;
   if (!isValidDateKey(rec.date)) return false;
   if (typeof rec.name !== 'string' || rec.name.trim().length === 0) return false;
+
+  return true;
+}
+
+/**
+ * True when `row` is safe to hand to every consumer of a `PlannerEvent`.
+ *
+ * Like a leave plan, an event is date-range data: a key that is not a real
+ * `YYYY-MM-DD` local date or an end before the start would put a chip on the wrong
+ * days rather than crash, so those are rejected at the door. Type is a closed union
+ * because the planner renders a label per member; an unknown value would render
+ * blank. Department, location and notes are genuinely optional, but a present value
+ * must be a string - the calendar filters and the day panel call string methods on
+ * them.
+ *
+ * Uniqueness by id is a store/snapshot rule, not a row-shape rule: a row validator
+ * cannot see its siblings.
+ */
+export function isPlannerEventRow(row: unknown): row is PlannerEvent {
+  const rec = asRecord(row);
+  if (!rec) return false;
+
+  if (typeof rec.id !== 'string' || rec.id.length === 0) return false;
+  if (typeof rec.title !== 'string' || rec.title.trim().length === 0) return false;
+
+  if (!isValidDateKey(rec.startDate) || !isValidDateKey(rec.endDate)) return false;
+  // Keys are zero-padded, so lexical order is calendar order.
+  if (rec.startDate > rec.endDate) return false;
+
+  if (!isPlannerEventType(rec.type)) return false;
+
+  for (const field of ['department', 'location', 'notes'] as const) {
+    if (rec[field] !== undefined && typeof rec[field] !== 'string') return false;
+  }
+
+  // Timestamps are compared and rendered; an unparseable one is not a display
+  // fallback the planner can invent.
+  for (const field of ['createdAt', 'updatedAt'] as const) {
+    const value = rec[field];
+    if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return false;
+  }
 
   return true;
 }

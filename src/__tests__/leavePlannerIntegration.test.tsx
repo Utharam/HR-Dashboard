@@ -38,7 +38,7 @@ const ONE_POLICY = { ...INITIAL_POLICIES[0], id: 'POL-LEAVE-1', title: 'Leave se
 
 function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
   return {
-    v: 2,
+    v: 3,
     dataVersion: DATA_SCHEMA_VERSION,
     exportedAt: '2026-11-14T09:30:00.000Z',
     employees: [ONE_EMPLOYEE],
@@ -46,6 +46,7 @@ function makeSnapshot(overrides: Partial<DataSnapshot> = {}): DataSnapshot {
     leavePlans: [],
     attendance: [],
     holidays: [],
+    plannerEvents: [],
     settings: { ...DEFAULT_PLANNER_SETTINGS },
     ...overrides,
   };
@@ -71,6 +72,7 @@ function makeSpyStore() {
     saveLeavePlans,
     saveAttendance: (rows) => inner.saveAttendance(rows),
     saveHolidays: (rows) => inner.saveHolidays(rows),
+    savePlannerEvents: (rows) => inner.savePlannerEvents(rows),
     saveSettings,
     exportSnapshot: () => inner.exportSnapshot(),
     importSnapshot: (snapshot) => inner.importSnapshot(snapshot),

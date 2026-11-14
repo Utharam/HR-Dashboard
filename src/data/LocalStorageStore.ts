@@ -7,11 +7,11 @@
  * data and the two backends do not invent different storage formats.
  *
  * The contract is deliberately weaker than IndexedDB in one respect: localStorage has
- * no transactions. `importSnapshot` validates everything first, then writes the four
- * keys, restoring the previous values if a later write fails. That is a best-effort
- * rollback, not a guarantee — a quota failure can also prevent restoring — but it is
- * the strongest promise this API allows, and every method still reports rather than
- * throws.
+ * no transactions. `importSnapshot` validates everything first, then writes every
+ * business key, restoring the previous values if a later write fails. That is a
+ * best-effort rollback, not a guarantee — a quota failure can also prevent restoring —
+ * but it is the strongest promise this API allows, and every method still reports
+ * rather than throws.
  */
 
 import type {
@@ -20,6 +20,7 @@ import type {
   Holiday,
   HRPolicy,
   LeavePlan,
+  PlannerEvent,
   PlannerSettings,
 } from '../types'
 import {
@@ -43,6 +44,7 @@ import {
   isEmployeeRow,
   isHolidayRow,
   isLeavePlanRow,
+  isPlannerEventRow,
   isPlannerSettingsRow,
   isPolicyRow,
 } from '../utils/rowValidators'
@@ -51,6 +53,7 @@ import { INITIAL_POLICIES } from './initialPolicies'
 import { createInitialLeavePlans, isDemoEmployeeSet } from './initialLeavePlans'
 import { createInitialHolidays } from './initialHolidays'
 import { createInitialAttendance } from './initialAttendance'
+import { createInitialPlannerEvents } from './initialPlannerEvents'
 
 type LegacyKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
 
@@ -143,6 +146,14 @@ export class LocalStorageStore implements DataStore {
       isHolidayRow,
       createInitialHolidays(2026),
     )
+    // General events are a separate dataset. Like the leave seed, the demo events
+    // belong to the demo roster: only an ABSENT key plus that exact roster is a
+    // first-run signal. A corrupt key is a lost calendar and starts empty.
+    const plannerEventsResult = loadPersisted(
+      STORAGE_KEYS.plannerEvents,
+      isPlannerEventRow,
+      [],
+    )
     const settingsResult = loadSettings()
 
     // Shape validation accepts a repeated id; this backend would then load the whole
@@ -156,6 +167,7 @@ export class LocalStorageStore implements DataStore {
     const attendanceDeduped = dedupeById(attendanceResult.rows)
     const holidaysById = dedupeById(holidaysResult.rows)
     const holidaysDeduped = dedupeByDate(holidaysById.rows)
+    const plannerEventsDeduped = dedupeById(plannerEventsResult.rows)
     const leavePlansUnusable =
       !hasStoredValue(STORAGE_KEYS.leavePlans) || leavePlansResult.status === 'recovered'
     const leavePlans = leavePlansUnusable
@@ -168,10 +180,14 @@ export class LocalStorageStore implements DataStore {
       !hasStoredValue(STORAGE_KEYS.attendance) && isDemoEmployeeSet(employees.rows)
         ? createInitialAttendance(employees.rows, holidays)
         : attendanceDeduped.rows
+    const plannerEvents =
+      !hasStoredValue(STORAGE_KEYS.plannerEvents) && isDemoEmployeeSet(employees.rows)
+        ? createInitialPlannerEvents()
+        : plannerEventsDeduped.rows
 
     return {
       snapshot: {
-        v: 2,
+        v: 3,
         dataVersion: DATA_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         employees: employees.rows,
@@ -179,6 +195,7 @@ export class LocalStorageStore implements DataStore {
         leavePlans,
         attendance,
         holidays,
+        plannerEvents,
         settings: settingsResult.settings,
       },
       // In this backend the legacy keys ARE the live store, so there is no separate
@@ -193,13 +210,15 @@ export class LocalStorageStore implements DataStore {
         leavePlansResult.status === 'recovered' ||
         attendanceResult.status === 'recovered' ||
         holidaysResult.status === 'recovered' ||
+        plannerEventsResult.status === 'recovered' ||
         settingsResult.recovered ||
         employees.repaired ||
         policies.repaired ||
         leavePlansDeduped.repaired ||
         attendanceDeduped.repaired ||
         holidaysById.repaired ||
-        holidaysDeduped.repaired,
+        holidaysDeduped.repaired ||
+        plannerEventsDeduped.repaired,
     }
   }
 
@@ -233,6 +252,15 @@ export class LocalStorageStore implements DataStore {
     return savePersisted(STORAGE_KEYS.holidays, rows)
   }
 
+  async savePlannerEvents(rows: PlannerEvent[]): Promise<StoreResult> {
+    // The event calendar is rendered and exported as a whole, so a malformed row is
+    // rejected here rather than written and discovered by the next load's recovery.
+    if (!rows.every(isPlannerEventRow) || !hasUniqueIds(rows)) {
+      return { ok: false, reason: 'invalid' }
+    }
+    return savePersisted(STORAGE_KEYS.plannerEvents, rows)
+  }
+
   async saveSettings(settings: PlannerSettings): Promise<StoreResult> {
     return savePersisted(STORAGE_KEYS.settings, [settings])
   }
@@ -255,6 +283,7 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.leavePlans, readRaw(STORAGE_KEYS.leavePlans)],
       [STORAGE_KEYS.attendance, readRaw(STORAGE_KEYS.attendance)],
       [STORAGE_KEYS.holidays, readRaw(STORAGE_KEYS.holidays)],
+      [STORAGE_KEYS.plannerEvents, readRaw(STORAGE_KEYS.plannerEvents)],
       [STORAGE_KEYS.settings, readRaw(STORAGE_KEYS.settings)],
     ])
 
@@ -264,6 +293,7 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.leavePlans, valid.leavePlans],
       [STORAGE_KEYS.attendance, valid.attendance],
       [STORAGE_KEYS.holidays, valid.holidays],
+      [STORAGE_KEYS.plannerEvents, valid.plannerEvents],
       [STORAGE_KEYS.settings, [valid.settings]],
     ]
 
@@ -290,6 +320,7 @@ export class LocalStorageStore implements DataStore {
       [STORAGE_KEYS.leavePlans, []],
       [STORAGE_KEYS.attendance, []],
       [STORAGE_KEYS.holidays, []],
+      [STORAGE_KEYS.plannerEvents, []],
       [STORAGE_KEYS.settings, [{ ...DEFAULT_PLANNER_SETTINGS }]],
     ]
 
